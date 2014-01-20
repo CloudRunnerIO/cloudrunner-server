@@ -26,8 +26,8 @@ import zmq
 
 from cloudrunner.core.message import JobRep
 from cloudrunner.core.message import StatusCodes
-from cloudrunner.dispatcher import Promise
-from cloudrunner.dispatcher.session import ServerSession
+from cloudrunner_server.dispatcher import Promise
+from cloudrunner_server.dispatcher.session import ServerSession
 
 LOG = logging.getLogger('Publisher')
 

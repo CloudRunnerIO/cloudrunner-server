@@ -18,9 +18,9 @@
 #    under the License.
 
 from cloudrunner.core.message import ScheduleReq
-from cloudrunner.dispatcher import SCHEDULER_URI_TEMPLATE
 from cloudrunner.util.shell import colors
 from cloudrunner.util.loader import local_plugin_loader
+from cloudrunner_server.dispatcher import SCHEDULER_URI_TEMPLATE
 
 import M2Crypto as m
 import json

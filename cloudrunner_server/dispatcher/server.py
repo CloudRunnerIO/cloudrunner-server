@@ -43,12 +43,6 @@ from cloudrunner.util.logconfig import configure_loggers
 
 CONFIG = Config(CONFIG_LOCATION)
 
-from cloudrunner.dispatcher import SCHEDULER_URI_TEMPLATE
-from cloudrunner.dispatcher import PluginContext
-from cloudrunner.dispatcher import Promise
-
-SCHEDULER_URI = SCHEDULER_URI_TEMPLATE % CONFIG
-
 if CONFIG.verbose_level:
     configure_loggers(getattr(logging, CONFIG.verbose_level, 'INFO'),
                       LOG_LOCATION)
@@ -59,21 +53,25 @@ else:
 from cloudrunner.core import message
 from cloudrunner.core.message import StatusCodes
 from cloudrunner.core import parser
-from cloudrunner.dispatcher.admin import Admin
-from cloudrunner.dispatcher.publisher import Publisher
 from cloudrunner.util.daemon import Daemon
 from cloudrunner.util.loader import load_plugins
 from cloudrunner.util.loader import local_plugin_loader
 from cloudrunner.util.shell import colors
 
-from cloudrunner.plugins import PLUGIN_BASES
-from cloudrunner.plugins.args_provider import ArgsProvider
-from cloudrunner.plugins.args_provider import CliArgsProvider
-from cloudrunner.plugins.args_provider import ManagedPlugin
-from cloudrunner.plugins.auth.base import AuthPluginBase
-from cloudrunner.plugins.jobs.base import JobInOutProcessorPluginBase
-from cloudrunner.plugins.libs.base import IncludeLibPluginBase
+from cloudrunner_server.dispatcher import SCHEDULER_URI_TEMPLATE
+from cloudrunner_server.dispatcher import PluginContext
+from cloudrunner_server.dispatcher import Promise
+from cloudrunner_server.dispatcher.admin import Admin
+from cloudrunner_server.dispatcher.publisher import Publisher
+from cloudrunner_server.plugins import PLUGIN_BASES
+from cloudrunner_server.plugins.args_provider import ArgsProvider
+from cloudrunner_server.plugins.args_provider import CliArgsProvider
+from cloudrunner_server.plugins.args_provider import ManagedPlugin
+from cloudrunner_server.plugins.auth.base import AuthPluginBase
+from cloudrunner_server.plugins.jobs.base import JobInOutProcessorPluginBase
+from cloudrunner_server.plugins.libs.base import IncludeLibPluginBase
 
+SCHEDULER_URI = SCHEDULER_URI_TEMPLATE % CONFIG
 
 LOG = logging.getLogger("Dispatcher")
 

@@ -25,12 +25,12 @@ from mock import patch
 import os
 import threading
 
-from cloudrunner.tests import base
-from cloudrunner.plugins.auth.user_db import AuthDb
-from cloudrunner.dispatcher import server
-from cloudrunner.dispatcher.session import ServerSession
-from cloudrunner.dispatcher.server import CONFIG
 from cloudrunner.core import parser
+from cloudrunner_server.plugins.auth.user_db import AuthDb
+from cloudrunner_server.dispatcher import server
+from cloudrunner_server.dispatcher.session import ServerSession
+from cloudrunner_server.dispatcher.server import CONFIG
+from cloudrunner_server.tests import base
 
 SESSION = "1234-5678-9012"
 

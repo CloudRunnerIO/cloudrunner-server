@@ -5,12 +5,12 @@
 %{!?python_sitelib: %global python_sitelib %(%{__python} -c "from distutils.sysconfig import get_python_lib; print(get_python_lib())")}
 
 
-Name:       cloudrunner
+Name:       cloudrunner_server
 Version:    0.2
-Release:    2.bstk%{?dist}
+Release:    2.cloudr%{?dist}
 Summary:    CloudRunner engine for running scripts in cloud environment
 Group:      Cloud tools
-License:    Apache2
+License:    Proprietary
 URL:        http://www.cloudrunner.io/
 Source0:    %{name}-%{version}.tar.gz
 BuildRoot:  %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
@@ -84,11 +84,11 @@ rm -rf %{buildroot}
 %defattr(-,root,root,-)
 %doc README.rst
 
-%dir %{python_sitelib}/cloudrunner-server/
-%{python_sitelib}/cloudrunner-server/tests/*
-%{python_sitelib}/cloudrunner-server/__init__*
-%{python_sitelib}/cloudrunner-server/plugins
-%{python_sitelib}/cloudrunner-server-%{version}-py*.egg-info
+%dir %{python_sitelib}/cloudrunner_server/
+%{python_sitelib}/cloudrunner_server/tests/*
+%{python_sitelib}/cloudrunner_server/__init__*
+%{python_sitelib}/cloudrunner_server/plugins
+%{python_sitelib}/cloudrunner_server-%{version}-py*.egg-info
 
 %dir /var/run/cloudrunner/
 %dir /var/run/sock/cloudrunner/
@@ -98,9 +98,9 @@ rm -rf %{buildroot}
 %{_bindir}/cloudrunner-dsp
 %{_bindir}/cloudrunner-master
 
-%{python_sitelib}/cloudrunner-server/db
-%{python_sitelib}/cloudrunner-servermaster/dispatcher
-%{python_sitelib}/cloudrunner-server/master
+%{python_sitelib}/cloudrunner_server/db
+%{python_sitelib}/cloudrunner_servermaster/dispatcher
+%{python_sitelib}/cloudrunner_server/master
 
 %{_initrddir}/cloudrunner-dsp
 %config(noreplace) %{_sysconfdir}/cloudrunner/cloudrunner.conf

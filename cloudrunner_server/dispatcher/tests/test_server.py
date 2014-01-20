@@ -29,13 +29,13 @@ import tempfile
 import uuid
 from crontab import CronTab
 
-from cloudrunner.tests import base
-from cloudrunner.master.functions import CertController
-from cloudrunner.plugins.auth.user_db import UserMap
-from cloudrunner.plugins.auth.user_db import AuthDb
-from cloudrunner.dispatcher.server import Dispatcher
-from cloudrunner.dispatcher.server import CONFIG
-from cloudrunner.plugins.scheduler import cron_scheduler
+from cloudrunner_server.master.functions import CertController
+from cloudrunner_server.plugins.auth.user_db import UserMap
+from cloudrunner_server.plugins.auth.user_db import AuthDb
+from cloudrunner_server.dispatcher.server import Dispatcher
+from cloudrunner_server.dispatcher.server import CONFIG
+from cloudrunner_server.plugins.scheduler import cron_scheduler
+from cloudrunner_server.tests import base
 
 
 class TestServer(base.BaseTestCase):
@@ -184,7 +184,7 @@ class TestServer(base.BaseTestCase):
         auth_db_mock.cursor = Mock(return_value=cursor_mock)
 
         with nested(patch('sqlite3.connect', Mock(return_value=auth_db_mock)),
-            patch('datetime.datetime', now=Mock(return_value=333333333))):
+                    patch('datetime.datetime', now=Mock(return_value=333333333))):
             disp.init_libs()
             self.assertIsNotNone(disp.auth)
             self.assertIsNotNone(disp.transport_class)

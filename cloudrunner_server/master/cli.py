@@ -26,9 +26,9 @@ except ImportError:
 import argparse
 
 from cloudrunner import CONFIG_LOCATION
-from cloudrunner.master import functions
 from cloudrunner.util.config import Config
 from cloudrunner.util.shell import colors
+from cloudrunner_server.master import functions
 
 
 def main():

@@ -24,7 +24,7 @@ from os import path as p
 
 from cloudrunner.core.message import is_valid_host
 from cloudrunner.core.message import TOKEN_SEPARATOR
-from cloudrunner.master.functions import CertController
+from cloudrunner_server.master.functions import CertController
 
 LOG = logging.getLogger('Control Tower')
 

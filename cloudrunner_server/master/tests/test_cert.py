@@ -21,10 +21,10 @@ import os
 import M2Crypto as m
 import shutil
 
-from cloudrunner.tests import base
-from cloudrunner.master.functions import CertController
-from cloudrunner.master.functions import ConfigController
-from cloudrunner.master.functions import ERR
+from cloudrunner_server.tests import base
+from cloudrunner_server.master.functions import CertController
+from cloudrunner_server.master.functions import ConfigController
+from cloudrunner_server.master.functions import ERR
 
 
 class TestCert(base.BaseTestCase):

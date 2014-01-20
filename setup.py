@@ -17,8 +17,6 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-import os
-import shutil
 import sys
 
 if sys.version_info < (2, 7):
@@ -31,16 +29,10 @@ from setuptools import find_packages
 
 from version import VERSION
 
-os_requirements = []
-
-if os.name == 'nt':
-    # Add Windows requirements
-    os_requirements.append('pywin32')
-
 test_requirements = ['nose>=1.0', 'mock', 'coverage']
 
 setup(
-    name='cloudrunner',
+    name='cloudrunner_server',
     version=VERSION,
     url='http://www.cloudrunner.io/',
     author='CloudRunner.io',
@@ -50,26 +42,27 @@ setup(
     packages=find_packages(),
     package_data={'': ['*.txt', '*.rst'], 'conf': ['.*.conf'], 'db': ['*.py']},
     include_package_data = True,
-    install_requires=[
-        'pyzmq', 'python-crontab', 'M2Crypto', 'httplib2'] + os_requirements,
+    install_requires=['cloudrunner', 'pyzmq', 'python-crontab',
+                      'M2Crypto', 'httplib2'],
     tests_require = test_requirements,
     test_suite = 'nose.collector',
     scripts=['bin/cloudrunner-autocomplete'],
     entry_points={
         "console_scripts": [
-            "cloudrunner = cloudrunner.shell.runner:main",
-            "cloudrunner-master = cloudrunner.master.cli:main",
-            "cloudrunner-node = cloudrunner.node.agent:main",
-            "cloudrunner-dsp = cloudrunner.dispatcher.server:main",
+            "cloudrunner-master = cloudrunner_server.master.cli:main",
+            "cloudrunner-dsp = cloudrunner_server.dispatcher.server:main",
         ]
     },
     classifiers=[
         'Development Status :: 3 - Alpha',
         'Environment :: Console',
+        'Environment :: Plugins',
+        'Environment :: Web Environment',
         'Intended Audience :: Developers',
         'Intended Audience :: System Administrators',
-        'License :: OSI Approved :: Apache Software License',
-        'Operating System :: OS Independent',
+        'Intended Audience :: Information Technology',
+        'License :: Other/Proprietary License',
+        'Operating System :: Unix',
         'Programming Language :: Python',
         'Programming Language :: Python :: 2',
         'Programming Language :: Python :: 2.6',
