@@ -17,9 +17,17 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-from cloudrunner_server.plugins.auth.base import AuthPluginBase
-from cloudrunner_server.plugins.jobs.base import JobInOutProcessorPluginBase
-from cloudrunner_server.plugins.libs.base import IncludeLibPluginBase
+import abc
 
-PLUGIN_BASES = (AuthPluginBase, JobInOutProcessorPluginBase,
-                IncludeLibPluginBase)
+
+class StatePluginBase(object):
+
+    __metaclass__ = abc.ABCMeta
+
+    @abc.abstractmethod
+    def set_state_handlers(self):
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def save_state(self):
+        raise NotImplementedError()

@@ -17,9 +17,29 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-from cloudrunner_server.plugins.auth.base import AuthPluginBase
-from cloudrunner_server.plugins.jobs.base import JobInOutProcessorPluginBase
-from cloudrunner_server.plugins.libs.base import IncludeLibPluginBase
+import abc
 
-PLUGIN_BASES = (AuthPluginBase, JobInOutProcessorPluginBase,
-                IncludeLibPluginBase)
+
+class IncludeLibPluginBase(object):
+
+    __metaclass__ = abc.ABCMeta
+
+    @abc.abstractmethod
+    def process(self, user, section, env, args):
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def add(self, user, name, script, **kwargs):
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def show(self, user, name, **kwargs):
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def list(self, user, **kwargs):
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def delete(self, user, name, **kwargs):
+        raise NotImplementedError()

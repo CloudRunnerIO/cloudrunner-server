@@ -17,9 +17,16 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-from cloudrunner_server.plugins.auth.base import AuthPluginBase
-from cloudrunner_server.plugins.jobs.base import JobInOutProcessorPluginBase
-from cloudrunner_server.plugins.libs.base import IncludeLibPluginBase
+from cloudrunner_server.plugins.storage.base import StorePluginBase
 
-PLUGIN_BASES = (AuthPluginBase, JobInOutProcessorPluginBase,
-                IncludeLibPluginBase)
+
+class DBStorage(StorePluginBase):
+
+    def save(self, user, response):
+        raise NotImplementedError()
+
+    def list(self, user, **kwargs):
+        raise NotImplementedError()
+
+    def search(self, user, **kwargs):
+        raise NotImplementedError()

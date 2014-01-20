@@ -85,7 +85,7 @@ class TestServer(base.BaseTestCase):
                                    write=Mock(), remove=Mock(),
                                    new=Mock(return_value=cron_obj)),
                     patch(
-                    'cloudrunner.dispatcher.server.Dispatcher.get_api_token',
+                    'cloudrunner_server.dispatcher.server.Dispatcher.get_api_token',
                     Mock(return_value=['TOKEN', 'SOME_GENERATED_TOKEN'])),
                     patch('__builtin__.open',
                           return_value=Mock(
