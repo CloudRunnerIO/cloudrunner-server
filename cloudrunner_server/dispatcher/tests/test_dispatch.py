@@ -37,7 +37,7 @@ SESSION = "1234-5678-9012"
 
 class TestDispatch(base.BaseTestCase):
 
-    def test_sesson(self):
+    def test_session(self):
         payload = """
 #! switch [*]
 test_1

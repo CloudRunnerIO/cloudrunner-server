@@ -60,7 +60,7 @@ class TestServer(base.BaseTestCase):
         disp.user_id = user
         user_token = "user_token"
         disp.user_token = user_token
-        with patch('cloudrunner.plugins.auth.user_db.UserMap.authenticate',
+        with patch('cloudrunner_server.plugins.auth.user_db.UserMap.authenticate',
                    Mock(return_value=(True, {'*': 'root'}))):
             disp._login()
             self.assertIsNotNone(disp.auth)

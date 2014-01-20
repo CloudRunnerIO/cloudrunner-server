@@ -1,7 +1,7 @@
 __author__ = 'Ivelin Slavov'
 
 from unittest import TestCase
-from cloudrunner.db import get_db, Column
+from cloudrunner_server.db import get_db, Column
 import os
 
 

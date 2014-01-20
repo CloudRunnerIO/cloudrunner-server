@@ -63,6 +63,7 @@ from cloudrunner_server.dispatcher import PluginContext
 from cloudrunner_server.dispatcher import Promise
 from cloudrunner_server.dispatcher.admin import Admin
 from cloudrunner_server.dispatcher.publisher import Publisher
+from cloudrunner_server.master.functions import CertController
 from cloudrunner_server.plugins import PLUGIN_BASES
 from cloudrunner_server.plugins.args_provider import ArgsProvider
 from cloudrunner_server.plugins.args_provider import CliArgsProvider
@@ -286,14 +287,12 @@ class Dispatcher(Daemon):
         return (success, msg)
 
     def list_nodes(self, payload, remote_user_map, **kwargs):
-        from cloudrunner.master.functions import CertController
         cert = CertController(CONFIG)
         org = remote_user_map.org if self.config.security.use_org else None
         nodes = cert.get_approved_nodes(org)
         return (True, [node for node in nodes])
 
     def list_pending_nodes(self, payload, remote_user_map, **kwargs):
-        from cloudrunner.master.functions import CertController
         cert = CertController(CONFIG)
         org = remote_user_map.org if self.config.security.use_org else None
         nodes = cert.list_pending(org)

@@ -20,10 +20,10 @@
 import os
 import tempfile
 
-from cloudrunner.tests import base
 from cloudrunner.util.crypto import hash_token
 from cloudrunner.util.loader import local_plugin_loader
-from cloudrunner.plugins.auth.base import AuthPluginBase
+from cloudrunner_server.tests import base
+from cloudrunner_server.plugins.auth.base import AuthPluginBase
 
 
 class TestUsersWithoutOrg(base.BaseTestCase):
@@ -43,7 +43,7 @@ class TestUsersWithoutOrg(base.BaseTestCase):
     def test_login(self):
         self.assertEqual(len(AuthPluginBase.__subclasses__()), 1)
         success, access_map = self.auth.authenticate("user1",
-                                                          hash_token("token1"))
+                                                     hash_token("token1"))
         self.assertTrue(success, access_map)
         self.assertEquals(access_map.org, 'DEFAULT')
 
@@ -81,7 +81,7 @@ class TestUsersWithoutOrg(base.BaseTestCase):
         self.assertTrue(
             *self.auth.create_user('user2', 'token2'))
         success, access_map = self.auth.authenticate("user2",
-                                                          hash_token("token2"))
+                                                     hash_token("token2"))
         self.assertTrue(success, access_map)
         self.assertEquals(access_map.org, 'DEFAULT')
         self.assertTrue(*self.auth.remove_user('user2'))
@@ -94,6 +94,7 @@ class TestUsersWithoutOrg(base.BaseTestCase):
         success, access_map = self.auth.validate("user1", token)
         self.assertTrue(success, access_map)
         self.assertEquals(access_map.org, 'DEFAULT')
+
 
 class TestUsersWithOrg(base.BaseTestCase):
 
@@ -113,7 +114,7 @@ class TestUsersWithOrg(base.BaseTestCase):
     def test_login(self):
         self.assertEqual(len(AuthPluginBase.__subclasses__()), 1)
         success, access_map = self.auth.authenticate("user1",
-                                                          hash_token("token1"))
+                                                     hash_token("token1"))
         self.assertTrue(success, access_map)
         self.assertEquals(access_map.org, 'MyOrg')
 
@@ -151,7 +152,7 @@ class TestUsersWithOrg(base.BaseTestCase):
         self.assertTrue(
             *self.auth.create_user('user2', 'token2', 'MyOrg'))
         success, access_map = self.auth.authenticate("user2",
-                                                          hash_token("token2"))
+                                                     hash_token("token2"))
         self.assertTrue(success, access_map)
         self.assertEquals(access_map.org, 'MyOrg')
         self.assertTrue(*self.auth.remove_user('user2'))
