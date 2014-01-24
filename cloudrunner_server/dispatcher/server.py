@@ -62,7 +62,7 @@ from cloudrunner_server.dispatcher import SCHEDULER_URI_TEMPLATE
 from cloudrunner_server.dispatcher import PluginContext
 from cloudrunner_server.dispatcher import Promise
 from cloudrunner_server.dispatcher.admin import Admin
-from cloudrunner_server.dispatcher.publisher import Publisher
+from cloudrunner_server.dispatcher.manager import SessionManager
 from cloudrunner_server.master.functions import CertController
 from cloudrunner_server.plugins import PLUGIN_BASES
 from cloudrunner_server.plugins.args_provider import ArgsProvider
@@ -127,13 +127,7 @@ class Dispatcher(Daemon):
     def init_libs(self):
         self.dispatcher_uri = ''.join(['tcp://',
                                       CONFIG.listen_uri or '0.0.0.0:38123'])
-        self.worker_uri = 'inproc://cr-dispatcher-workers'
-        self.worker_out_uri = 'inproc://cr-dispatcher-workers-out'
-        self.job_done_uri = 'inproc://cr-dispatcher-done'
         self.scheduler_uri = SCHEDULER_URI
-        self.logger_uri = CONFIG.logger_uri or \
-            "ipc://%(sock_dir)s/logger.sock" % CONFIG
-        self.logger_uri_int = "inproc://logger-int"
 
         # instantiate dispatcher implementation
         self.transport_class = local_plugin_loader(CONFIG.transport)
@@ -144,8 +138,6 @@ class Dispatcher(Daemon):
         load_plugins(CONFIG)
 
         args_plugins = argparse.ArgumentParser(add_help=False)
-        self.plugin_plugins = argparse.ArgumentParser(add_help=False).\
-            add_subparsers(dest='plugins')
 
         self.plugin_register = {}
         self.plugin_cli_register = {}
@@ -167,20 +159,44 @@ class Dispatcher(Daemon):
                         LOG.exception(ex)
                         continue
 
-                if issubclass(plugin, CliArgsProvider):
-                    try:
-                        arg = plugin().append_cli_args(self.plugin_plugins)
-                        self.plugin_cli_register.setdefault(arg,
-                                                            []).append(plugin)
-                    except Exception, ex:
-                        LOG.exception(ex)
-                        continue
-
                 if issubclass(plugin, ManagedPlugin):
                     try:
                         plugin().start()
                     except Exception, ex:
                         LOG.error('Plugin error(%s):  %r' % (plugin, ex))
+
+        for plugin in CliArgsProvider.__subclasses__():
+            try:
+                # overwrite error method
+                def _toString(parser):
+                    from StringIO import StringIO
+                    buf = StringIO()
+                    parser.print_help(file=buf)
+                    return buf.getvalue()
+
+                def _error(cls, *arg, **kw):
+                    raise ValueError(cls._toString())
+                argparse.ArgumentParser._toString = _toString
+                argparse.ArgumentParser.error = _error
+                plugin_plugins = argparse.ArgumentParser(
+                    add_help=False,
+                    prog='')
+                plugin.parser = plugin_plugins
+                arg = plugin().append_cli_args(plugin_plugins)
+                if not arg:
+                    LOG.warn("Plugin %s doesn't return correct id" %
+                             plugin.__name__)
+                    continue
+                if arg in self.plugin_cli_register:
+                    LOG.warn(
+                        "Duplicate plugin name %s from plugin [%s]" %
+                        (arg, plugin.__name__))
+                    continue
+                self.plugin_cli_register.setdefault(arg,
+                                                    []).append(plugin)
+            except Exception, ex:
+                LOG.exception(ex)
+                continue
 
         self.scheduler_class = None
         if CONFIG.scheduler:
@@ -232,7 +248,7 @@ class Dispatcher(Daemon):
         return True  # Already logged, kind of echo
 
     def get_api_token(self, *args, **kwargs):
-        token = self.auth.create_token(self.user_id, **kwargs)
+        token = self.auth.create_token(self.user_id, self.token, **kwargs)
         if token:
             return ["TOKEN", token]
         else:
@@ -246,6 +262,7 @@ class Dispatcher(Daemon):
         cli_plug = [(args, [c.__module__ for c in p])
                     for (args, p) in sorted(self.plugin_cli_register.items(),
                                             key=lambda x: (x[1], x[0]))]
+
         return [plug, cli_plug]
 
     def plugin(self, payload, remote_user_map, **kwargs):
@@ -253,38 +270,27 @@ class Dispatcher(Daemon):
         plugin_name = kwargs['plugin']
         plugins = self.plugin_cli_register.get(plugin_name, None)
         if not plugins:
-            return ['Plugin %s not found' % plugin_name]
+            return [(False, 'Plugin %s not found' % plugin_name)]
 
         user_org = (self.user_id, remote_user_map.org)
 
         for plugin in plugins:
             try:
-                ret = plugin().call(user_org, payload, kwargs.get('args', ''))
+                args = kwargs.get('args', '').split()
+                ns, _ = plugin.parser.parse_known_args(args)
+                ret = plugin().call(user_org, payload,
+                                    self.plugin_context.instance(
+                                    self.user_id, self.user_token),
+                                    ns)
                 if ret:
                     resp.append(ret)
+            except ValueError, verr:
+                resp.append((False, str(verr)))
             except Exception, ex:
-                LOG.error(ex)
+                LOG.exception(ex)
+                resp.append((False, plugin.parser._toString()))
 
         return resp
-
-    def schedule(self, payload, remote_user_map, **kwargs):
-        if not self.scheduler_class:
-            return [False, 'ERROR: Scheduler not defined in config']
-
-        action = kwargs['action']
-
-        kwargs['payload'] = payload
-        if action == "add":
-            # Set auth token
-            kwargs['auth_token'] = self.get_api_token(expiry=-1)[1]
-
-        bin_path = os.path.dirname(os.path.abspath(sys.argv[0]))
-        kwargs['exec'] = os.path.join(bin_path, 'cloudrunner-master')
-
-        scheduler = self.scheduler_class()
-        (success, msg) = getattr(scheduler, action)(self.user_id,
-                                                    **kwargs)
-        return (success, msg)
 
     def list_nodes(self, payload, remote_user_map, **kwargs):
         cert = CertController(CONFIG)
@@ -316,26 +322,6 @@ class Dispatcher(Daemon):
 
         return (True, active_nodes)
 
-    def library(self, payload, remote_user_map, **kwargs):
-        success, result = False, ''
-        user_org = (self.user_id, remote_user_map.org)
-
-        for plugin in self.plugin_context.lib_plugins:
-            try:
-                action = kwargs.pop('action')
-                args = []
-                if action == "add":
-                    args.append(kwargs.pop('name'))
-                    args.append(payload)
-                success, result = getattr(plugin(), action)(user_org,
-                                                            *args,
-                                                            **kwargs)
-            except Exception, ex:
-                LOG.exception(ex)
-                return False, "Cannot process command, see logs for details"
-
-        return success, result
-
     def attach(self, payload, remote_user_map, **kwargs):
         """
         Attach to an existing pre-defined session
@@ -359,7 +345,7 @@ class Dispatcher(Daemon):
         job_id = str(kwargs.pop('job_id'))
 
         targets = str(kwargs.pop('targets', '*'))
-        session = [sess for sess in self.publisher.subscriptions.get(
+        session = [sess for sess in self.manager.subscriptions.get(
             session_id, []) if sess.owner == self.user_id]
         if not session:
             return [False, "You are not the owner of the session"]
@@ -372,15 +358,15 @@ class Dispatcher(Daemon):
     def term(self, payload, remote_user_map, **kwargs):
         session_id = str(kwargs.pop('session_id'))
 
-        session_sub = [sess for sess in self.publisher.subscriptions.get(
+        session_sub = [sess for sess in self.manager.subscriptions.get(
             session_id, []) if sess.owner == self.user_id]
         if not session_sub:
             return [False, "You are not the owner of the session"]
 
-        session = self.publisher.sessions.get(session_id)
+        session = self.manager.sessions.get(session_id)
         if session:
             session.stop_reason = str(kwargs.get('action', 'term'))
-            session.stopped.set()
+            session.session_event.set()
             return [True, "Session terminated"]
         else:
             return [False, "Session not found"]
@@ -392,81 +378,67 @@ class Dispatcher(Daemon):
 
         session_id = str(uuid.uuid1())
 
-        promise = self.publisher.prepare_session(self.user_id, session_id,
-                                                 payload, remote_user_map,
-                                                 plugin_ctx=self.plugin_context,
-                                                 **kwargs)
+        promise = self.manager.prepare_session(
+            self.user_id, session_id, payload, remote_user_map,
+            self.plugin_context.instance(self.user_id, self.user_token),
+            **kwargs)
         promise.main = True
         return promise
 
     def worker(self, *args):
-        job_queue = self.context.socket(zmq.DEALER)
-        job_done_queue = self.context.socket(zmq.DEALER)
-        job_done_queue.connect(self.worker_out_uri)
+        job_queue = self.backend.consume_queue('requests')
+        job_done_queue = self.backend.consume_queue('finished_jobs')
+        log_queue = self.backend.subscribe_fanout('logger')
 
-        log_queue = self.context.socket(zmq.PUB)
-        log_queue.connect(self.logger_uri_int)
-
-        try:
-            job_queue.connect(self.worker_uri)
-        except zmq.ZMQError, zerr:
-            if zerr.errno == 2:
-                # Socket dir is missing
-                LOG.error("Socket uri is missing: %s" % self.worker_uri)
-                exit(1)
-
-        poller = zmq.Poller()
-        poller.register(job_queue, zmq.POLLIN)
-        poller.register(job_done_queue, zmq.POLLIN)
+        poller = self.backend.create_poller(job_queue, job_done_queue)
 
         while not self.stopping.is_set():
             ready = {}
             try:
                 frames = None
                 try:
-                    ready = dict(poller.poll(300))
+                    ready = poller.poll(300)
                     if not ready:
                         continue
-                except zmq.ZMQError as e:
-                    if context.closed or zerr.errno == zmq.ETERM \
-                        or zerr.errno == zmq.ENOTSOCK:
+                except zmq.ZMQError as zerr:
+                    if zerr.errno == zmq.ETERM or zerr.errno == zmq.ENOTSOCK:
                         break
-                    LOG.exception(e)
+                    LOG.exception(zerr)
                     if not self.stopping.is_set():
                         continue
                 if job_queue in ready:
                     # User -> queue
-                    frames = job_queue.recv_multipart()
+                    frames = job_queue.recv()
                     sender = frames.pop(0)
                     req = message.AgentReq.build(*frames)
                     if not req:
                         LOG.error("Invalid request %s" % frames)
                         continue
-
                     if req.control.startswith('_'):
                         LOG.error("Invalid request %s" % frames)
                         continue
 
                     if not hasattr(self, req.control):
                         # TODO: Check if a plugin supports command
-                        job_queue.send_multipart(
-                            [sender, StatusCodes.FINISHED,
-                             json.dumps(
-                             ["ERROR: [%s] command not available on Master" %
-                              req.control])])
+                        job_queue.send(
+                            sender, StatusCodes.FINISHED,
+                            json.dumps(
+                                ["ERROR: [%s] command not available on Master" %
+                                 req.control]))
                         continue
 
                     self.user_id = req.login
                     if req.auth_type == 1:
                         # Password auth
                         self.user_token = hash_token(req.password)
+                        self.user_token = req.password
                     else:
                         # Token auth
                         self.user_token = req.password
 
                     auth_check = self._login(req.auth_type)
                     if not auth_check[0]:
-                        job_queue.send_multipart([sender, 'NOT AUTHORIZED'])
+                        job_queue.send(sender, 'NOT AUTHORIZED')
                         continue
 
                     remote_user_map = auth_check[1]
@@ -475,8 +447,8 @@ class Dispatcher(Daemon):
                                                           remote_user_map.org))
                     # def pipe_callback(*args):
                     #    self.job_queue.send_multipart(
-                    #        [sender, StatusCodes.PIPEOUT,
-                    #         json.dumps(args)])
+                    #        sender, StatusCodes.PIPEOUT,
+                    #         json.dumps(args))
 
                     response = getattr(self, req.control)(req.data,
                                                           remote_user_map,
@@ -488,27 +460,26 @@ class Dispatcher(Daemon):
                         elif response.remove:
                             # Detach
                             try:
-                                for sub in self.publisher.subscriptions[
+                                for sub in self.manager.subscriptions[
                                     response.session_id]:
                                     if sub.session_id == response.session_id:
-                                        self.publisher.subscriptions[
+                                        self.manager.subscriptions[
                                             response.session_id].remove(sub)
                                         break
                             except:
                                 pass
                         else:
-                            self.publisher.subscriptions[
+                            self.manager.subscriptions[
                                 response.session_id].append(response)
                     elif response:
-                        job_queue.send_multipart(
-                            [sender, StatusCodes.FINISHED,
-                             json.dumps(response)])
+                        job_queue.send(sender, StatusCodes.FINISHED,
+                                       json.dumps(response))
 
                 elif job_done_queue in ready:
                     # Done -> user
-                    frames = job_done_queue.recv_multipart()
-                    job_queue.send_multipart(frames)
-                    log_queue.send_multipart(frames[1:])
+                    frames = job_done_queue.recv()
+                    job_queue.send(*frames)
+                    log_queue.send(*frames[1:])
             except zmq.ZMQError, err:
                 if self.context.closed or \
                         getattr(err, 'errno', 0) == zmq.ETERM:
@@ -517,6 +488,9 @@ class Dispatcher(Daemon):
                 LOG.exception(err)
 
         job_queue.close()
+        job_done_queue.close()
+        log_queue.close()
+
         LOG.info('Server worker exited')
 
     def sched_worker(self, *args):
@@ -602,7 +576,6 @@ class Dispatcher(Daemon):
     def run(self):
 
         self.init_libs()
-        self.transport = self.transport_class(self.config)
 
         if not self.config.sock_dir:
             # try to create it
@@ -617,100 +590,21 @@ class Dispatcher(Daemon):
         WORKER_COUNT = int(CONFIG.workers_count or 10)
         SCHED_WORKER_COUNT = int(CONFIG.sched_worker_count or 5)
 
-        self.context = zmq.Context(3)
+        #self.context = zmq.Context(3)
         self.stopping = threading.Event()
 
-        if self.config.security.use_org:
-            self.transport.publisher.organizations = self.auth.list_orgs()
-        else:
-            self.transport.publisher.organizations = \
-                [self.transport.DEFAULT_ORG]
-        self.transport.run()  # Run router
+        self.backend = self.transport_class(self.config)
+        self.backend.prepare()
 
-        self.admin = Admin(self.config, self.transport.admin)
+        if self.config.security.use_org:
+            self.backend.organizations = self.auth.list_orgs()
+        else:
+            self.backend.organizations = None
+
+        self.admin = Admin(self.config, self.backend)
         self.admin.start()
 
-        time.sleep(.5)
-
-        self.publisher = Publisher(self.config, self.context,
-                                   self.transport.publisher,
-                                   self.job_done_uri,
-                                   plugins_ctx=self.plugin_context)
-        self.publisher.start()
-
-        def input_device():
-            worker_proxy = self.context.socket(zmq.DEALER)
-            worker_proxy.bind(self.worker_uri)
-            router = self.context.socket(zmq.ROUTER)
-            router.bind(self.dispatcher_uri)
-            try:
-                zmq.device(zmq.QUEUE, router, worker_proxy)
-            except zmq.ZMQError, err:
-                if self.context.closed or \
-                        getattr(err, 'errno', 0) == zmq.ETERM or \
-                        getattr(err, 'errno', 0) == zmq.ENOTSOCK:
-                    # System interrupt
-                    pass
-                else:
-                    raise err
-            router.close()
-            worker_proxy.close()
-
-        def output_device():
-            job_done = self.context.socket(zmq.DEALER)
-            job_done.bind(self.job_done_uri)
-            worker_out_proxy = self.context.socket(zmq.DEALER)
-            worker_out_proxy.bind(self.worker_out_uri)
-            # For use of monitoring proxy
-            # mon_proxy = self.context.socket(zmq.PUB)
-            # mon_proxy.bind(self.mon_proxy_uri)
-            # LOG.info("Monitor writing on %s" % self.mon_proxy_uri)
-            try:
-                zmq.device(zmq.QUEUE, worker_out_proxy, job_done)
-                # monitored_queue(worker_out_proxy, job_done, mon_proxy)
-            except zmq.ZMQError, err:
-                if self.context.closed or \
-                        getattr(err, 'errno', 0) == zmq.ETERM or \
-                        getattr(err, 'errno', 0) == zmq.ENOTSOCK:
-                    # System interrupt
-                    pass
-                else:
-                    raise err
-            job_done.close()
-            worker_out_proxy.close()
-            # mon_proxy.close()
-
-        def logger_device():
-            log_xsub = self.context.socket(zmq.XSUB)
-            log_xsub.bind(self.logger_uri_int)
-            log_xpub = self.context.socket(zmq.XPUB)
-            log_xpub.bind(self.logger_uri)
-            while True:
-                try:
-                    zmq.device(zmq.FORWARDER, log_xsub, log_xpub)
-                except zmq.ZMQError, err:
-                    if self.context.closed or \
-                            getattr(err, 'errno', 0) == zmq.ETERM:
-                        # System interrupt
-                        break
-                    LOG.exception(err)
-                    continue
-
-        self.notification_service = self.context.socket(zmq.ROUTER)
-        self.notification_service.bind(self.transport.notify_msg_bus_uri)
-
-        device_in = threading.Thread(target=input_device)
-        device_in.start()
-
-        device_out = threading.Thread(target=output_device)
-        device_out.start()
-
-        device_log = threading.Thread(target=logger_device)
-        device_log.start()
-
-        # wait for devices
-        time.sleep(.5)
-
+        self.manager = SessionManager(self.config, self.backend)
         self.threads = []
         for i in range(WORKER_COUNT):
             thread = threading.Thread(target=self.worker, args=[])
@@ -718,10 +612,10 @@ class Dispatcher(Daemon):
             self.threads.append(thread)
 
         self.sched_threads = []
-        for i in range(SCHED_WORKER_COUNT):
-            thread = threading.Thread(target=self.sched_worker, args=[])
-            thread.start()
-            self.sched_threads.append(thread)
+        # for i in range(SCHED_WORKER_COUNT):
+        #    thread = threading.Thread(target=self.sched_worker, args=[])
+        #    thread.start()
+        #    self.sched_threads.append(thread)
 
         signal.signal(signal.SIGINT, self._handle_terminate)
         signal.signal(signal.SIGTERM, self._handle_terminate)
@@ -732,8 +626,8 @@ class Dispatcher(Daemon):
 
     def _handle_terminate(self, *args):
         LOG.info("Received terminate signal")
-
-        self.publisher.stop()
+        self.backend.terminate()
+        self.manager.stop()
         self.stopping.set()
 
         for thread in self.threads:
@@ -742,14 +636,7 @@ class Dispatcher(Daemon):
             sched_thread.join()
         LOG.info('Threads exited')
 
-        self._terminate()
-
         ioloop.IOLoop.instance().stop()
-
-        LOG.info('Exiting terminate')
-
-    def _terminate(self):
-        LOG.info('Stopping Server daemon')
 
         # Destroy managed plugins
         for plugin_base in PLUGIN_BASES:
@@ -760,9 +647,6 @@ class Dispatcher(Daemon):
                     except:
                         pass
 
-        self.notification_service.close()
-        self.transport.shutdown()
-        self.context.term()
         LOG.info('Stopped Server daemon')
 
 

@@ -46,7 +46,7 @@ def _default_dir():
     return _def_dir
 
 
-class LibIncludePlugin(IncludeLibPluginBase, ArgsProvider):
+class LibIncludePlugin(IncludeLibPluginBase, ArgsProvider, CliArgsProvider):
 
     def __init__(self):
         self.lib_dir = getattr(LibIncludePlugin, 'lib_dir', _default_dir())
@@ -241,3 +241,48 @@ class LibIncludePlugin(IncludeLibPluginBase, ArgsProvider):
 
         if args.storelib:
             self.add(user_org, args.storelib, section)
+
+    # CLI arguments
+    def append_cli_args(self, arg_parser):
+        lib_actions = arg_parser.add_subparsers(dest='action')
+
+        list_ = lib_actions.add_parser('list', add_help=False,
+                                       help="List library items")
+        list_.add_argument('--json', action='store_true',
+                           help='Return in JSON format')
+
+        show = lib_actions.add_parser('show', add_help=False,
+                                      help='Show a library item')
+        show.add_argument('name', help='Library item name')
+
+        add = lib_actions.add_parser('add', add_help=False,
+                                     help='Add new library item')
+        add.add_argument('--overwrite', '-o', help='Overwrite existing')
+        add.add_argument('--private', help='Save as private',
+                         action='store_true', default=False)
+        add.add_argument('name', help='Item name')
+        add.add_argument('content', help='Item content')
+
+        return "library"
+
+    def call(self, user_org, data, ctx, args):
+        if args.action == "list":
+            rows = []
+            success, items = self.list(user_org)
+            if args.json:
+                return success, items
+            if success:
+                if items['public']:
+                    rows.append('PUBLIC')
+                    for item in items['public']:
+                        rows.append('%-40s%s' % (item['name'], item['owner']))
+                if items['private']:
+                    rows.append('PRIVATE')
+                    for item in items['private']:
+                        rows.append('%-40s%s' % (item['name'], item['owner']))
+
+                return (True, '\n'.join(rows))
+            return success, items
+        elif args.action == 'add':
+            return self.add(user_org, args.name, args.content,
+                            is_public=not args.private)

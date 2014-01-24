@@ -19,36 +19,15 @@
 
 import abc
 
-
-class ArgsProvider(object):
-
-    __metaclass__ = abc.ABCMeta
-
-    @abc.abstractmethod
-    def append_args(self, arg_parser):
-        raise NotImplementedError()
+from cloudrunner.plugins.transport.base import TransportBackend
 
 
-class CliArgsProvider(object):
-
-    __metaclass__ = abc.ABCMeta
+class ServerTransportBackend(TransportBackend):
 
     @abc.abstractmethod
-    def append_cli_args(self, arg_parser):
+    def create_fanout(self, endpoint, *args, **kwargs):
         raise NotImplementedError()
 
     @abc.abstractmethod
-    def call(self, user_org, data, ctx, args):
-        raise NotImplementedError()
-
-
-class ManagedPlugin(object):
-    __metaclass__ = abc.ABCMeta
-
-    @abc.abstractmethod
-    def start(self):
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def stop(self):
+    def subscribe_fanout(self, endpoint, *args, **kwargs):
         raise NotImplementedError()

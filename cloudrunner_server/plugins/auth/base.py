@@ -33,7 +33,7 @@ class AuthPluginBase(object):
         raise NotImplementedError()
 
     @abc.abstractmethod
-    def create_token(self, user, **kwargs):
+    def create_token(self, user, password, **kwargs):
         raise NotImplementedError()
 
     @abc.abstractmethod

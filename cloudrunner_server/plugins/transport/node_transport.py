@@ -31,11 +31,10 @@ from zmq.eventloop import ioloop
 import uuid
 
 from cloudrunner.core.message import *
-from cloudrunner_server.plugins.transport.tlszmq import ConnectionException
-from cloudrunner_server.plugins.transport.tlszmq import ServerDisconnectedException
-from cloudrunner_server.plugins.transport.tlszmq import TLSZmqClientSocket
-from cloudrunner_server.plugins.transport.tlszmq import TLSClientDecrypt
-from cloudrunner_server.util.shell import colors
+from cloudrunner.util.shell import colors
+from cloudrunner_server.plugins.transport.tlszmq import \
+    (ConnectionException, ServerDisconnectedException,
+     TLSZmqClientSocket, TLSClientDecrypt)
 
 LOGC = logging.getLogger('ZMQ Node Transport')
 STATE_OPS = ("IDENT", "RELOAD", 'FINISHED')
@@ -179,9 +178,9 @@ class Transport(object):
                 LOGC.info('Master approved the node. Starting service')
                 return 0
             elif rp.reply == 'ERR_CRT_EXISTS':
-                LOGC.info('Master says: "There is already an issued certificate '
-                          'for this node. Remove the certificate '
-                          'from master first"')
+                LOGC.info('Master says: "There is already an issued certificate'
+                          ' for this node. Remove the certificate'
+                          ' from master first"')
                 return -1
             elif rp.reply == 'ERR_CN_FAIL':
                 LOGC.info(
@@ -260,7 +259,8 @@ class Transport(object):
 
             while True:
                 try:
-                    _, message = self.sub_sock.recv_multipart()
+                    fff = self.sub_sock.recv_multipart()
+                    _, message = fff
                     if message == StatusCodes.WELCOME or \
                         message == StatusCodes.RELOAD:
                         # Heartbeat
@@ -283,6 +283,8 @@ class Transport(object):
                             LOGC.error("Cannot decrypt frames from [%s]: %r" %
                                       (_, ex))
                         try:
+                            print "FRAMES", frames
+
                             self.callback(*frames)
                         except Exception, ex:
                             LOGC.error("Cannot pass job to agent: %r" % ex)
@@ -295,8 +297,8 @@ class Transport(object):
                         break
                     LOGC.exception(zerr)
                     LOGC.error(zerr.errno)
-                except Exception, ex:
-                    LOGC.error("Node listener thread: exception %s" % ex)
+                except ValueError, ex: #Exception, ex:
+                    LOGC.error("Node listener thread: exception %r" % ex)
 
             self.sub_sock.close(0)
             LOGC.info('Node Listener exited')
@@ -316,8 +318,8 @@ class Transport(object):
                 csreq = '.'.join(base_name, ".csr")
                 if not os.path.exists(csreq):
                     LOGC.warn('Client certificate request not found.'
-                              'Run program with "configure" option first or set '
-                              'the path to the .csr file in the config as:\n'
+                              'Run program with "configure" option first or set'
+                              ' the path to the .csr file in the config as:\n'
                               '[Security]\n'
                               'node_csr=path_to_file\n')
                     exit(1)

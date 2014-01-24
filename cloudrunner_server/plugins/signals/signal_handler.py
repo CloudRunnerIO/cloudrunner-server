@@ -74,26 +74,6 @@ class SignalHandlerPlugin(JobInOutProcessorPluginBase,
     def append_args(self):
         return [dict(arg='--attach_to', dest='attach')]
 
-    def append_cli_args(self, arg_parser):
-        parser = arg_parser.add_parser('signals', prog='', add_help=False)
-        sig_actions = parser.add_subparsers(dest='action')
-
-        SignalHandlerPlugin.parser = parser
-
-        attach = sig_actions.add_parser('attach',
-                                        help='Attach target to signal')
-        attach.add_argument('signal', help='Signal name')
-        attach.add_argument('target', help='Target name')
-        attach.add_argument('-a', '--auth', action='store_true',
-                            help='Pass auth headers')
-
-        detach = sig_actions.add_parser('detach',
-                                        help='Detach target from signal')
-        detach.add_argument('signal', help='Signal name')
-        detach.add_argument('target', help='Target name')
-
-        return "signal"
-
     def before(self, user_org, session_id, script, env, args, ctx, **kwargs):
         return (script, env)
         if args.attach_to:
@@ -190,25 +170,30 @@ class SignalHandlerPlugin(JobInOutProcessorPluginBase,
                         password=password)
         return _req
 
-    def call(self, user_org, data, args_str):
-        args = args_str.split()
+    def append_cli_args(self, arg_parser):
+        sig_actions = arg_parser.add_subparsers(dest='action')
 
-        def _help():
-            from StringIO import StringIO
-            buf = StringIO()
-            SignalHandlerPlugin.parser.print_help(buf)
-            return buf.getvalue()
+        attach = sig_actions.add_parser('attach', add_help=False,
+                                        help='Attach target to signal')
+        attach.add_argument('signal', help='Signal name')
+        attach.add_argument('target', help='Target name')
+        attach.add_argument('-a', '--auth', action='store_true',
+                            help='Pass auth headers')
 
-        try:
-            ns, _ = SignalHandlerPlugin.parser.parse_known_args(args)
-            if ns.action == 'attach':
-                return self._attach(user_org, ns.signal, ns.target, ns.auth)
-            elif ns.action == 'detach':
-                return self._detach(user_org, ns.signal, ns.target)
-            return False, "Unknown"
-        except Exception, ex:
-            LOG.exception(ex)
-            return False, _help()
+        detach = sig_actions.add_parser('detach',
+                                        help='Detach target from signal')
+        detach.add_argument('signal', help='Signal name')
+        detach.add_argument('target', help='Target name')
+
+        return "signal"
+
+    def call(self, user_org, data, ctx, args):
+
+        if args.action == 'attach':
+            return self._attach(user_org, args.signal, args.target, args.auth)
+        elif args.action == 'detach':
+            return self._detach(user_org, args.signal, args.target)
+        return False, "Unknown"
 
     def _attach(self, user, signal, target, use_auth):
         LOG.info("[%s] Attaching to %s, auth: %s" %

@@ -1,12 +1,13 @@
 import json
 import logging
 from sys import maxint as MAX_INT
-import threading
+from threading import (Thread, Event)
 import time
 import zmq
 import uuid
 
 from cloudrunner.core import parser
+from cloudrunner.core.exceptions import ConnectionError
 from cloudrunner.core.message import JobInput
 from cloudrunner.core.message import JobRep
 from cloudrunner.core.message import StatusCodes
@@ -14,75 +15,69 @@ from cloudrunner.core.message import StatusCodes
 LOG = logging.getLogger('ServerSession')
 
 
-class ServerSession(threading.Thread):
+class JobSession(Thread):
 
     """
     Starts a session on the server, which is responsible for
     communication with nodes and for processing and agregating results
     """
 
-    def __init__(self, context, user, session_id, payload, remote_user_map,
-                 stop_event, **kwargs):
-        self.ctx = context
+    def __init__(self, manager, user, session_id, payload, remote_user_map,
+                 stop_event, plugin_ctx, **kwargs):
         self.session_id = session_id
         self.user = user
         self.payload = payload
         self.remote_user_map = remote_user_map
         self.kwargs = kwargs
-        self.stop_reason = 'normal'
+        self.stop_reason = 'term'
         self.session_event = stop_event
         self.task_name = str(kwargs.get('caller', ''))
         self.timeout = kwargs.get('timeout')
-        super(ServerSession, self).__init__()
+        self.manager = manager
+        self.plugin_context = plugin_ctx
+        super(JobSession, self).__init__()
 
     def _reply(self, session_id, ret_type, data):
-        for sub in self.ctx.subscriptions.get(session_id, []):
+        for sub in self.manager.subscriptions.get(session_id, []):
             try:
-                self.job_done.send_multipart(
-                    [sub.peer, ret_type] + [str(x) for x in data])
+                self.job_done.send(
+                    *[sub.peer, ret_type] + [str(x) for x in data])
             except zmq.ZMQError as e:
-                if self.ctx.context.closed or zerr.errno == zmq.ETERM \
+                if self.manager.context.closed or zerr.errno == zmq.ETERM \
                         or zerr.errno == zmq.ENOTSOCK:
                     break
                 continue
 
     def parse_script(self, env):
         self.sections = []
-        target = None
-        targets = None
-
-        tgt_args = None
-        tgt_args_string = None
 
         _sections = parser.split_sections(self.payload)
-        plugin_context = self.ctx.plugins_ctx
 
-        for _section in _sections:
-            section = None
-            (target, req_args) = parser.parse_selectors(_section)
-
-            if target:  # selector part, parse options
-                _args = [a for a in req_args.split() if a.strip()]
-                if plugin_context.args_plugins:
-                    (valid,
-                        invalid) = plugin_context.args_plugins.\
-                        parse_known_args(_args)
-                    tgt_args = valid
-                    tgt_args_string = list(set(_args) - set(invalid))
-
-                targets = target
-                continue
-
-            if not target and targets:
-                # Data section
-                section = Section()
-                section.data = _section
-                section.targets = targets
-                section.args = tgt_args
-                section.args_string = tgt_args_string
-
-                self.sections.append(section)
+        for i in range(1, len(_sections), 2):
             targets = None
+            tgt_args = None
+            tgt_args_string = None
+
+            target_str = _sections[i]
+            _section = _sections[i + 1]
+
+            (targets, req_args) = parser.parse_selectors(target_str)
+
+            _args = [a for a in req_args.split() if a.strip()]
+            if self.plugin_context.args_plugins:
+                (valid, invalid) = self.plugin_context.args_plugins.\
+                    parse_known_args(_args)
+                tgt_args = valid
+                tgt_args_string = list(set(_args) - set(invalid))
+
+            # Data section
+            section = Section()
+            section.data = _section
+            section.targets = targets
+            section.args = tgt_args
+            section.args_string = tgt_args_string
+
+            self.sections.append(section)
 
         if not _sections:
             LOG.warn("Request without executable sections")
@@ -104,7 +99,7 @@ class ServerSession(threading.Thread):
 
         common_opts = parser.parse_common_opts(self.payload)
         if common_opts:
-            args, __ = self.ctx.opt_parser.parse_known_args(
+            args, __ = self.manager.opt_parser.parse_known_args(
                 common_opts[1].split())
             if not timeout and args.timeout:
                 # read from opts
@@ -120,10 +115,8 @@ class ServerSession(threading.Thread):
 
         tags = json.dumps(self.kwargs.get("tags", []))
 
-        self.job_done = self.ctx.context.socket(zmq.DEALER)
-        self.job_done.connect(self.ctx.job_done_uri)
+        self.job_done = self.manager.backend.publish_queue('finished_jobs')
 
-        plugin_context = self.ctx.plugins_ctx
         user_org = (self.user, self.remote_user_map.org)
 
         # Clean up
@@ -147,7 +140,7 @@ class ServerSession(threading.Thread):
             libs = user_libs
             section.update_targets(env)
 
-            for plugin in plugin_context.job_plugins:
+            for plugin in self.plugin_context.job_plugins:
                 try:
                     # Save passed env for job
                     (data, env) = plugin().before(user_org,
@@ -155,7 +148,7 @@ class ServerSession(threading.Thread):
                                                   section.data,
                                                   env,
                                                   section.args,
-                                                  plugin_context,
+                                                  self.plugin_context,
                                                   **self.kwargs)
                     if data:
                         # updated
@@ -164,7 +157,7 @@ class ServerSession(threading.Thread):
                 except Exception, ex:
                     LOG.error('Plugin error(%s):  %r' % (plugin, ex))
 
-            for plugin in plugin_context.lib_plugins:
+            for plugin in self.plugin_context.lib_plugins:
                 try:
                     _libs = plugin().process(user_org,
                                              section.data,
@@ -212,12 +205,12 @@ class ServerSession(threading.Thread):
 
             env.update(new_env)
 
-            for plugin in plugin_context.job_plugins:
+            for plugin in self.plugin_context.job_plugins:
                 try:
                     # Save passed env for job
                     plugin().after(
                         user_org, self.session_id, job_id, env, msg_ret,
-                        section.args, plugin_context, **self.kwargs)
+                        section.args, self.plugin_context, **self.kwargs)
                 except Exception, ex:
                     LOG.error('Plugin error(%s):  %r' % (plugin, ex))
 
@@ -246,8 +239,8 @@ class ServerSession(threading.Thread):
         time.sleep(2)
 
         self.session_event.set()
-        del self.ctx.subscriptions[self.session_id]
-        del self.ctx.sessions[self.session_id]
+        del self.manager.subscriptions[self.session_id]
+        del self.manager.sessions[self.session_id]
 
     def exec_section(self, targets, request, timeout=None):
         """
@@ -264,133 +257,142 @@ class ServerSession(threading.Thread):
         """
 
         job_id = str(uuid.uuid1())  # Job Session id
-        job_event = threading.Event()
-        job = self.ctx.transport.create_job(job_id, job_event)
+        job_event = Event()
+        #job = self.manager.transport.create_job(job_id, job_event)
         remote_user_map = request.pop('remote_user_map')
         # Call for nodes
-        self.ctx.transport.publish(
+        job_queue = self.manager.backend.consume_queue('in_messages',
+                                                       ident=job_id)
+        job_reply = self.manager.backend.publish_queue('out_messages')
+        node_map = {}
+        discovery_period = time.time() + self.manager.discovery_timeout
+        total_wait = time.time() + (timeout or self.manager.wait_timeout)
+
+        self.manager.publisher.send(
             remote_user_map.org, job_id, str(targets))
         yield ('PIPE', job_id, str(targets), 'Job Started')
 
-        node_map = {}
-        discovery_period = time.time() + self.ctx.discovery_timeout
-        total_wait = time.time() + (timeout or self.ctx.wait_timeout)
-
         try:
             while not self.session_event.is_set() and not job_event.is_set():
-                for frames in job.receive():
-                    if not frames:
-                        if time.time() > discovery_period:
-                            # Discovery period ended, check for results
-                            if not any([n['status'] in StatusCodes.pending()
-                                        for n in node_map.values()]):
-                                job_event.set()
-                                break
+                frames = job_queue.recv(600)
 
-                        if time.time() > total_wait:
-                            LOG.warn('Timeout waiting for response from nodes')
-                            for node in node_map.values():
-                                if node['status'] != StatusCodes.FINISHED:
-                                    node['data']['stderr'] = \
-                                        node['data'].setdefault('stderr',
-                                                                '') + \
-                                        'Timeout waiting response from node'
-                            LOG.debug(node_map)
-                            job_event.set()
+                if not frames:
+                    if time.time() > discovery_period:
+                        # Discovery period ended, check for results
+                        if not any([n['status'] in StatusCodes.pending()
+                                    for n in node_map.values()]):
                             break
 
+                    if time.time() > total_wait:
+                        LOG.warn('Timeout waiting for response from nodes')
+                        for node in node_map.values():
+                            if node['status'] != StatusCodes.FINISHED:
+                                node['data']['stderr'] = \
+                                    node['data'].setdefault('stderr',
+                                                            '') + \
+                                    'Timeout waiting response from node'
+                        LOG.debug(node_map)
+                        job_event.set()
+                        break
+
+                    continue
+
+                if frames[0] == '':
+                    # input from user -> node
+                    input_req = JobInput.build(*frames)
+                    if not input_req:
                         continue
 
-                    if frames[0] == '':
-                        # input from user -> node
-                        input_req = JobInput.build(*frames)
-                        if not input_req:
-                            continue
+                    for node, data in node_map.items():
+                        if input_req.cmd == 'INPUT' and \
+                            (input_req.targets == '*' or
+                                node in input_req.targets):
+                            job_reply.send(data['router_id'], node, job_id,
+                                           input_req.cmd, input_req.data)
+                    continue
+                job_rep = JobRep.build(*frames)
+                if not job_rep:
+                    LOG.error("Invalid reply from node: %s" % frames)
+                    continue
 
-                        for node, data in node_map.items():
-                            if input_req.cmd == 'INPUT' and \
-                                (input_req.targets == '*' or
-                                    node in input_req.targets):
-                                job.reply(data['router_id'], node,
-                                          input_req.cmd, input_req.data)
+                # Assert we have rep from the same organization
+                if self.manager.config.security.use_org:
+                    assert job_rep.org == remote_user_map.org, \
+                        job_rep.org + " != " + remote_user_map.org
+
+                state = node_map.setdefault(
+                    job_rep.peer, dict(status=StatusCodes.STARTED,
+                                       data={},
+                                       stdout='',
+                                       stderr=''))
+
+                node_map[job_rep.peer]['router_id'] = job_rep.ident
+                if job_rep.control == StatusCodes.READY:
+                    remote_user = remote_user_map.select(job_rep.peer)
+                    if not remote_user:
+                        LOG.info("Node %s not allowed for user %s" % (
+                            job_rep.peer,
+                            remote_user_map.owner))
+                        node_map.pop(job_rep.peer)
                         continue
-                    job_rep = JobRep.build(*frames)
-                    if not job_rep:
-                        LOG.error("Invalid reply from node: %s" % frames)
-                        continue
+                    # Send task to attached node
+                    node_map[job_rep.peer]['remote_user'] = remote_user
+                    LOG.info("Sending job to %s" % job_rep.peer)
+                    job_reply.send(job_rep.ident, job_rep.peer, job_id, 'JOB',
+                                   json.dumps((remote_user, request)))
+                    continue
 
-                    # Assert we have rep from the same organization
-                    if self.ctx.config.security.use_org:
-                        assert job_rep.org == remote_user_map.org, \
-                            job_rep.org + " != " + remote_user_map.org
+                if not job_rep.data:
+                    continue
 
-                    state = node_map.setdefault(
-                        job_rep.peer, dict(status=StatusCodes.STARTED,
-                                           data={},
-                                           stdout='',
-                                           stderr=''))
+                state['data'].update(job_rep.data)
+                state['status'] = job_rep.control
 
-                    node_map[job_rep.peer]['router_id'] = job_rep.ident
-                    if job_rep.control == StatusCodes.READY:
-                        remote_user = remote_user_map.select(job_rep.peer)
-                        if not remote_user:
-                            LOG.info("Node %s not allowed for user %s" % (
-                                job_rep.peer,
-                                remote_user_map.owner))
-                            node_map.pop(job_rep.peer)
-                            continue
-                        # Send task to attached node
-                        node_map[job_rep.peer]['remote_user'] = remote_user
-                        LOG.info("Sending job to %s" % job_rep.peer)
-                        job.reply(job_rep.ident, job_rep.peer, 'JOB',
-                                  json.dumps((remote_user, request)))
-                        continue
-
-                    if not job_rep.data:
-                        continue
-
-                    state['data'].update(job_rep.data)
-                    state['status'] = job_rep.control
-
-                    if job_rep.control == StatusCodes.FINISHED:
-                        job.reply(job_rep.ident, job_rep.peer, 'ACK')
-                        state['data']['stdout'] = state['stdout'] + \
-                            state['data']['stdout']
-                        state['data']['stderr'] = job_rep.data.pop('stderr')
-                        if state['data']['stdout'] and state['data']['stderr']:
-                            yield ('PIPE', job_id,
-                                   node_map[job_rep.peer]['remote_user'],
-                                   job_rep.peer,
-                                   state['data']['stdout'],
-                                   state['data']['stderr'])
-                    elif job_rep.control == StatusCodes.STDOUT:
+                if job_rep.control == StatusCodes.FINISHED:
+                    #job_reply.send(job_rep.ident, job_rep.peer, job_id, 'ACK')
+                    state['data']['stdout'] = state['stdout'] + \
+                        state['data']['stdout']
+                    state['data']['stderr'] = job_rep.data.pop('stderr')
+                    if state['data']['stdout'] and state['data']['stderr']:
                         yield ('PIPE', job_id,
                                node_map[job_rep.peer]['remote_user'],
                                job_rep.peer,
-                               job_rep.data['stdout'], '')
-                    elif job_rep.control == StatusCodes.STDERR:
-                        yield ('PIPE', job_id,
-                               node_map[job_rep.peer]['remote_user'],
-                               job_rep.peer,
-                               '', job_rep.data['stderr'])
-                    elif job_rep.control == StatusCodes.EVENTS:
-                        LOG.info("Polling events for %s" % job_id)
-                    # else:
-                    #    job.reply(job_rep.ident, job_rep.peer, 'UNKNOWN')
+                               state['data']['stdout'],
+                               state['data']['stderr'])
+                elif job_rep.control == StatusCodes.STDOUT:
+                    yield ('PIPE', job_id,
+                           node_map[job_rep.peer]['remote_user'],
+                           job_rep.peer,
+                           job_rep.data['stdout'], '')
+                elif job_rep.control == StatusCodes.STDERR:
+                    yield ('PIPE', job_id,
+                           node_map[job_rep.peer]['remote_user'],
+                           job_rep.peer,
+                           '', job_rep.data['stderr'])
+                elif job_rep.control == StatusCodes.EVENTS:
+                    LOG.info("Polling events for %s" % job_id)
+                # else:
+                #    job_reply.send(job_rep.ident, job_rep.peer, job_id,
+                #    'UNKNOWN')
 
-                    LOG.debug('Resp[%s]:: [%s][%s][%s]\n' % (job_id,
-                                                             job_rep.peer,
-                                                             job_rep.control,
-                                                             job_rep.data))
+                LOG.debug('Resp[%s]:: [%s][%s][%s]\n' % (job_id,
+                                                         job_rep.peer,
+                                                         job_rep.control,
+                                                         job_rep.data))
+        except ConnectionError:
+            # Transport died
+            self.session_event.set()
         except Exception, ex:
             LOG.exception(ex)
         finally:
-            if self.session_event.is_set():
+            if self.session_event.is_set() or job_event.is_set():
                 # Forced stop ?
+                # ToDo: check arg flag to keep task running
                 for name, node in node_map.items():
                     try:
-                        job.reply(
-                            node['router_id'], name, 'TERM', self.stop_reason)
+                        job_reply.send(
+                            node['router_id'], name, job_id,
+                            'TERM', self.stop_reason)
                     except:
                         continue
 
@@ -407,7 +409,8 @@ class ServerSession(threading.Thread):
 
             job_event.set()
 
-        self.ctx.transport.destroy_job(job_id)
+        job_queue.close()
+        job_reply.close()
 
         yield job_id, [dict(node=k,
                             remote_user=n['remote_user'],

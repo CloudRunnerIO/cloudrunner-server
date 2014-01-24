@@ -32,10 +32,24 @@ SCHEDULER_URI_TEMPLATE = "ipc://%(sock_dir)s/scheduler.sock"
 class PluginContext(object):
 
     def __init__(self, auth):
+        self.props = {}
         self.auth = auth
 
-    def create_auth_token(self, user, expiry):
-        return self.auth.create_token(user, expiry)
+    def __setattr__(self, name, prop):
+        if name != 'props':
+            self.props[name] = prop
+        super(PluginContext, self).__setattr__(name, prop)
+
+    def instance(self, user_id, password):
+        ctx = PluginContext(self.auth)
+        ctx.user_id = user_id
+        ctx.password = password
+        for name, prop in self.props.items():
+            setattr(ctx, name, prop)
+        return ctx
+
+    def create_auth_token(self, expiry):
+        return self.auth.create_token(self.user_id, self.password, expiry)
 
 
 class Promise(object):
@@ -50,5 +64,9 @@ class Promise(object):
         self.remove = False
 
     def __str__(self):
+        return "[%s] (%s) /%s /%s" % (self.session_id, self.main,
+                                      self.peer, self.owner)
+
+    def __repr__(self):
         return "[%s] (%s) /%s /%s" % (self.session_id, self.main,
                                       self.peer, self.owner)

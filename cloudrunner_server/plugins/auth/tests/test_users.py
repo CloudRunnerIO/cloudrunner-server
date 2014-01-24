@@ -89,7 +89,7 @@ class TestUsersWithoutOrg(base.BaseTestCase):
                                                  hash_token("token2")))
 
     def test_create_token(self):
-        token = self.auth.create_token("user1", expiry=1400)
+        token = self.auth.create_token("user1", "pass", expiry=1400)
         self.assertIsNotNone(token)
         success, access_map = self.auth.validate("user1", token)
         self.assertTrue(success, access_map)
@@ -160,7 +160,7 @@ class TestUsersWithOrg(base.BaseTestCase):
                                                  hash_token("token2")))
 
     def test_create_token(self):
-        token = self.auth.create_token("user1", expiry=1400)
+        token = self.auth.create_token("user1", "password" expiry=1400)
         self.assertIsNotNone(token)
         success, access_map = self.auth.validate("user1", token)
         self.assertTrue(success, access_map)

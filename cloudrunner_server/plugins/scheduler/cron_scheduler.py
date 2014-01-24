@@ -26,6 +26,7 @@ import uuid
 import pwd
 
 from cloudrunner import VAR_DIR
+from cloudrunner_server.plugins.args_provider import CliArgsProvider
 
 SEPARATOR = '\t'
 LOG = logging.getLogger("CronScheduler")
@@ -69,7 +70,7 @@ def _default_dir():
     return _def_dir
 
 
-class CronScheduler(object):
+class CronScheduler(CliArgsProvider):
 
     def __init__(self):
         if os.geteuid() == 0:
@@ -188,12 +189,14 @@ class CronScheduler(object):
 
     show = view  # Alias
 
-    def list(self, *args, **kwargs):
+    def list(self, where=None, *args, **kwargs):
         jobs = []
         search = {}
         if 'search_pattern' in kwargs:
             search['meta'] = kwargs['search_pattern']
-        for job in self._all(**search):
+        if not where:
+            where = self._all
+        for job in where(**search):
             jobs.append(dict(name=job.name,
                              user=job.user,
                              enabled=job.enabled,
@@ -211,3 +214,45 @@ class CronScheduler(object):
                 return (True, 'Cron job %s removed' % name)
 
         return (False, 'Cron not found')
+
+    def append_cli_args(self, arg_parser):
+        sched_actions = arg_parser.add_subparsers(dest='action')
+
+        _list = sched_actions.add_parser('list', add_help=False,
+                                         help='List all scheduled tasks')
+        _list.add_argument('--json', action="store_true", help='JSON output')
+
+        add = sched_actions.add_parser('add', add_help=False,
+                                       help='Create scheduled task')
+        add.add_argument('name', help='Job name')
+        add.add_argument('content', help='Content')
+        add.add_argument('period', nargs="+",
+                         help='Execution period, in cron format e.g. */5 * * * *')
+
+        return "scheduler"
+
+    def call(self, user_org, data, ctx, args):
+        if args.action == "list":
+            success, jobs = self.list(where=lambda *args:
+                                      self._own(user_org[0]))
+            if args.json:
+                return success, jobs
+            rows = []
+            if success:
+                rows.append('%-20s %-20s %-20s' %
+                           ('Name', 'Period', 'Enabled'))
+                for job in jobs:
+                    rows.append('%(name)-20s %(period)-20s %(enabled)-20s' %
+                                job)
+            else:
+                return False, jobs
+
+            return True, '\n'.join(rows)
+        elif args.action == "add":
+            bin_path = os.path.dirname(os.path.abspath(sys.argv[0]))
+            kwargs = {}
+            kwargs["exec"] = os.path.join(bin_path, 'cloudrunner-master')
+            return self.add(user_org[0], args.content, args.name,
+                            ' '.join(args.period),
+                            ctx.create_auth_token(user_org[0], expiry=-1),
+                            **kwargs)

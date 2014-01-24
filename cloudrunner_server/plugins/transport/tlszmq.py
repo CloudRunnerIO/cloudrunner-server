@@ -163,8 +163,9 @@ class TLSZmqServerSocket(object):
                 if tls.needs_write():
                     enc_rep = tls.get_data()
                     self.zmq_socket.send_multipart([ident, enc_rep])
-            except zmq.ZMQError, err:
-                if hasattr(err, 'errno') and err.errno == 4:
+            except zmq.ZMQError, zerr:
+                if zerr.errno == zmq.ETERM or zerr.errno == zmq.ENOTSUP \
+                    or zerr.errno == zmq.ENOTSOCK:
                     # System interrupt
                     break
             except KeyboardInterrupt:
@@ -177,7 +178,7 @@ class TLSZmqServerSocket(object):
         LOGS.info("Server exited")
 
     def terminate(self):
-        self.zmq_socket.close(1)
+        self.zmq_socket.close()
         for conn in self.conns.values():
             conn[1].shutdown()
 
@@ -295,7 +296,9 @@ class TLSZmqClientSocket(object):
                 self.shutdown()
                 raise
             except zmq.ZMQError, zerr:
-                if zerr.errno == zmq.ETERM or zerr.errno == zmq.ENOTSOCK:
+                if zerr.errno == zmq.ETERM or zerr.errno == zmq.ENOTSUP \
+                    or zerr.errno == zmq.ENOTSOCK:
+                    # System interrupt
                     break
                 LOGC.exception(zerr)
             except Exception, ex:

@@ -50,95 +50,23 @@ class Transport(object):
             config
         Transport.msg_bus_uri = "ipc://%(sock_dir)s/control.sock" % config
         Transport.mngmt_uri = "ipc://%(sock_dir)s/pub-management.sock" % config
-        Transport.notify_msg_bus_uri = "ipc://%(sock_dir)s/notify-sessions.sock" % config
+        Transport.notify_msg_bus_uri = \
+            "ipc://%(sock_dir)s/notify-sessions.sock" % config
         Transport.DEFAULT_ORG = DEFAULT_ORG
         self.config = config
         self.publisher = Dispatcher(self.config)
-        self.admin = Admin(self.config)
-        self.router = Router(self.config)
+        #self.admin = Admin(self.config)
+        #self.router = Router(self.config)
 
     def run(self):
-        self.router.start()
+        pass #self.router.start()
 
     def shutdown(self):
         LOG.info('Stopping transport')
-        self.admin.terminate()
-        self.publisher.terminate()
-        self.router.terminate()
+        #self.admin.terminate()
+        #self.publisher.terminate()
+        #self.router.terminate()
         LOG.info('Transport stopped')
-
-
-class Admin(Process):
-
-    """
-    Admin transport wrapper. Handles communication between
-    master and nodes. When a package is received, sends it up
-    to the holder's `self.process` method.
-    """
-
-    def __init__(self, config):
-        super(Admin, self).__init__()
-        self.config = config
-        self.admin_uri = Transport.msg_bus_uri
-        self.process = lambda packet: ['Admin.process not implemented']
-        self.out_msg_bus_uri = Transport.reply_to_node_uri
-
-    def set_callback(self, process_cb):
-        self.process = process_cb
-
-    def run(self):
-        self.context = zmq.Context(3)
-        # Socket to receive commands from nodes
-        self.admin_sock = self.context.socket(zmq.DEALER)
-        self.admin_sock.setsockopt(zmq.IDENTITY, ADMIN_TOWER)
-
-        self.admin_sock.connect(self.admin_uri)
-
-        signal.signal(signal.SIGTERM, self.close)
-        signal.signal(signal.SIGINT, self.close)
-
-        self.node_reply_queue = self.context.socket(zmq.DEALER)
-        self.node_reply_queue.connect(self.out_msg_bus_uri)
-
-        def run():
-            packets = []
-            while True:
-                try:
-                    if self.admin_sock.poll(100):
-                        packet = self.admin_sock.recv_multipart()
-                        req = ControlReq.build(*packet)
-                        if not req:
-                            LOGA.warn("ADMIN_TOWER invalid packet recv: %s" %
-                                      packet)
-                            continue
-                        #LOGA.info("ADMIN_TOWER recv: %s" % req)
-                        rep = self.process(req)
-                        LOGA.info("ADMIN_TOWER reply: %s: %s" %
-                                 (req.ident, rep[:2]))
-                        packets.append([req.ident, req.node] + rep)
-                    if packets:
-                        packet = packets.pop(0)
-                        self.node_reply_queue.send_multipart(packet)
-                except zmq.ZMQError, err:
-                    if self.context.closed or \
-                            getattr(err, 'errno', 0) == zmq.ETERM:
-                        # System interrupt
-                        break
-                except KeyboardInterrupt:
-                    break
-                except Exception, ex:
-                    LOGA.exception(ex)
-        main = Thread(target=run)
-        main.start()
-        ioloop.IOLoop.instance().start()
-
-    def close(self, *args):
-        LOGA.info("Stopping admin Process")
-        self.admin_sock.close()
-        self.node_reply_queue.close()
-        # self.context.term()
-        ioloop.IOLoop.instance().stop()
-        LOGA.info("Stopped admin Process")
 
 
 class Dispatcher(Process):
@@ -149,8 +77,8 @@ class Dispatcher(Process):
 
     def __init__(self, config):
         super(Dispatcher, self).__init__()
-        self.msg_bus_uri = Transport.msg_bus_uri
-        self.out_msg_bus_uri = Transport.reply_to_node_uri
+        #self.msg_bus_uri = Transport.msg_bus_uri
+        #self.out_msg_bus_uri = Transport.reply_to_node_uri
         self.master_pub_uri = 'tcp://%s' % config.master_pub
         self.pub_listener_uri = "ipc://%(sock_dir)s/pub-proxy.sock" % config
         self.crypter = TLSServerCrypt(config.security.server_key,
@@ -221,7 +149,7 @@ class Dispatcher(Process):
             def receive(self):
                 while not self.event.is_set():
                     try:
-                        #if self.to_send:
+                        # if self.to_send:
                         #    packets = self.to_send.pop(0)
                         if self.resp_endpoint.poll(100):
                             rep = self.resp_endpoint.recv_multipart(
@@ -547,7 +475,7 @@ class Dispatcher(Process):
         timer = Timer(self.HEARTBEAT_INTERVAL, self.heartbeat_call)
         timer.start()
 
-        ioloop.IOLoop.instance().start()
+        #ioloop.IOLoop.instance().start()
         self.node_reply_queue_sock.close()
         self.publ_management.close()
         timer.stop()
@@ -574,7 +502,7 @@ class Dispatcher(Process):
 
     def close(self, *args):
         LOGD.info("Stopping Publisher Process")
-        self.context.destroy()
+        #self.context.destroy()
         ioloop.IOLoop.instance().stop()
         LOGD.info("Stopped Publisher Process")
 
@@ -587,7 +515,7 @@ class Router(Process):
 
     def __init__(self, config):
         super(Router, self).__init__()
-        self.repl_uri = 'tcp://%s' % config.master_repl
+        #self.repl_uri = 'tcp://%s' % config.master_repl
         self.sock_dir = config.sock_dir
         self.msg_bus_uri = Transport.msg_bus_uri
         self.out_msg_bus_uri = Transport.reply_to_node_uri
@@ -715,7 +643,7 @@ class Router(Process):
                         break
         Thread(target=master, args=[self.master_repl]).start()
 
-        ioloop.IOLoop.instance().start()
+        #ioloop.IOLoop.instance().start()
 
     def close(self, *args):
         LOGR.info("Stopping router")

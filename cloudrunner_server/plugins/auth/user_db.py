@@ -47,8 +47,9 @@ class UserMap(AuthPluginBase):
         """
         Authenticate using password
         """
+        pwd_hash = hash_token(password)
         try:
-            auth = self.db.authenticate(user, password)
+            auth = self.db.authenticate(user, pwd_hash)
             if auth:
                 return (True, self.db.load(*auth))
             return (False, None)
@@ -69,7 +70,7 @@ class UserMap(AuthPluginBase):
             LOG.exception(ex)
             return (False, None)
 
-    def create_token(self, user, expiry=None, **kwargs):
+    def create_token(self, user, password, expiry=None, **kwargs):
         return self.db.get_token(user, expiry or DEFAULT_EXPIRE)
 
     def list_users(self):
