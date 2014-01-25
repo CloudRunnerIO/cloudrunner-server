@@ -48,11 +48,11 @@ class ZmqTransport(ServerTransportBackend):
         # node -> server
         self.buses.in_messages = Pipe(
             'inproc://ssl-worker',
-            "inproc://in-messages.sock" % config)
+            "inproc://in-messages.sock")
 
         # server -> node
         self.buses.out_messages = Pipe(
-            "inproc://out-messages.sock" % config,
+            "inproc://out-messages.sock",
             'inproc://ssl-worker',
         )
 

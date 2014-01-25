@@ -25,6 +25,14 @@ from cloudrunner.plugins.transport.base import TransportBackend
 class ServerTransportBackend(TransportBackend):
 
     @abc.abstractmethod
+    def prepare(self):
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def terminate(self):
+        raise NotImplementedError()
+
+    @abc.abstractmethod
     def create_fanout(self, endpoint, *args, **kwargs):
         raise NotImplementedError()
 

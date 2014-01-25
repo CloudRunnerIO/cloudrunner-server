@@ -192,8 +192,7 @@ class Dispatcher(Daemon):
                         "Duplicate plugin name %s from plugin [%s]" %
                         (arg, plugin.__name__))
                     continue
-                self.plugin_cli_register.setdefault(arg,
-                                                    []).append(plugin)
+                self.plugin_cli_register[arg] = plugin
             except Exception, ex:
                 LOG.exception(ex)
                 continue
@@ -259,36 +258,61 @@ class Dispatcher(Daemon):
                 for (args, p) in sorted(self.plugin_register.items(),
                                         key=lambda x: (x[1], x[0]))]
 
-        cli_plug = [(args, [c.__module__ for c in p])
-                    for (args, p) in sorted(self.plugin_cli_register.items(),
-                                            key=lambda x: (x[1], x[0]))]
+        cli_plug = [(plugin, p.__module__) for (plugin, p) in
+                    self.plugin_cli_register.items()]
 
         return [plug, cli_plug]
 
     def plugin(self, payload, remote_user_map, **kwargs):
         resp = []
-        plugin_name = kwargs['plugin']
-        plugins = self.plugin_cli_register.get(plugin_name, None)
-        if not plugins:
+        plugin_name = kwargs.pop('plugin')
+        plugin = self.plugin_cli_register.get(plugin_name)
+        if not plugin:
             return [(False, 'Plugin %s not found' % plugin_name)]
 
         user_org = (self.user_id, remote_user_map.org)
 
-        for plugin in plugins:
-            try:
-                args = kwargs.get('args', '').split()
-                ns, _ = plugin.parser.parse_known_args(args)
-                ret = plugin().call(user_org, payload,
-                                    self.plugin_context.instance(
-                                    self.user_id, self.user_token),
-                                    ns)
-                if ret:
-                    resp.append(ret)
-            except ValueError, verr:
-                resp.append((False, str(verr)))
-            except Exception, ex:
-                LOG.exception(ex)
-                resp.append((False, plugin.parser._toString()))
+        try:
+            args = kwargs.get('args', '').split()
+            if '--jhelp' in args:
+                args.remove('--jhelp')
+
+                p = plugin.parser
+                while args and p._subparsers:
+                    posit = args.pop(0)
+                    # is subparser?
+                    for act in p._subparsers._actions:
+                        if isinstance(act, argparse._SubParsersAction):
+                            if posit in act.choices:
+                                p = act.choices[posit]
+                    if not args:
+                        break
+                    posit = args.pop(0)
+                # Print formated help
+
+                arguments = []
+                for action in p._actions:
+                    if isinstance(action, argparse._SubParsersAction):
+                        arguments.append({action.dest: action.choices.keys()})
+                    elif isinstance(action, argparse._StoreAction):
+                        arguments.extend(action.option_strings)
+                    elif isinstance(action, argparse._StoreTrueAction):
+                        arguments.append('@' + action.dest)
+                    else:
+                        arguments.append(action.dest)
+                return [(True, arguments)]
+            ns, _ = plugin.parser.parse_known_args(args)
+            ret = plugin().call(user_org, payload,
+                                self.plugin_context.instance(
+                                self.user_id, self.user_token),
+                                ns)
+            if ret:
+                resp.append(ret)
+        except ValueError, verr:
+            resp.append((False, str(verr)))
+        except Exception, ex:
+            LOG.exception(ex)
+            resp.append((False, plugin.parser._toString()))
 
         return resp
 

@@ -229,6 +229,9 @@ class CronScheduler(CliArgsProvider):
         add.add_argument('period', nargs="+",
                          help='Execution period, in cron format e.g. */5 * * * *')
 
+        delete = sched_actions.add_parser('delete', add_help=False,
+                                          help='Delete scheduled task')
+        delete.add_argument('name', help='Job name')
         return "scheduler"
 
     def call(self, user_org, data, ctx, args):
@@ -254,5 +257,8 @@ class CronScheduler(CliArgsProvider):
             kwargs["exec"] = os.path.join(bin_path, 'cloudrunner-master')
             return self.add(user_org[0], args.content, args.name,
                             ' '.join(args.period),
-                            ctx.create_auth_token(user_org[0], expiry=-1),
+                            ctx.create_auth_token(expiry=-1),
                             **kwargs)
+
+        elif args.action == "delete":
+            return self.delete(user_org[0], args.name)

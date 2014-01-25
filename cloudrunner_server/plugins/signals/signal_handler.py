@@ -121,7 +121,7 @@ class SignalHandlerPlugin(JobInOutProcessorPluginBase,
                         if meta['auth']:
                             auth_kwargs['auth_user'] = meta['user']
                             auth_kwargs['auth_token'] = ctx.create_auth_token(
-                                meta['user'], expiry=30)
+                                expiry=30)
 
                         status, script_content = load_from_link(
                             proto_tokens[0],

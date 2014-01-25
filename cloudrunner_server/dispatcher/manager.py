@@ -36,7 +36,6 @@ LOG = logging.getLogger('Publisher')
 class SessionManager(object):
 
     def __init__(self, config, backend):
-        #super(Publisher, self).__init__()
         self.config = config
         self.backend = backend
         self.discovery_timeout = int(self.config.discovery_timeout or 2)
@@ -46,7 +45,6 @@ class SessionManager(object):
 
         self.opt_parser = argparse.ArgumentParser(add_help=False)
         self.opt_parser.add_argument('-t', '--timeout')
-        self.master_pub_uri = 'tcp://%s' % config.master_pub
 
         self.publisher = self.backend.create_fanout('publisher')
 

@@ -519,7 +519,7 @@ class Router(Process):
         self.sock_dir = config.sock_dir
         self.msg_bus_uri = Transport.msg_bus_uri
         self.out_msg_bus_uri = Transport.reply_to_node_uri
-        self.ssl_worker_uri = "inproc:///ssl-worker-sock"
+        self.ssl_worker_uri = "inproc://ssl-worker-sock"
 
         self.config = config
         self.process = lambda packet: ['Receiver.process not implemented']
