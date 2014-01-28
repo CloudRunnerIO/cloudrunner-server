@@ -50,6 +50,7 @@ else:
     configure_loggers(logging.DEBUG if CONFIG.verbose else logging.INFO,
                       LOG_LOCATION)
 
+from cloudrunner.core.exceptions import ConnectionError
 from cloudrunner.core import message
 from cloudrunner.core.message import StatusCodes
 from cloudrunner.core import parser
@@ -373,10 +374,10 @@ class Dispatcher(Daemon):
             session_id, []) if sess.owner == self.user_id]
         if not session:
             return [False, "You are not the owner of the session"]
-        # return [True, 'Jobs notified']
-        self.notification_service.send_multipart(
-            [job_id, '', 'INPUT', session_id, self.user_id,
-             str(remote_user_map.org), payload, targets])
+        job_queue = self.manager.backend.publish_queue('user_input')
+        job_queue.send(job_id, '', 'INPUT', session_id, self.user_id,
+                       str(remote_user_map.org), payload, targets)
+
         return [True, "Notified"]
 
     def term(self, payload, remote_user_map, **kwargs):
@@ -504,12 +505,8 @@ class Dispatcher(Daemon):
                     frames = job_done_queue.recv()
                     job_queue.send(*frames)
                     log_queue.send(*frames[1:])
-            except zmq.ZMQError, err:
-                if self.context.closed or \
-                        getattr(err, 'errno', 0) == zmq.ETERM:
-                    # System interrupt
-                    break
-                LOG.exception(err)
+            except ConnectionError:
+                break
 
         job_queue.close()
         job_done_queue.close()

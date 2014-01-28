@@ -121,8 +121,6 @@ class Transport(object):
                             LOGC.error("Cannot decrypt frames from [%s]: %r" %
                                       (_, ex))
                         try:
-                            print "FRAMES", frames
-
                             self.callback(*frames)
                         except Exception, ex:
                             LOGC.error("Cannot pass job to agent: %r" % ex)

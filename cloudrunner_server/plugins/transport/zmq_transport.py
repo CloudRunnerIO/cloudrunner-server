@@ -38,6 +38,8 @@ class DictWrapper(dict):
 
 class ZmqTransport(ServerTransportBackend):
 
+    proto = "zmq+ssl"
+
     def __init__(self, config):
         self.preprocessor = []
         self.context = zmq.Context()
@@ -73,9 +75,13 @@ class ZmqTransport(ServerTransportBackend):
             "inproc://replies-queue"
         )
 
+        self.buses.user_input = Pipe(
+            "inproc://session-notification-push",
+            "inproc://session-notification-pull"
+        )
+
         self.endpoints = {
             'session': "ipc://%(sock_dir)s/pub-mngmt.sock" % config,
-            'notifications': "inproc://session-notification",
             'logger': "inproc://logger-queue",
             'logger_fanout': config.logger_uri or (
             "ipc://%(sock_dir)s/logger.sock" % config),
@@ -248,10 +254,28 @@ class ZmqTransport(ServerTransportBackend):
                 except KeyboardInterrupt:
                     break
 
-        #notification_service = self.context.socket(zmq.ROUTER)
-        # notification_service.bind(self.buses['notifications'])
-        # self.bindings[
-        #    self.buses['notifications']] = notification_service
+        def user_input_queue():
+            notification_service = self.context.socket(zmq.ROUTER)
+            notification_service.bind(self.buses['user_input'].publish)
+            notification_proxy = self.context.socket(zmq.ROUTER)
+            notification_proxy.bind(self.buses['user_input'].consume)
+            while True:
+                try:
+                    frames = notification_service.recv_multipart()
+                    frames.pop(0)
+                    notification_proxy.send_multipart(frames)
+                except zmq.ZMQError, err:
+                    if self.context.closed or \
+                            getattr(err, 'errno', 0) == zmq.ETERM or \
+                            getattr(err, 'errno', 0) == zmq.ENOTSOCK:
+                        break
+                    else:
+                        raise err
+                except KeyboardInterrupt:
+                    break
+
+            notification_service.close()
+            notification_proxy.close()
 
         Thread(target=requests_queue).start()
         self.bindings['requests'] = True
@@ -267,6 +291,9 @@ class ZmqTransport(ServerTransportBackend):
         self.bindings['in_messages'] = True
         self.bindings['out_messages'] = True
 
+        Thread(target=user_input_queue).start()
+        self.bindings["user_input"] = True
+
     def _validate(self, endp_type, ident):
         if not endp_type in self.buses:
             raise ValueError("Type %s not in allowed types %s" % (
@@ -281,23 +308,20 @@ class ZmqTransport(ServerTransportBackend):
     def consume_queue(self, endp_type, ident=None, **kwargs):
         self._validate(endp_type, ident)
         sock = self.context.socket(zmq.DEALER)
-        assert (self.bindings.get(endp_type) is not None), \
-            "There is no bound socket here [%s], %s" % (
-                endp_type, self.bindings.keys())
-        if ident:
-            sock.setsockopt(zmq.IDENTITY, ident)
-        sock.connect(self.buses[endp_type].consume)
-        return SockWrapper(endp_type, sock)
+        return self._connect(endp_type, self.buses[endp_type].consume, ident)
 
     def publish_queue(self, endp_type, ident=None, **kwargs):
         self._validate(endp_type, ident)
-        sock = self.context.socket(zmq.DEALER)
         assert (self.bindings.get(endp_type) is not None), \
             "There is no bound socket here [%s], %s" % (
                 endp_type, self.bindings.keys())
+        return self._connect(endp_type, self.buses[endp_type].publish, ident)
+
+    def _connect(self, endp_type, endpoint, ident):
+        sock = self.context.socket(zmq.DEALER)
         if ident:
             sock.setsockopt(zmq.IDENTITY, ident)
-        sock.connect(self.buses[endp_type].publish)
+        sock.connect(endpoint)
         return SockWrapper(endp_type, sock)
 
     def create_fanout(self, endpoint, *args, **kwargs):

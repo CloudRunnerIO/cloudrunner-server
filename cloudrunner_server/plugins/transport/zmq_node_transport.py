@@ -164,7 +164,6 @@ class NodeTransport(TransportBackend):
         try:
             sock = self.context.socket(zmq.DEALER)
             if ident:
-                print "ident", ident
                 sock.setsockopt(zmq.IDENTITY, ident)
             sock.connect(uri)
 
@@ -405,7 +404,6 @@ class NodeTransport(TransportBackend):
                         LOGC.error("Timeout waiting for register response")
                         break
                     reply = reg_sock.recv_multipart()
-                    print "REPLY", reply
             except ConnectionException:
                 LOGC.error("Rebuilding ssl connection %s" % reply)
                 self.restart()

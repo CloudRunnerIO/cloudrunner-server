@@ -24,6 +24,7 @@ class JobSession(Thread):
 
     def __init__(self, manager, user, session_id, payload, remote_user_map,
                  stop_event, plugin_ctx, **kwargs):
+        super(JobSession, self).__init__()
         self.session_id = session_id
         self.user = user
         self.payload = payload
@@ -35,7 +36,6 @@ class JobSession(Thread):
         self.timeout = kwargs.get('timeout')
         self.manager = manager
         self.plugin_context = plugin_ctx
-        super(JobSession, self).__init__()
 
     def _reply(self, session_id, ret_type, data):
         for sub in self.manager.subscriptions.get(session_id, []):
@@ -46,7 +46,6 @@ class JobSession(Thread):
                 if self.manager.context.closed or zerr.errno == zmq.ETERM \
                         or zerr.errno == zmq.ENOTSOCK:
                     break
-                continue
 
     def parse_script(self, env):
         self.sections = []
@@ -82,10 +81,22 @@ class JobSession(Thread):
         if not _sections:
             LOG.warn("Request without executable sections")
 
-    def run(self):
+    def catch(func):
+        def f(*args, **kwargs):
+            LOG.info("started 0")
+            try:
+                return func(*args, **kwargs)
+            except Exception, ex:
+                LOG.exception(ex)
+            LOG.info("exited 0")
 
+        return f
+
+    @catch
+    def run(self):
         env = self.kwargs.pop('env', {})
         self.parse_script(env)
+        self.job_done = self.manager.backend.publish_queue('finished_jobs')
 
         ret = []
         timeout = None
@@ -114,8 +125,6 @@ class JobSession(Thread):
             timeout = MAX_INT
 
         tags = json.dumps(self.kwargs.get("tags", []))
-
-        self.job_done = self.manager.backend.publish_queue('finished_jobs')
 
         user_org = (self.user, self.remote_user_map.org)
 
@@ -172,10 +181,12 @@ class JobSession(Thread):
             #
             # Exec section
             #
-            for _reply in self.exec_section(
+
+            section_it = self.exec_section(
                 section.targets, dict(env=env, script=section.data,
                                       remote_user_map=self.remote_user_map,
-                                      libs=libs), timeout=timeout):
+                                      libs=libs), timeout=timeout)
+            for _reply in section_it:
 
                 if _reply[0] == 'PIPE':
                     job_id = _reply[1]
@@ -233,15 +244,16 @@ class JobSession(Thread):
                 self.task_name, self.user, tags]
         self._reply(self.session_id, StatusCodes.FINISHED,
                     meta + [self.payload, json.dumps(response)])
-        self.job_done.close()
-
-        # Wait for all other threads to finish consuming session data
-        time.sleep(2)
 
         self.session_event.set()
         del self.manager.subscriptions[self.session_id]
         del self.manager.sessions[self.session_id]
 
+        # Wait for all other threads to finish consuming session data
+        time.sleep(2)
+        self.job_done.close()
+
+    @catch
     def exec_section(self, targets, request, timeout=None):
         """
         Send request to nodes
@@ -258,12 +270,16 @@ class JobSession(Thread):
 
         job_id = str(uuid.uuid1())  # Job Session id
         job_event = Event()
-        #job = self.manager.transport.create_job(job_id, job_event)
         remote_user_map = request.pop('remote_user_map')
         # Call for nodes
         job_queue = self.manager.backend.consume_queue('in_messages',
                                                        ident=job_id)
         job_reply = self.manager.backend.publish_queue('out_messages')
+        user_input_queue = self.manager.backend.consume_queue('user_input',
+                                                              ident=job_id)
+
+        poller = self.manager.backend.create_poller(job_queue,
+                                                    user_input_queue)
         node_map = {}
         discovery_period = time.time() + self.manager.discovery_timeout
         total_wait = time.time() + (timeout or self.manager.wait_timeout)
@@ -274,7 +290,28 @@ class JobSession(Thread):
 
         try:
             while not self.session_event.is_set() and not job_event.is_set():
-                frames = job_queue.recv(600)
+                ready = poller.poll(500)
+
+                if user_input_queue in ready:
+                    frames = user_input_queue.recv()
+
+                    # input from user -> node
+                    input_req = JobInput.build(*frames)
+                    if not input_req:
+                        LOG.warn("Invalid request %s" % frames)
+                        continue
+
+                    for node, data in node_map.items():
+                        if input_req.cmd == 'INPUT' and \
+                            (input_req.targets == '*' or
+                                node in input_req.targets):
+                            job_reply.send(data['router_id'], node, job_id,
+                                           input_req.cmd, input_req.data)
+                    continue
+
+                frames = None
+                if job_queue in ready:
+                    frames = job_queue.recv()
 
                 if not frames:
                     if time.time() > discovery_period:
@@ -297,19 +334,6 @@ class JobSession(Thread):
 
                     continue
 
-                if frames[0] == '':
-                    # input from user -> node
-                    input_req = JobInput.build(*frames)
-                    if not input_req:
-                        continue
-
-                    for node, data in node_map.items():
-                        if input_req.cmd == 'INPUT' and \
-                            (input_req.targets == '*' or
-                                node in input_req.targets):
-                            job_reply.send(data['router_id'], node, job_id,
-                                           input_req.cmd, input_req.data)
-                    continue
                 job_rep = JobRep.build(*frames)
                 if not job_rep:
                     LOG.error("Invalid reply from node: %s" % frames)
@@ -409,6 +433,7 @@ class JobSession(Thread):
 
             job_event.set()
 
+        user_input_queue.close()
         job_queue.close()
         job_reply.close()
 
