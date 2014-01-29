@@ -1,0 +1,12 @@
+include README.rst
+include MANIFEST.in
+include requirements.txt
+include version.py
+
+recursive-include conf *.conf
+recursive-include cloudrunner/db *
+recursive-include etc *
+
+graft conf
+graft cloudrunner/db
+graft etc
