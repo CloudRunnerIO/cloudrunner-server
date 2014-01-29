@@ -31,9 +31,6 @@ import sys
 import time
 import threading
 import uuid
-import zmq
-from zmq.eventloop import ioloop
-from zmq.devices.monitoredqueue import monitored_queue
 
 from cloudrunner import CONFIG_LOCATION
 from cloudrunner import LOG_LOCATION
@@ -221,7 +218,7 @@ class Dispatcher(Daemon):
         self.plugin_context.args_plugins = args_plugins
         if JobInOutProcessorPluginBase.__subclasses__():
             job_plugins = JobInOutProcessorPluginBase.__subclasses__()
-            LOG.info('Loading Job PRocessing plugins: %s' % job_plugins)
+            LOG.info('Loading Job Processing plugins: %s' % job_plugins)
         else:
             job_plugins = []
         self.plugin_context.job_plugins = job_plugins
@@ -248,7 +245,7 @@ class Dispatcher(Daemon):
         return True  # Already logged, kind of echo
 
     def get_api_token(self, *args, **kwargs):
-        token = self.auth.create_token(self.user_id, self.token, **kwargs)
+        token = self.auth.create_token(self.user_id, self.user_token, **kwargs)
         if token:
             return ["TOKEN", token]
         else:
@@ -267,6 +264,7 @@ class Dispatcher(Daemon):
     def plugin(self, payload, remote_user_map, **kwargs):
         resp = []
         plugin_name = kwargs.pop('plugin')
+        data = kwargs.pop('data', None)
         plugin = self.plugin_cli_register.get(plugin_name)
         if not plugin:
             return [(False, 'Plugin %s not found' % plugin_name)]
@@ -276,6 +274,7 @@ class Dispatcher(Daemon):
         try:
             args = kwargs.get('args', '').split()
             if '--jhelp' in args:
+
                 args.remove('--jhelp')
 
                 p = plugin.parser
@@ -330,22 +329,11 @@ class Dispatcher(Daemon):
         return (True, [node for node in nodes])
 
     def list_active_nodes(self, payload, remote_user_map, **kwargs):
-        req_sock = self.context.socket(zmq.SUB)
-        req_sock.connect(self.transport.mngmt_uri)
-        req_sock.setsockopt(zmq.SUBSCRIBE, str(remote_user_map.org))
-        time.sleep(.5)
-        # invoke heartbeat printer
-        os.kill(self.transport.publisher.pid, signal.SIGHUP)
-
-        if req_sock.poll(500):
-            nodes = req_sock.recv_multipart()
-            assert nodes[0] == remote_user_map.org
-            active_nodes = nodes[1:]
-        else:
-            active_nodes = ['Cannot retrieve nodes']
-        req_sock.close()
-
-        return (True, active_nodes)
+        tenant = self.backend.tenants.get(remote_user_map.org, [])
+        nodes = []
+        if tenant:
+            nodes = [node.name for node in tenant.nodes]
+        return (True, nodes)
 
     def attach(self, payload, remote_user_map, **kwargs):
         """
@@ -413,7 +401,7 @@ class Dispatcher(Daemon):
     def worker(self, *args):
         job_queue = self.backend.consume_queue('requests')
         job_done_queue = self.backend.consume_queue('finished_jobs')
-        log_queue = self.backend.subscribe_fanout('logger')
+        log_queue = self.backend.create_fanout('logger')
 
         poller = self.backend.create_poller(job_queue, job_done_queue)
 
@@ -425,10 +413,10 @@ class Dispatcher(Daemon):
                     ready = poller.poll(300)
                     if not ready:
                         continue
-                except zmq.ZMQError as zerr:
-                    if zerr.errno == zmq.ETERM or zerr.errno == zmq.ENOTSOCK:
-                        break
-                    LOG.exception(zerr)
+                except ConnectionError:
+                    break
+                except Exception, ex:
+                    LOG.exception(ex)
                     if not self.stopping.is_set():
                         continue
                 if job_queue in ready:
@@ -515,29 +503,16 @@ class Dispatcher(Daemon):
         LOG.info('Server worker exited')
 
     def sched_worker(self, *args):
-        worker_thread = self.context.socket(zmq.DEALER)
-        try:
-            worker_thread.bind(self.scheduler_uri)
-        except zmq.ZMQError, zerr:
-            if zerr.errno == 2:
-                # Socket dir is missing
-                LOG.error("Socket uri is missing: %s" % self.scheduler_uri)
-                exit(1)
+        task_queue = self.backend.consume_queue('scheduler')
 
         while not self.stopping.is_set():
             try:
-                frames = None
                 try:
-                    frames = worker_thread.recv_multipart(zmq.NOBLOCK)
-                except zmq.ZMQError as e:
-                    if e.errno != zmq.EAGAIN:
-                        raise
-                    if not self.stopping.is_set():
-                        time.sleep(.1)
+                    frames = task_queue.recv(500)
+                    if not frames:
                         continue
-                    else:
-                        if not frames:
-                            break
+                except ConnectionError:
+                    break
 
                 req = message.ScheduleReq.build(*frames)
                 if not req:
@@ -581,14 +556,13 @@ class Dispatcher(Daemon):
                     response.peer = ''
                     response.resolve()
 
-            except zmq.ZMQError, err:
-                if self.context.closed or \
-                        getattr(err, 'errno', 0) == zmq.ETERM:
-                    # System interrupt
-                    break
+            except ConnectionError:
+                break
+            except Exception, err:
                 LOG.exception(err)
+                continue
 
-        worker_thread.close()
+        task_queue.close()
         LOG.info('Scheduler worker exited')
 
     def choose(self):
@@ -609,9 +583,8 @@ class Dispatcher(Daemon):
                                 "cannot be created")
 
         WORKER_COUNT = int(CONFIG.workers_count or 10)
-        SCHED_WORKER_COUNT = int(CONFIG.sched_worker_count or 5)
+        SCHED_WORKER_COUNT = int(CONFIG.sched_worker_count or 3)
 
-        #self.context = zmq.Context(3)
         self.stopping = threading.Event()
 
         self.backend = self.transport_class(self.config)
@@ -633,15 +606,15 @@ class Dispatcher(Daemon):
             self.threads.append(thread)
 
         self.sched_threads = []
-        # for i in range(SCHED_WORKER_COUNT):
-        #    thread = threading.Thread(target=self.sched_worker, args=[])
-        #    thread.start()
-        #    self.sched_threads.append(thread)
+        for i in range(SCHED_WORKER_COUNT):
+            thread = threading.Thread(target=self.sched_worker, args=[])
+            thread.start()
+            self.sched_threads.append(thread)
 
         signal.signal(signal.SIGINT, self._handle_terminate)
         signal.signal(signal.SIGTERM, self._handle_terminate)
 
-        ioloop.IOLoop.instance().start()
+        self.backend.loop()
 
         LOG.info('Exited RUN')
 
@@ -656,8 +629,6 @@ class Dispatcher(Daemon):
         for sched_thread in self.sched_threads:
             sched_thread.join()
         LOG.info('Threads exited')
-
-        ioloop.IOLoop.instance().stop()
 
         # Destroy managed plugins
         for plugin_base in PLUGIN_BASES:

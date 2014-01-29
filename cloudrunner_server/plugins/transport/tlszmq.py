@@ -256,7 +256,7 @@ class TLSZmqClientSocket(object):
 
                 if self.socket_proc in socks:
                     data = self.socket_proc.recv_multipart()
-                    LOGC.debug("Data to send %s" % data[:2])
+                    LOGC.info("Data to send %s" % data[:2])
                     data.pop(0)  # sender
 
                     self.tls.send(json.dumps(data))

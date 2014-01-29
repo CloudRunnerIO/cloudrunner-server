@@ -25,8 +25,9 @@ import string
 import sqlite3
 import uuid
 
-from cloudrunner_server.plugins.auth.base import AuthPluginBase
+from cloudrunner.core.message import DEFAULT_ORG
 from cloudrunner.util.crypto import hash_token
+from cloudrunner_server.plugins.auth.base import AuthPluginBase
 
 TOKEN_LEN = 60
 DEFAULT_EXPIRE = 1440  # 24h
@@ -41,7 +42,7 @@ class UserMap(AuthPluginBase):
 
     @property
     def db(self):
-        return AuthDb(self.config.users.db)
+        return AuthDb(self.config.users.db, self.config.security.use_org)
 
     def authenticate(self, user, password):
         """
@@ -111,8 +112,9 @@ class UserMap(AuthPluginBase):
 
 class AuthDb(object):
 
-    def __init__(self, db_path):
+    def __init__(self, db_path, use_org):
         try:
+            self.use_org = use_org
             self.db = sqlite3.connect(db_path)
         except:
             LOG.error("Cannot connect to auth DB: %s" % db_path)
@@ -173,8 +175,10 @@ class AuthDb(object):
                                "ON org.org_uid = Users.org_uid "
                                "WHERE org.active = 1 and Users.id = ?",
                                (user_id,)).fetchone()
-        if org_data:
+        if org_data and self.use_org:
             access_map.org = org_data[0]
+        else:
+            access_map.org = DEFAULT_ORG
         return access_map
 
     def all(self):

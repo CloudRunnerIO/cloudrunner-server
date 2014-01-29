@@ -18,6 +18,7 @@
 #    under the License.
 
 import abc
+import time
 
 from cloudrunner.plugins.transport.base import TransportBackend
 
@@ -39,3 +40,49 @@ class ServerTransportBackend(TransportBackend):
     @abc.abstractmethod
     def subscribe_fanout(self, endpoint, *args, **kwargs):
         raise NotImplementedError()
+
+    @abc.abstractmethod
+    def add_tenant(self, tenant_id, name):
+        raise NotImplementedError()
+
+
+class Node(object):
+
+    def __init__(self, name):
+        self.created = time.time()
+        self.name = name
+
+    @property
+    def last_seen(self):
+        return time.time() - self.created
+
+    def __eq__(self, name):
+        return self.name == name
+
+
+class Tenant(object):
+
+    def __init__(self, _id, name):
+        self.id = _id
+        self.name = str(name)
+        self.nodes = []
+
+    def __delitem__(self, node_id):
+        if node_id in self.nodes:
+            self.nodes.remove(node_id)
+
+    def __repr__(self):
+        _repr = '[%s]\n' % self.id
+        for node in self.nodes:
+            _repr = "%s%s\tLast seen: %.f sec ago\n" % (_repr, node.name,
+                                                        node.last_seen)
+        return _repr
+
+    def __eq__(self, _id):
+        return self.id == _id
+
+    def push(self, node):
+        if node not in self.nodes:
+            self.nodes.append(Node(node))
+        else:
+            self.nodes[self.nodes.index(node)].created = time.time()

@@ -20,11 +20,15 @@
 import logging
 import M2Crypto as m
 from os import path as p
+import signal
+import sys
 from threading import Thread
 
 from cloudrunner.core.exceptions import ConnectionError
 from cloudrunner.core.message import (ADMIN_TOWER, ControlReq, StatusCodes,
-                                      is_valid_host, TOKEN_SEPARATOR)
+                                      is_valid_host, TOKEN_SEPARATOR,
+                                      DEFAULT_ORG)
+from cloudrunner.util.shell import Timer
 from cloudrunner_server.master.functions import CertController
 
 LOG = logging.getLogger('Control Tower')
@@ -41,6 +45,9 @@ class Admin(Thread):
         self.config = config
         self.backend = backend
         self.ccont = CertController(self.config)
+
+        # Set organizations/tenants
+        self.backend.add_tenant(DEFAULT_ORG, "CloudRunner")
 
     def run(self):
         # Endpoint to receive commands from nodes
@@ -60,6 +67,8 @@ class Admin(Thread):
                         continue
                     LOG.info("ADMIN_TOWER recv: %s" % req)
                     rep = self.process(req)
+                    if not rep:
+                        continue
                     LOG.info("ADMIN_TOWER reply: %s: %s" %
                              (req.ident, rep[:2]))
                     packets.append([req.ident, req.node] + rep)
@@ -156,16 +165,12 @@ class Admin(Thread):
             p.abspath(self.config.security.ca)))
 
         try:
-            # Check if node is already requested or signed
-            csr_file_name = p.join(base_path, 'reqs',
-                                   '.'.join([rq.node, 'csr']))
-            crt_file_name = p.join(base_path, 'nodes',
-                                   '.'.join([rq.node, 'crt']))
-
-            if rq.control == 'IDENT':
-                return ['SUB_LOC', 'DEFAULT']
-
-            elif rq.control == 'REGISTER':
+            if rq.control == 'REGISTER':
+                # Check if node is already requested or signed
+                csr_file_name = p.join(base_path, 'reqs',
+                                       '.'.join([rq.node, 'csr']))
+                crt_file_name = p.join(base_path, 'nodes',
+                                       '.'.join([rq.node, 'crt']))
 
                 if rq.node in self.ccont.list_approved():
                     # cert already issued

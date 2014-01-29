@@ -94,7 +94,6 @@ class LibIncludePlugin(IncludeLibPluginBase, ArgsProvider, CliArgsProvider):
         if not lib_file:
             return False, "Invalid file name"
 
-        print _lib_dir, lib_file
         if lib_file.endswith('.meta'):
             # Prevent .meta overwrite
             return False, "Invalid file name, cannot end with .meta"
@@ -257,11 +256,16 @@ class LibIncludePlugin(IncludeLibPluginBase, ArgsProvider, CliArgsProvider):
 
         add = lib_actions.add_parser('add', add_help=False,
                                      help='Add new library item')
-        add.add_argument('--overwrite', '-o', help='Overwrite existing')
+        add.add_argument('--overwrite', '-o', action='store_true',
+                         help='Overwrite existing')
         add.add_argument('--private', help='Save as private',
                          action='store_true', default=False)
         add.add_argument('name', help='Item name')
         add.add_argument('content', help='Item content')
+
+        delete = lib_actions.add_parser('delete', add_help=False,
+                                        help='Delete a library item')
+        delete.add_argument('name', help='Library item name')
 
         return "library"
 
@@ -284,5 +288,11 @@ class LibIncludePlugin(IncludeLibPluginBase, ArgsProvider, CliArgsProvider):
                 return (True, '\n'.join(rows))
             return success, items
         elif args.action == 'add':
-            return self.add(user_org, args.name, args.content,
+            return self.add(user_org, args.name, data,
                             is_public=not args.private)
+
+        elif args.action == 'show':
+            return self.show(user_org, args.name)
+
+        elif args.action == 'delete':
+            return self.delete(user_org, args.name)

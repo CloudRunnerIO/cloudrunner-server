@@ -35,10 +35,10 @@ LOG = logging.getLogger("CronScheduler")
 class Job(object):
 
     def __init__(self, cron_job):
-        self.meta = cron_job.meta()
+        self.meta = cron_job.comment
         self.enabled = cron_job.enabled
-        self.command = cron_job.command.command()
-        self.time = cron_job.render_time()
+        self.command = cron_job.command
+        self.time = str(cron_job.slices)
         self.cron_job = cron_job
 
         self._append_job_params()
@@ -53,7 +53,7 @@ class Job(object):
 
     @property
     def period(self):
-        return self.cron_job.render_time()
+        return str(self.cron_job.slices)
 
     @staticmethod
     def _prepare_job_meta(user, token, job_id, name, task_file):
@@ -134,9 +134,10 @@ class CronScheduler(CliArgsProvider):
 
             cron = self.crontab.new(command=command, comment=comment)
             try:
-                cron.set_slices(period.split(' '))
+                period = [str(term) for term in period]
+                cron.setall(*period)
             except:
-                return (False, 'Period is not valid')
+                return (False, 'Period is not valid: %s' % period)
 
             if not cron.is_valid():
                 return (False, 'Cron is not valid')
@@ -167,7 +168,7 @@ class CronScheduler(CliArgsProvider):
             if payload:
                 open(job.file, 'w').write(payload)
             if period and job.period != period:
-                job.cron_job.set_slices(period.split(' '))
+                job.cron_job.setall(*period)
                 self.crontab.write()
             return (True, "Updated")
 
@@ -227,8 +228,20 @@ class CronScheduler(CliArgsProvider):
         add.add_argument('name', help='Job name')
         add.add_argument('content', help='Content')
         add.add_argument('period', nargs="+",
-                         help='Execution period, in cron format e.g. */5 * * * *')
+                         help='Execution period, in cron format e.g. '
+                         '*/5 * * * *')
 
+        edit = sched_actions.add_parser('edit', add_help=False,
+                                        help='Edit scheduled task')
+        edit.add_argument('name', help='Job name')
+        edit.add_argument('content', help='Content')
+        edit.add_argument('period', nargs="+",
+                          help='Execution period, in cron format e.g. '
+                          '*/5 * * * *')
+
+        show = sched_actions.add_parser('show', add_help=False,
+                                        help='Get scheduled task contents')
+        show.add_argument('name', help='Job name')
         delete = sched_actions.add_parser('delete', add_help=False,
                                           help='Delete scheduled task')
         delete.add_argument('name', help='Job name')
@@ -255,10 +268,19 @@ class CronScheduler(CliArgsProvider):
             bin_path = os.path.dirname(os.path.abspath(sys.argv[0]))
             kwargs = {}
             kwargs["exec"] = os.path.join(bin_path, 'cloudrunner-master')
-            return self.add(user_org[0], args.content, args.name,
-                            ' '.join(args.period),
-                            ctx.create_auth_token(expiry=-1),
+            ret = self.add(user_org[0], data, args.name,
+                           args.period,
+                           ctx.create_auth_token(expiry=-1),
+                           **kwargs)
+            return ret
+        elif args.action == "edit":
+            bin_path = os.path.dirname(os.path.abspath(sys.argv[0]))
+            kwargs = {}
+            ret = self.edit(user_org[0], data, args.name,
+                            args.period,
                             **kwargs)
-
+            return ret
+        elif args.action == "show":
+            return self.show(user_org[0], args.name)
         elif args.action == "delete":
             return self.delete(user_org[0], args.name)

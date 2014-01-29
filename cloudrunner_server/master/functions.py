@@ -806,8 +806,16 @@ class SchedulerController(object):
                              "Set it in config file.", bold=1)
             print colors.red("=" * 50, bold=1)
             exit(1)
+        if self.config.transport:
+            backend_class = local_plugin_loader(self.config.transport)
+        else:
+            print colors.red("=" * 50, bold=1)
+            print colors.red("Cannot find backend transport class. "
+                             "Set it in config file.", bold=1)
+            print colors.red("=" * 50, bold=1)
+            exit(1)
 
-        self.scheduler = scheduler_class()
+        self.backend = backend_class(self.config)
 
     @yield_wrap
     def list(self, **kwargs):
@@ -822,16 +830,10 @@ class SchedulerController(object):
         Run Cloudrunner script from scheduled task.
         Usually invoked from CronTab or other scheduler.
         '''
-
-        context = zmq.Context(1)
-        socket = context.socket(zmq.DEALER)
-        scheduler_uri = SCHEDULER_URI_TEMPLATE % self.config
+        sched_queue = self.backend.publish_queue('scheduler')
 
         _req = ScheduleReq('schedule', job_id)
-        socket.connect(scheduler_uri)
-        socket.send_multipart(_req.pack())
-
-        socket.close()
+        sched_queue.send(*_req.pack())
         yield DATA, "Job %s sent for execution" % job_id
 
 

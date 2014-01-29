@@ -40,7 +40,6 @@ LOGD = logging.getLogger('ZMQ Dispatcher')
 LOGR = logging.getLogger('ZMQ ROUTER')
 LOGH = logging.getLogger('HEARTBEAT')
 LOGA = logging.getLogger('ZMQ ADMIN TOWER')
-DEFAULT_ORG = "DEFAULT"
 
 
 class Transport(object):

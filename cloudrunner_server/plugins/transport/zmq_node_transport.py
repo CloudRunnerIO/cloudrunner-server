@@ -37,6 +37,7 @@ import logging
 import zmq
 from zmq.eventloop import ioloop
 
+from cloudrunner.core.message import (ADMIN_TOWER, HEARTBEAT)
 from cloudrunner.core.exceptions import ConnectionError
 from cloudrunner.plugins.transport.base import TransportBackend
 from cloudrunner import VAR_DIR
@@ -63,7 +64,9 @@ class NodeTransport(TransportBackend):
         self._sockets = []
         self.context = zmq.Context()
         self.ssl_thread_event = Event()
-        self.decrypter = TLSClientDecrypt(self.config.security.server)
+
+    def loop(self):
+        ioloop.IOLoop.instance().start()
 
     def ssl_socket_device(self, context):
         LOGC.info("Starting new SSL thread")
@@ -154,6 +157,7 @@ class NodeTransport(TransportBackend):
             self.ssl_stop()
 
         self.ssl_start()
+        self.decrypter = TLSClientDecrypt(self.config.security.server)
 
         return True
 
@@ -214,10 +218,12 @@ class NodeTransport(TransportBackend):
                         #message = frames[0]
                         if message == StatusCodes.WELCOME or \
                             message == StatusCodes.RELOAD:
-                            dispatcher.send_multipart([message])
+                            ssl_proxy.send_multipart([HEARTBEAT,
+                                                      'IDENT'])
                         elif message == StatusCodes.HB:
                             # Heartbeat
-                            pass
+                            ssl_proxy.send_multipart([HEARTBEAT,
+                                                      self.node_id])
                         else:
                             # decrypt
                             try:
@@ -250,6 +256,7 @@ class NodeTransport(TransportBackend):
             except Exception, ex:
                 LOGC.error("Node listener thread: exception %s" % ex)
 
+        ssl_proxy.close()
         master_sub.close()
         dispatcher.close()
         LOGC.info('Node Listener exited')
