@@ -99,7 +99,7 @@ rm -rf %{buildroot}
 %{_bindir}/cloudrunner-master
 
 %{python_sitelib}/cloudrunner_server/db
-%{python_sitelib}/cloudrunner_servermaster/dispatcher
+%{python_sitelib}/cloudrunner_server/dispatcher
 %{python_sitelib}/cloudrunner_server/master
 
 %{_initrddir}/cloudrunner-dsp
