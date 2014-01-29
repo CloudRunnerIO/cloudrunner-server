@@ -42,8 +42,7 @@ class TestUsersWithoutOrg(base.BaseTestCase):
 
     def test_login(self):
         self.assertEqual(len(AuthPluginBase.__subclasses__()), 1)
-        success, access_map = self.auth.authenticate("user1",
-                                                     hash_token("token1"))
+        success, access_map = self.auth.authenticate("user1", "token1")
         self.assertTrue(success, access_map)
         self.assertEquals(access_map.org, 'DEFAULT')
 
@@ -71,8 +70,7 @@ class TestUsersWithoutOrg(base.BaseTestCase):
         self.assertTrue(*self.auth.remove_role('user1', '*'))
 
     def test_wrong_pass(self):
-        self.assertFalse(*self.auth.authenticate("user1",
-                                                 hash_token("some bad token")))
+        self.assertFalse(*self.auth.authenticate("user1", "some bad token"))
 
     def test_bad_token(self):
         self.assertFalse(*self.auth.validate("user1", "some wrong token"))
@@ -80,13 +78,11 @@ class TestUsersWithoutOrg(base.BaseTestCase):
     def test_rm_user(self):
         self.assertTrue(
             *self.auth.create_user('user2', 'token2'))
-        success, access_map = self.auth.authenticate("user2",
-                                                     hash_token("token2"))
+        success, access_map = self.auth.authenticate("user2",  "token2")
         self.assertTrue(success, access_map)
         self.assertEquals(access_map.org, 'DEFAULT')
         self.assertTrue(*self.auth.remove_user('user2'))
-        self.assertFalse(*self.auth.authenticate("user2",
-                                                 hash_token("token2")))
+        self.assertFalse(*self.auth.authenticate("user2", "token2"))
 
     def test_create_token(self):
         token = self.auth.create_token("user1", "pass", expiry=1400)
@@ -113,8 +109,7 @@ class TestUsersWithOrg(base.BaseTestCase):
 
     def test_login(self):
         self.assertEqual(len(AuthPluginBase.__subclasses__()), 1)
-        success, access_map = self.auth.authenticate("user1",
-                                                     hash_token("token1"))
+        success, access_map = self.auth.authenticate("user1", "token1")
         self.assertTrue(success, access_map)
         self.assertEquals(access_map.org, 'MyOrg')
 
@@ -142,8 +137,7 @@ class TestUsersWithOrg(base.BaseTestCase):
         self.assertTrue(*self.auth.remove_role('user1', '*'))
 
     def test_wrong_pass(self):
-        self.assertFalse(*self.auth.authenticate("user1",
-                                                 hash_token("some bad token")))
+        self.assertFalse(*self.auth.authenticate("user1", "some bad token"))
 
     def test_bad_token(self):
         self.assertFalse(*self.auth.validate("user1", "some wrong token"))
@@ -151,16 +145,14 @@ class TestUsersWithOrg(base.BaseTestCase):
     def test_rm_user(self):
         self.assertTrue(
             *self.auth.create_user('user2', 'token2', 'MyOrg'))
-        success, access_map = self.auth.authenticate("user2",
-                                                     hash_token("token2"))
+        success, access_map = self.auth.authenticate("user2", "token2")
         self.assertTrue(success, access_map)
         self.assertEquals(access_map.org, 'MyOrg')
         self.assertTrue(*self.auth.remove_user('user2'))
-        self.assertFalse(*self.auth.authenticate("user2",
-                                                 hash_token("token2")))
+        self.assertFalse(*self.auth.authenticate("user2", "token2"))
 
     def test_create_token(self):
-        token = self.auth.create_token("user1", "password" expiry=1400)
+        token = self.auth.create_token("user1", "password", expiry=1400)
         self.assertIsNotNone(token)
         success, access_map = self.auth.validate("user1", token)
         self.assertTrue(success, access_map)

@@ -301,13 +301,14 @@ class Dispatcher(Daemon):
                     else:
                         arguments.append(action.dest)
                 return [(True, arguments)]
-            ns, _ = plugin.parser.parse_known_args(args)
-            ret = plugin().call(user_org, payload,
-                                self.plugin_context.instance(
-                                self.user_id, self.user_token),
-                                ns)
-            if ret:
-                resp.append(ret)
+            else:
+                ns, _ = plugin.parser.parse_known_args(args)
+                ret = plugin().call(user_org, payload,
+                                    self.plugin_context.instance(
+                                    self.user_id, self.user_token),
+                                    ns)
+                if ret:
+                    resp.append(ret)
         except ValueError, verr:
             resp.append((False, str(verr)))
         except Exception, ex:
@@ -443,11 +444,10 @@ class Dispatcher(Daemon):
                     self.user_id = req.login
                     if req.auth_type == 1:
                         # Password auth
-                        self.user_token = hash_token(req.password)
                         self.user_token = req.password
                     else:
                         # Token auth
-                        self.user_token = req.password
+                        self.user_token = hash_token(req.password)
 
                     auth_check = self._login(req.auth_type)
                     if not auth_check[0]:

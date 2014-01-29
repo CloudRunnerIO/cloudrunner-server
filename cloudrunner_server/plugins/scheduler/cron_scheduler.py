@@ -128,10 +128,8 @@ class CronScheduler(CliArgsProvider):
                 create_payload()
             os.write(_file_fd, payload)
             os.close(_file_fd)
-
             comment = Job._prepare_job_meta(user, auth_token, job_id,
                                             name, task_file)
-
             cron = self.crontab.new(command=command, comment=comment)
             try:
                 period = [str(term) for term in period]
@@ -141,7 +139,6 @@ class CronScheduler(CliArgsProvider):
 
             if not cron.is_valid():
                 return (False, 'Cron is not valid')
-
             cron.enable()
             self.crontab.write()
 
@@ -175,7 +172,7 @@ class CronScheduler(CliArgsProvider):
         return (False, 'Not found')
 
     def view(self, user, name, **kwargs):
-        crons = self._all(name=name)
+        crons = self._own(name=name)
         for job in crons:
             try:
                 content = open(job.file).read()
@@ -208,6 +205,7 @@ class CronScheduler(CliArgsProvider):
     def delete(self, user, name=None, **kwargs):
         crons = self._own(user)
         for job in crons:
+            print job.user, user, job.name, name
             if job.user == user and job.name == name:
                 self.crontab.remove(job.cron_job)
                 self.crontab.write()

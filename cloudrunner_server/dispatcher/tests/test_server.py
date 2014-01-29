@@ -19,7 +19,7 @@
 
 from contextlib import nested
 from datetime import datetime
-from mock import Mock
+from mock import Mock, MagicMock
 from mock import DEFAULT
 from mock import call
 from mock import patch
@@ -29,6 +29,7 @@ import tempfile
 import uuid
 from crontab import CronTab
 
+from cloudrunner.util.crypto import hash_token
 from cloudrunner_server.master.functions import CertController
 from cloudrunner_server.plugins.auth.user_db import UserMap
 from cloudrunner_server.plugins.auth.user_db import AuthDb
@@ -60,8 +61,11 @@ class TestServer(base.BaseTestCase):
         disp.user_id = user
         user_token = "user_token"
         disp.user_token = user_token
-        with patch('cloudrunner_server.plugins.auth.user_db.UserMap.authenticate',
-                   Mock(return_value=(True, {'*': 'root'}))):
+        remote_user_map = Mock()
+        remote_user_map.org = Mock(return_value='MyOrg')
+        with patch(
+            'cloudrunner_server.plugins.auth.user_db.UserMap.authenticate',
+            Mock(return_value=(True, {'*': 'root'}))):
             disp._login()
             self.assertIsNotNone(disp.auth)
             self.assertIsNotNone(disp.transport_class)
@@ -69,7 +73,7 @@ class TestServer(base.BaseTestCase):
         # Add
         cron_obj = Mock()
         cron_obj.is_valid = Mock(return_value=True)
-        cron_obj.set_slices = Mock()
+        cron_obj.setall = Mock()
         cron_obj.enable = Mock()
         cron_job = Mock(meta=lambda: meta, enabled=True,
                         command=Mock(command=lambda: 'command'),
@@ -108,68 +112,84 @@ class TestServer(base.BaseTestCase):
                               __getitem__=Mock(return_value=cron_job)),
                         patch('sys.argv',
                               Mock(__getitem__=lambda *args:
-                                   '/usr/bin/cloudrunner'))):
+                                   '/usr/bin/cloudrunner')),
+                        patch('cloudrunner_server.dispatcher.PluginContext',
+                              return_value=Mock(create_auth_token=lambda *args,
+                                                **kwargs: "SOME_GENERATED_TOKEN"))):
                 with patch.multiple(cron_scheduler.CronScheduler,
                                     job_dir='/tmp',
-                                    _all=Mock(return_value=[job1]),
+                                    _own=Mock(return_value=[job1]),
                                     crontab=Mock(
                                     __iter__=Mock(
                                     return_value=iter(
                                     ['job1', 'job2']))),
                                     create=True):
                     # List
-                    self.assertEqual(disp.schedule('', {}, action="list"),
-                                    (True, [
+                    self.assertEqual(disp.plugin("", remote_user_map,
+                                                 plugin='scheduler',
+                                                 args="list --json"),
+                                     [(True, [
                                      {'enabled': True, 'name': 'job1',
-                                         'period': '', 'user': 'user'}]))
+                                         'period': '', 'user': 'user'}])])
                 with patch.multiple(cron_scheduler.CronScheduler,
                                     job_dir='/tmp',
+                                    _own=Mock(return_value=[]),
                                     _all=Mock(return_value=[]),
                                     crontab=Mock(
                                     __iter__=Mock(
                                     return_value=iter(
                                     ['job1', 'job2']))),
                                     create=True):
-                    self.assertEqual(disp.schedule('cron_content', {},
-                                                   period="/2 * * * *",
-                                                   name="my_cron", action="add"),
-                                    (True, None))
+                    self.assertEqual(disp.plugin("cron_content",
+                                                 remote_user_map,
+                                                 plugin="scheduler",
+                                                 args="add my_cron data /2 * * * *"),
+                                     [(True, None)])
 
                 CronTab.new.assert_called_with(
                     comment=meta,
                     command='/usr/bin/cloudrunner-master schedule run %s' %
                     str(uuid.uuid1()))
-                cron_obj.set_slices.assert_called_with(
-                    ['/2', '*', '*', '*', '*'])
+                cron_obj.setall.assert_called_with(
+                    '/2', '*', '*', '*', '*')
                 os.write.assert_called_with('file', 'cron_content')
 
             # View
+            cron_job = MagicMock(meta=lambda: meta, enabled=True,
+                            command='command',
+                            period='/2 * * * *',
+                            id='123123',
+                            user='userX')
+            cron_job.configure_mock(name='my_cron')
+
             with nested(patch('crontab.CronTab.__iter__',
                         Mock(return_value=iter([cron_job]))),
                         patch('os.read', Mock(return_value="Cron content")),
                         patch('sys.argv',
-                              Mock(__getitem__=lambda *args: '/usr/bin/'))):
-                self.assertEqual(disp.schedule('', {}, name='my_cron',
-                                               action="view"),
-                                (True, {'job_id': str(uuid.uuid1()),
-                                        'name': 'my_cron',
-                                        'period': 0,
-                                        'owner': 'userX',
-                                        'content': "Cron content"}))
+                              Mock(__getitem__=lambda *args: '/usr/bin/')),
+                        patch.multiple(cron_scheduler.CronScheduler,
+                                       job_dir='/tmp',
+                                       _own=lambda *args, **kwargs: [cron_job],
+                                       crontab=Mock(
+                                       __iter__=Mock(
+                                       return_value=iter(
+                                       ['job1', 'job2']))),
+                                       create=True)):
 
-            # Delete
-            with patch('crontab.CronTab.__iter__',
-                       Mock(return_value=iter([cron_job]))):
-                self.assertEqual(disp.schedule('', {}, name='my_cron',
-                                               action="delete"),
-                                 (True, 'Cron job my_cron removed'))
+                self.assertEqual(disp.plugin('', remote_user_map,
+                                             plugin='scheduler',
+                                             args="show my_cron"),
+                                 [(True, {'job_id': str(uuid.uuid1()),
+                                          'name': 'my_cron',
+                                          'period': '/2 * * * *',
+                                          'owner': 'userX',
+                                          'content': "Cron content"})])
 
-            # Execute
-            with patch('crontab.CronTab.__iter__',
-                       Mock(return_value=iter([cron_job]))):
-                self.assertEqual(disp.schedule('', {}, name='my_cron',
-                                               action="delete"),
-                                 (True, 'Cron job my_cron removed'))
+                # Delete
+                self.assertEqual(disp.plugin('', remote_user_map,
+                                             plugin='scheduler',
+                                             args="delete my_cron"),
+                                 [(True, 'Cron job my_cron removed')])
 
     def test_login(self):
         disp = Dispatcher('run', config=base.CONFIG)
@@ -200,6 +220,7 @@ class TestServer(base.BaseTestCase):
             row_mock.fetchall = Mock(return_value=iter([('*', 'root'),
                                     ('.*-win', 'admin')]))
 
+            disp.user_token = hash_token('some_token')
             auth = disp._login(auth_type=2)
             self.assertEqual((auth[0], str(auth[1])),
                             (True, 'some_user:[root]:.*-win:admin'))
@@ -208,7 +229,7 @@ class TestServer(base.BaseTestCase):
                              [call('SELECT count(*) FROM Users'),
                               call(
                               'SELECT Users.id FROM Users INNER JOIN Organizations org ON Users.org_uid = org.org_uid WHERE username = ? AND token = ? AND active = 1',
-                            ('some_user', 'some_token')),
+                            ('some_user', hash_token('some_token'))),
                                  call('SELECT count(*) FROM Users'),
                                  call(
                                      'SELECT servers, role FROM AccessMap WHERE user_id = ?', (2,)),
@@ -217,7 +238,7 @@ class TestServer(base.BaseTestCase):
                                  call('SELECT count(*) FROM Users'),
                                  call(
                                      'SELECT user_id FROM Tokens INNER JOIN Users ON Users.id = Tokens.user_id WHERE username = ? AND Tokens.token = ? AND expiry > ?',
-                                     ('some_user', 'some_token', 333333333)),
+                                     ('some_user', hash_token('some_token'), 333333333)),
                                  call('SELECT count(*) FROM Users'),
                                  call(
                                      'SELECT servers, role FROM AccessMap WHERE user_id = ?', (2,)),

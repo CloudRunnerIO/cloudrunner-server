@@ -28,7 +28,7 @@ import threading
 from cloudrunner.core import parser
 from cloudrunner_server.plugins.auth.user_db import AuthDb
 from cloudrunner_server.dispatcher import server
-from cloudrunner_server.dispatcher.session import ServerSession
+from cloudrunner_server.dispatcher.session import JobSession
 from cloudrunner_server.dispatcher.server import CONFIG
 from cloudrunner_server.tests import base
 
@@ -73,14 +73,21 @@ whoami
                 job = Mock()
                 job.receive = Mock(side_effect=[("READY",)])
                 self.transport.create_job = Mock(return_value=job)
+                self.backend = Mock()
 
                 self.config = Mock()
                 self.config.security = Mock(use_org=False)
 
         remote_user_map = Mock(org="MyOrg")
+        class PluginCtx(object):
+            def __init__(self):
+                self.args_plugins = []
+                self.lib_plugins = []
+                self.job_plugins = []
 
-        session = ServerSession(
-            Ctx(), 1, SESSION, payload, remote_user_map, stop_event)
+        session = JobSession(Ctx(),
+            'user', SESSION, payload, remote_user_map, stop_event,
+            PluginCtx())
 
         ret_data1 = [
             ['PIPE', 'JOB_ID', 'admin', '["STDOUT", "BLA"]'],
