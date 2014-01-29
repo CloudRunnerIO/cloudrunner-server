@@ -97,6 +97,7 @@ rm -rf %{buildroot}
 %files dispatcher
 %{_bindir}/cloudrunner-dsp
 %{_bindir}/cloudrunner-master
+%{_bindir}/cloudrunner-autocomplete
 
 %{python_sitelib}/cloudrunner_server/db
 %{python_sitelib}/cloudrunner_server/dispatcher
