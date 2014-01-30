@@ -6,15 +6,15 @@
 
 
 Name:       cloudrunner_server
-Version:    0.2
+Version:    0.3
 Release:    2.cloudr%{?dist}
-Summary:    CloudRunner engine for running scripts in cloud environment
+Summary:    CloudRunner Server for running scripts in cloud environment
 Group:      Cloud tools
 License:    Proprietary
 URL:        http://www.cloudrunner.io/
 Source0:    %{name}-%{version}.tar.gz
 BuildRoot:  %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
-BuildArch:   noarch
+BuildArch:  noarch
 
 BuildRequires: python-setuptools
 
@@ -34,11 +34,9 @@ Requires: python-importlib
 %endif
 
 %description
-CloudRunner execution engine. Consists of three modules:
+CloudRunner Server. Consists of three modules:
 1. Master (cloudrunner-dsp service) - Starts a Master dispatcher server
-2. Node (cloudrunner-node) service - Starts an agent on a server node
-3. Agent/Runner (cloudrunner) - a tool to connect and run scripts on nodes
-This package contains common  libs and files.
+This package contains common libs and files.
 
 
 %package dispatcher
@@ -97,7 +95,7 @@ rm -rf %{buildroot}
 %files dispatcher
 %{_bindir}/cloudrunner-dsp
 %{_bindir}/cloudrunner-master
-%{_bindir}/cloudrunner-autocomplete
+%{_bindir}/cloudrunner-server-autocomplete
 
 %{python_sitelib}/cloudrunner_server/db
 %{python_sitelib}/cloudrunner_server/dispatcher
