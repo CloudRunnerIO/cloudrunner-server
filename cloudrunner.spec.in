@@ -92,7 +92,6 @@ rm -rf %{buildroot}
 %dir /var/run/sock/cloudrunner/
 %dir /var/lib/cloudrunner/
 
-%files dispatcher
 %{_bindir}/cloudrunner-dsp
 %{_bindir}/cloudrunner-master
 %{_bindir}/cloudrunner-server-autocomplete
