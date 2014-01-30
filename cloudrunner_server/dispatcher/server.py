@@ -35,7 +35,6 @@ import uuid
 from cloudrunner import CONFIG_LOCATION
 from cloudrunner import LOG_LOCATION
 from cloudrunner.util.config import Config
-from cloudrunner.util.crypto import hash_token
 from cloudrunner.util.logconfig import configure_loggers
 
 CONFIG = Config(CONFIG_LOCATION)
@@ -231,6 +230,7 @@ class Dispatcher(Daemon):
         self.plugin_context.lib_plugins = lib_plugins
 
     def _login(self, auth_type=1):
+        print self.user_id, self.user_token
         LOG.debug("[Login][%s]: %s" % (auth_type, self.user_id))
 
         if auth_type == 1:
@@ -447,7 +447,7 @@ class Dispatcher(Daemon):
                         self.user_token = req.password
                     else:
                         # Token auth
-                        self.user_token = hash_token(req.password)
+                        self.user_token = req.password
 
                     auth_check = self._login(req.auth_type)
                     if not auth_check[0]:
