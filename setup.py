@@ -46,7 +46,7 @@ setup(
                       'M2Crypto', 'httplib2'],
     tests_require = test_requirements,
     test_suite = 'nose.collector',
-    scripts=['bin/cloudrunner-autocomplete'],
+    scripts=['bin/cloudrunner-server-autocomplete'],
     entry_points={
         "console_scripts": [
             "cloudrunner-master = cloudrunner_server.master.cli:main",
