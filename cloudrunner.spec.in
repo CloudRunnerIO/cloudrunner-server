@@ -28,6 +28,7 @@ Requires: m2crypto
 Requires: python-zmq
 Requires: python-httplib2
 Requires: python-setuptools
+Requires: cloudrunner >= 0.3
 
 %if 0%{?rhel} < 7 && 0%{?fedora} < 13
 Requires: python-importlib
