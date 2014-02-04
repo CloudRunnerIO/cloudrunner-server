@@ -42,7 +42,7 @@ from cloudrunner.core.exceptions import ConnectionError
 from cloudrunner.plugins.transport.base import TransportBackend
 from cloudrunner import VAR_DIR
 
-from cloudrunner_server.plugins.transport.tlszmq import \
+from .tlszmq import \
     (ConnectionException, ServerDisconnectedException,
      TLSZmqClientSocket, TLSClientDecrypt)
 
@@ -60,7 +60,6 @@ class NodeTransport(TransportBackend):
         self.config = config
         self.node_id = config.id
         self.wait_for_approval = int(kwargs.get('wait_for_approval', 120))
-        #self.running = Event()
         self._sockets = []
         self.context = zmq.Context()
         self.ssl_thread_event = Event()
@@ -117,20 +116,6 @@ class NodeTransport(TransportBackend):
             'requests': [master_sub, control_uri],
             'jobs': [master_reply_uri, ssl_proxy_uri],
         }
-        # Run worker threads
-        if self.config.mode == 'single-user':
-            LOGC.info('Running client in single-user mode')
-            # worker = self.Worker(self.context, self.master_reply_uri,
-            #                     self.worker_uri, self.running,
-            #                     self.config.mode, callback)
-            # worker.start()
-        else:
-            LOGC.info('Running client in server mode')
-            # worker = self.Worker(self.context, '',
-            #                     '', self.running, self.config.mode)
-            # worker.start()
-            listener = Thread(target=self.listener_device)
-            listener.start()
 
         if not os.path.exists(self.config.security.node_key):
             LOGC.warn('Client key not generated, run program '
@@ -155,6 +140,14 @@ class NodeTransport(TransportBackend):
                 LOGC.error("Cannot register node at master")
                 return False
             self.ssl_stop()
+
+        # Run worker threads
+        if self.config.mode == 'single-user':
+            LOGC.info('Running client in single-user mode')
+        else:
+            LOGC.info('Running client in server mode')
+            listener = Thread(target=self.listener_device)
+            listener.start()
 
         self.ssl_start()
         self.decrypter = TLSClientDecrypt(self.config.security.server)
@@ -294,16 +287,8 @@ class NodeTransport(TransportBackend):
                 return [ADMIN_TOWER, 'REGISTER', node_id, csreq_data]
 
             rp = RegisterRep(reply)
-            if rp.reply == 'SEND_CSR':
-                return [ADMIN_TOWER, 'REGISTER', node_id, csreq_data]
-            if rp.reply == 'PENDING':
-                LOGC.info("Master says: Request queued for approval.")
-                if time.time() < start_reg + int(self.wait_for_approval):
-                    time.sleep(10)  # wait 10 sec before next try
-                    return [ADMIN_TOWER, 'REGISTER', node_id, csreq_data]
-                else:
-                    return -1
-            elif rp.reply == 'APPROVED':
+
+            if rp.reply == "APPROVED":
                 # Load certificates from chain
                 (node_crt_string,
                  ca_crt_string,
@@ -362,28 +347,40 @@ class NodeTransport(TransportBackend):
 
                 LOGC.info('Master approved the node. Starting service')
                 return 0
-            elif rp.reply == 'ERR_CRT_EXISTS':
-                LOGC.info('Master says: "There is already an issued certificate'
-                          ' for this node. Remove the certificate'
-                          ' from master first"')
-                return -1
-            elif rp.reply == 'ERR_CN_FAIL':
-                LOGC.info(
-                    'Master says: "Node Id doesn\'t match the request CN"')
-                return -1
-            elif rp.reply == 'INV_CSR':
-                LOGC.info('Master says: "Invalid CSR file"')
-                return -1
-            elif rp.reply == 'ERR_NAME_FORBD':
-                csr = m.X509.load_request_string(csreq_data)
-                LOGC.info('Master says: "The chosen node name(CN) - [%s] is '
-                          'forbidden. Choose another one."' %
-                          csr.get_subject().CN)
-                del csr
-                return -1
-            elif rp.reply == 'APPR_FAIL':
-                LOGC.info('Master says: "Certificate approval failed"')
-                return -1
+            elif rp.reply == "REJECTED":
+                if rp.data == 'SEND_CSR':
+                    return [ADMIN_TOWER, 'REGISTER', node_id, csreq_data]
+                if rp.data == 'PENDING':
+                    LOGC.info("Master says: Request queued for approval.")
+                    if time.time() < start_reg + int(self.wait_for_approval):
+                        time.sleep(10)  # wait 10 sec before next try
+                        return [ADMIN_TOWER, 'REGISTER', node_id, csreq_data]
+                    else:
+                        return -1
+                elif rp.data == 'ERR_CRT_EXISTS':
+                    LOGC.info('Master says: "There is already an issued certificate'
+                              ' for this node. Remove the certificate'
+                              ' from master first"')
+                    return -1
+                elif rp.data == 'ERR_CN_FAIL':
+                    LOGC.info(
+                        'Master says: "Node Id doesn\'t match the request CN"')
+                    return -1
+                elif rp.data == 'INV_CSR':
+                    LOGC.info('Master says: "Invalid CSR file"')
+                    return -1
+                elif rp.data == 'ERR_NAME_FORBD':
+                    csr = m.X509.load_request_string(csreq_data)
+                    LOGC.info('Master says: "The chosen node name(CN) - [%s] is '
+                              'forbidden. Choose another one."' %
+                              csr.get_subject().CN)
+                    del csr
+                    return -1
+                elif rp.data == 'APPR_FAIL':
+                    LOGC.info('Master says: "Certificate approval failed"')
+                    return -1
+                else:
+                    return -1
             else:
                 return -1
 

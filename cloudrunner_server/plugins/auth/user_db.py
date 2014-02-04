@@ -334,11 +334,15 @@ class AuthDb(object):
         token = ''.join(random.choice(string.printable[:-6])
                         for x in range(TOKEN_LEN))
         cur = self.db.cursor()
-        user_c = cur.execute("SELECT id FROM Users WHERE username = ?",
+        user_c = cur.execute("SELECT Users.id, org.name FROM Users "
+                             "INNER JOIN Organizations org "
+                             "ON Users.org_uid = org.org_uid "
+                             "WHERE username = ?",
                              (user,))
-        user_id = user_c.fetchone()
-        if user_id:
-            user_id = user_id[0]
+        user_org = user_c.fetchone()
+        if user_org:
+            user_id = user_org[0]
+            org = user_org[1]
             if expiry == -1:
                 # Max
                 expiry_date = datetime.datetime.max
@@ -353,7 +357,8 @@ class AuthDb(object):
             LOG.info("Creating api token for user %s, "
                      "expires at: %s" % (user, expiry))
             self.db.commit()
-            return token
+            return user, token, org
+        return (None, None, None)
 
 
 class UserRules(object):

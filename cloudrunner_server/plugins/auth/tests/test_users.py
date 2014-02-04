@@ -85,7 +85,10 @@ class TestUsersWithoutOrg(base.BaseTestCase):
         self.assertFalse(*self.auth.authenticate("user2", "token2"))
 
     def test_create_token(self):
-        token = self.auth.create_token("user1", "pass", expiry=1400)
+        (user, token, org) = self.auth.create_token(
+            "user1", "pass", expiry=1400)
+        self.assertEquals(user, 'user1')
+        self.assertEquals(org, 'DEFAULT')
         self.assertIsNotNone(token)
         success, access_map = self.auth.validate("user1", token)
         self.assertTrue(success, access_map)
@@ -152,8 +155,11 @@ class TestUsersWithOrg(base.BaseTestCase):
         self.assertFalse(*self.auth.authenticate("user2", "token2"))
 
     def test_create_token(self):
-        token = self.auth.create_token("user1", "password", expiry=1400)
+        (user, token, org) = self.auth.create_token("user1",
+                                                    "password", expiry=1400)
         self.assertIsNotNone(token)
+        self.assertEquals(user, 'user1')
+        self.assertEquals(org, 'MyOrg')
         success, access_map = self.auth.validate("user1", token)
         self.assertTrue(success, access_map)
         self.assertEquals(access_map.org, 'MyOrg')

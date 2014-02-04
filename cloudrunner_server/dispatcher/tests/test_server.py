@@ -156,10 +156,10 @@ class TestServer(base.BaseTestCase):
 
             # View
             cron_job = MagicMock(meta=lambda: meta, enabled=True,
-                            command='command',
-                            period='/2 * * * *',
-                            id='123123',
-                            user='userX')
+                                 command='command',
+                                 period='/2 * * * *',
+                                 id='123123',
+                                 user='userX')
             cron_job.configure_mock(name='my_cron')
 
             with nested(patch('crontab.CronTab.__iter__',
@@ -220,7 +220,7 @@ class TestServer(base.BaseTestCase):
             row_mock.fetchall = Mock(return_value=iter([('*', 'root'),
                                     ('.*-win', 'admin')]))
 
-            disp.user_token = hash_token('some_token')
+            disp.user_token = 'some_token'
             auth = disp._login(auth_type=2)
             self.assertEqual((auth[0], str(auth[1])),
                             (True, 'some_user:[root]:.*-win:admin'))
@@ -238,7 +238,7 @@ class TestServer(base.BaseTestCase):
                                  call('SELECT count(*) FROM Users'),
                                  call(
                                      'SELECT user_id FROM Tokens INNER JOIN Users ON Users.id = Tokens.user_id WHERE username = ? AND Tokens.token = ? AND expiry > ?',
-                                     ('some_user', hash_token('some_token'), 333333333)),
+                                     ('some_user', 'some_token', 333333333)),
                                  call('SELECT count(*) FROM Users'),
                                  call(
                                      'SELECT servers, role FROM AccessMap WHERE user_id = ?', (2,)),
@@ -252,7 +252,7 @@ class TestServer(base.BaseTestCase):
         cursor_mock = Mock()
         row_mock = Mock()
         elem_mock = Mock()
-        elem_mock.__getitem__ = Mock(return_value=2)
+        elem_mock.__getitem__ = Mock(side_effect=iter([2, 'MyOrg']))
         row_mock.fetchone = Mock(return_value=elem_mock)
         cursor_mock.execute = Mock(return_value=row_mock)
         auth_db_mock.cursor = Mock(return_value=cursor_mock)
@@ -266,5 +266,5 @@ class TestServer(base.BaseTestCase):
             disp.user_id = 'some_user'
             disp.user_token = 'some_token'
 
-            self.assertEqual(disp.get_api_token('', {}),
-                             ['TOKEN', '1' * 60])
+            self.assertEqual(disp.get_api_token('xxx', {}),
+                             ['TOKEN', '1' * 60, 'MyOrg'])

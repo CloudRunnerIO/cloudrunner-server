@@ -17,17 +17,24 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-import datetime
+from datetime import datetime
+from datetime import timedelta
 import logging
 import random
 import re
 import string
 import sqlite3
+from time import mktime
+from time import gmtime
 import uuid
 
 from cloudrunner_server.plugins.auth.base import AuthPluginBase
-from keystoneclient.v2_0 import client
 
+# try:
+#    from keystoneclient.v3 import client
+# except ImportError:
+from keystoneclient.v2_0 import client
+VERSION = 2
 DEFAULT_EXPIRE = 1440  # 24h
 
 LOG = logging.getLogger("KeystoneAuth")
@@ -38,6 +45,13 @@ class KeystoneAuth(AuthPluginBase):
     def __init__(self, config):
         self.config = config
         self.AUTH_URL = config.auth_url
+        self.ADMIN_AUTH_URL = config.auth_admin_url
+        self.admin_user = config.auth_user
+        self.admin_pass = config.auth_pass
+        self.admin_tenant = config.auth_admin_tenant or 'admin'
+        self.timeout = int(config.auth_timeout or 5)
+        self._token_cache = {}
+        LOG.info("Keystone Auth with %s" % self.AUTH_URL)
 
     def authenticate(self, user, password):
         """
@@ -45,32 +59,44 @@ class KeystoneAuth(AuthPluginBase):
         """
         try:
             keystone = client.Client(username=user, password=password,
-                                     auth_url=self.AUTH_URL)
+                                     auth_url=self.AUTH_URL,
+                                     timeout=self.timeout)
             if keystone.authenticate():
-                return (True, self._load_tenants(keystone, user, password))
+                tenant_map = self._load_tenant_map(keystone, user, password)
+                return (True, tenant_map)
             return (False, None)
         except Exception, ex:
             LOG.exception(ex)
             return (False, None)
 
-    def _load_tenants(self, keystone, username, password):
-        tenants = keystone.tenants.list()
+    def _get_tenants(self, client):
+        if VERSION == 3:
+            return client.projects
+        else:
+            return client.tenants
+
+    def _load_tenant_map(self, keystone, username, password):
+        tenants = self._get_tenants(keystone).list()
         access_map = UserRules(username)
 
-        access_map.add_role('*', 'root')
+        access_map.add_role('*', '@')
 
         access_map.org = tenants[0].name
-        access_map.organizations = [tenant.name for tenant in tenants]
+        access_map.organizations = [tenant.name for tenant in tenants
+                                    if tenant.enabled]
         return access_map
 
     def validate(self, user, token):
-        """
+        """x
         Authenticate using issued auth token
         """
         try:
-            auth = self.db.validate(user, token)
-            if auth:
-                return (True, self.db.load(*auth))
+            keystone = client.Client(username=user, token=token,
+                                     auth_url=self.AUTH_URL,
+                                     timeout=self.timeout)
+            if keystone.authenticate():
+                tenant_map = self._load_tenant_map(keystone, user, token)
+                return (True, tenant_map)
             return (False, None)
         except Exception, ex:
             LOG.exception(ex)
@@ -79,22 +105,61 @@ class KeystoneAuth(AuthPluginBase):
     def create_token(self, user, password, expiry=None, **kwargs):
         try:
             keystone = client.Client(username=user, password=password,
-                                     auth_url=self.AUTH_URL)
+                                     auth_url=self.AUTH_URL,
+                                     timeout=self.timeout)
             if keystone.authenticate():
+                tenant_map = self._load_tenant_map(keystone, user, password)
                 token = keystone.tokens.authenticate(
                     username=user, password=password)
-                return token.token['id']
-        except:
-            return None
+                return user, token.token['id'], tenant_map.org
+        except Exception, ex:
+            LOG.exception(ex)
+            return (None, None, None)
 
     def list_users(self):
-        return self.db.all()
+        return []
+
+    def _admin_token(self):
+        if 'admin_token' not in self._token_cache or \
+            self._token_cache.get('admin_token', [0])[0] > gmtime():
+            # Create token
+            keystone = client.Client(tenant_name=self.admin_tenant,
+                                     username=self.admin_user,
+                                     password=self.admin_pass,
+                                     auth_url=self.ADMIN_AUTH_URL,
+                                     timeout=self.timeout)
+            token = keystone.tokens.authenticate(username=self.admin_user,
+                                                 password=self.admin_pass)
+            if token.expires.endswith('Z'):
+                _exp = token.expires[:-1]
+                dt = datetime.strptime(_exp, "%Y-%m-%dT%H:%M:%S")
+            else:
+                # has time zone
+                token.expires = token.expires[:-1]
+                try:
+                    dt = datetime.strptime(
+                        token.expires, "%Y-%m-%dT%H:%M:%S%Z")
+                except:
+                    dt = datetime.strptime(
+                        token.expires, "%Y-%m-%dT%H:%M:%S%z")
+
+            # remove 10 sec to avoid time diffs
+            dt -= timedelta(seconds=5)
+            self._token_cache['admin_token'] = (mktime(dt.utctimetuple()),
+                                                token.id)
+        return self._token_cache['admin_token'][1]
 
     def list_orgs(self):
-        return self.db.orgs()
+        admin_token = self._admin_token()
+        c = client.Client(token=admin_token, auth_url=self.ADMIN_AUTH_URL,
+                          tenant_name='admin', timeout=self.timeout)
+        tenants_list = c.tenants.list()
+        tenants = [tenant.name for tenant in tenants_list
+                   if tenant.enabled]
+        return tenants
 
     def user_roles(self, username):
-        return self.db.user_roles(username)
+        raise NotImplemented()
 
     def create_org(self, orgname):
         raise NotImplemented()

@@ -79,3 +79,12 @@ class AuthPluginBase(object):
     @abc.abstractmethod
     def remove_role(self, username, node):
         raise NotImplementedError()
+
+
+class NodeVerifier(object):
+
+    __metaclass__ = abc.ABCMeta
+
+    @abc.abstractmethod
+    def verify(self, node, request, **kwargs):
+        raise NotImplementedError()

@@ -81,18 +81,6 @@ class JobSession(Thread):
         if not _sections:
             LOG.warn("Request without executable sections")
 
-    def catch(func):
-        def f(*args, **kwargs):
-            LOG.info("started 0")
-            try:
-                return func(*args, **kwargs)
-            except Exception, ex:
-                LOG.exception(ex)
-            LOG.info("exited 0")
-
-        return f
-
-    @catch
     def run(self):
         env = self.kwargs.pop('env', {})
         self.parse_script(env)
@@ -253,7 +241,6 @@ class JobSession(Thread):
         time.sleep(2)
         self.job_done.close()
 
-    @catch
     def exec_section(self, targets, request, timeout=None):
         """
         Send request to nodes

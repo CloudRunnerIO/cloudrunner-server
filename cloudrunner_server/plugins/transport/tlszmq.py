@@ -139,14 +139,17 @@ class TLSZmqServerSocket(object):
                         if x509:
                             subj = x509.get_subject()
                             client_id = subj.CN
-                            org_id = subj.OU
+                            org_id = subj.O
                             self.conns[ident][2] = True  # auth conn
                     except Exception, ex:
                         LOGS.exception(ex)
 
-                    LOGS.info(plain_data)
-                    proc_socket.send_multipart(
-                        [ident, client_id, org_id or '', plain_data])
+                    LOGS.info("PLAIN: %s" % plain_data)
+                    packets = plain_data.split('\x00')
+                    for packet in packets:
+                        if packet:
+                            proc_socket.send_multipart(
+                                [ident, client_id, org_id or '', packet])
 
                 if data:
                     tls.send(data)
@@ -256,10 +259,11 @@ class TLSZmqClientSocket(object):
 
                 if self.socket_proc in socks:
                     data = self.socket_proc.recv_multipart()
-                    LOGC.info("Data to send %s" % data[:2])
+                    LOGC.debug("Data to send %s" % data[:2])
                     data.pop(0)  # sender
 
                     self.tls.send(json.dumps(data))
+                    self.tls.send('\x00')  # separator
                     self.tls.update()
 
                 if self.tls.needs_write():
@@ -288,7 +292,7 @@ class TLSZmqClientSocket(object):
                         resp = json.loads(resp_json)
                         LOGC.debug("Data recvd %s" % resp[:2])
                         self.socket_proc.send_multipart(
-                             [str(r) for r in resp])
+                            [str(r) for r in resp])
                     except ValueError:
                         LOGC.error("Cannot decode message %s" % resp_json)
 

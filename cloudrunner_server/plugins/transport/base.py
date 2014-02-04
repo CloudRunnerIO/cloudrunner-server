@@ -18,6 +18,7 @@
 #    under the License.
 
 import abc
+import md5
 import time
 
 from cloudrunner.plugins.transport.base import TransportBackend
@@ -42,7 +43,7 @@ class ServerTransportBackend(TransportBackend):
         raise NotImplementedError()
 
     @abc.abstractmethod
-    def add_tenant(self, tenant_id, name):
+    def verify_node_request(self, node, request):
         raise NotImplementedError()
 
 
@@ -62,9 +63,12 @@ class Node(object):
 
 class Tenant(object):
 
-    def __init__(self, _id, name):
-        self.id = _id
+    def __init__(self, name):
         self.name = str(name)
+        m = md5.new()
+        m.update(name)
+        self.id = str(m.hexdigest())
+        del m
         self.nodes = []
 
     def __delitem__(self, node_id):

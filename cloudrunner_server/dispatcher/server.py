@@ -230,7 +230,6 @@ class Dispatcher(Daemon):
         self.plugin_context.lib_plugins = lib_plugins
 
     def _login(self, auth_type=1):
-        print self.user_id, self.user_token
         LOG.debug("[Login][%s]: %s" % (auth_type, self.user_id))
 
         if auth_type == 1:
@@ -245,9 +244,10 @@ class Dispatcher(Daemon):
         return True  # Already logged, kind of echo
 
     def get_api_token(self, *args, **kwargs):
-        token = self.auth.create_token(self.user_id, self.user_token, **kwargs)
+        (user, token, org) = self.auth.create_token(self.user_id,
+                                                    self.user_token, **kwargs)
         if token:
-            return ["TOKEN", token]
+            return ["TOKEN", token, org]
         else:
             return ["FAILURE"]
 
@@ -589,11 +589,6 @@ class Dispatcher(Daemon):
 
         self.backend = self.transport_class(self.config)
         self.backend.prepare()
-
-        if self.config.security.use_org:
-            self.backend.organizations = self.auth.list_orgs()
-        else:
-            self.backend.organizations = None
 
         self.admin = Admin(self.config, self.backend)
         self.admin.start()

@@ -21,6 +21,7 @@ from cloudrunner.core.message import ScheduleReq
 from cloudrunner.util.shell import colors
 from cloudrunner.util.loader import local_plugin_loader
 from cloudrunner_server.dispatcher import SCHEDULER_URI_TEMPLATE
+from cloudrunner_server.plugins.auth.base import NodeVerifier
 
 import M2Crypto as m
 import json
@@ -82,7 +83,7 @@ class CertController(object):
         open(serial_fn, 'w').write('%02s' % (int(serial) + 1))
 
     @yield_wrap
-    def get_approved_nodes(self, org):
+    def get_approved_nodes(self, org=None):
         approved = []
         for (_dir, _, nodes) in os.walk(os.path.join(self.ca_path, 'nodes')):
             for node in nodes:
@@ -90,7 +91,7 @@ class CertController(object):
                 try:
                     node_cert = m.X509.load_cert(os.path.join(_dir, node))
                     subj = node_cert.get_subject()
-                    if not org or subj.OU == org:
+                    if not org or subj.O == org:
                         approved.append(subj.CN)
                 except:
                     pass
@@ -156,7 +157,7 @@ class CertController(object):
                 try:
                     csr = m.X509.load_request(os.path.join(_dir, req))
                     subj = csr.get_subject()
-                    if org == subj.OU:
+                    if org == subj.O:
                         pending_nodes.append(subj.CN)
                 except:
                     pass
@@ -174,14 +175,6 @@ class CertController(object):
     @yield_wrap
     def sign_node(self, node, **kwargs):
         is_signed = False
-        ca = kwargs.get('ca', '')
-        if self.config.security.use_org and not ca:
-            yield ERR, "CA is mandatory for signing a node"
-            return
-        if not self.config.security.use_org and ca:
-            yield ERR, "Although CA value is passed, " \
-                "it will be skipped for No-org setup."
-            return
 
         for (_dir, _, reqs) in os.walk(os.path.join(self.ca_path, 'reqs')):
             for req in reqs:
@@ -194,8 +187,20 @@ class CertController(object):
                 try:
                     csr = m.X509.load_request(os.path.join(_dir, req))
                     if node == csr.get_subject().CN:
-                        yield TAG, "Signing %s" % node
+                        ca = kwargs.get('ca', '')
+                        if self.config.security.use_org and not ca:
+                            for verifier in NodeVerifier.__subclasses__():
+                                ca = verifier(self.config).verify(node, csr)
+                                if ca:
+                                    break
+                            else:
+                                yield ERR, "CA is mandatory for signing a node"
+                                return
+                        if not self.config.security.use_org and ca:
+                            yield ERR, "Although CA value is passed, " \
+                                "it will be skipped for No-org setup."
 
+                        yield TAG, "Signing %s" % node
                         if ca:
                             ca_cert_file = os.path.join(self.ca_path, 'org',
                                                         ca + '.ca.crt')
@@ -203,9 +208,15 @@ class CertController(object):
                                 yield ERR, "No CA certificate found " \
                                     "for %s" % ca
                                 return
-                            ca_priv_key = m.RSA.load_key(
-                                os.path.join(self.ca_path, 'org', ca + '.key'),
-                                self.pass_cb)
+                            try:
+                                ca_priv_key = m.RSA.load_key(
+                                    os.path.join(self.ca_path, 'org',
+                                                 ca + '.key'),
+                                    self.pass_cb)
+                            except Exception, ca_ex:
+                                yield ERR, "Cannot load Sub-CA cert: %s" % ca_ex
+                                return
+
                         else:
                             # Use Master CA
                             ca_cert_file = self.config.security.ca
@@ -227,7 +238,7 @@ class CertController(object):
                         cert.get_subject().C = csr_subj.C
                         cert.get_subject().CN = csr_subj.CN
                         if ca:
-                            cert.get_subject().OU = ca
+                            cert.get_subject().O = ca
                         cert.set_issuer(ca_crt.get_subject())
                         t = long(time.time()) + time.timezone
                         now = m.ASN1.ASN1_UTCTIME()
@@ -345,6 +356,7 @@ class CertController(object):
             open(os.path.join(ca_dir, 'serial'), 'w').write('1000')
 
         conf_file = os.path.join(ca_dir, "openssl.cnf")
+        print conf_file
         if not os.path.exists(conf_file):
             conf = """
 [ca]
@@ -366,8 +378,8 @@ default_md      = sha1
 [policy_match]
 countryName             = supplied
 stateOrProvinceName     = optional
-organizationName        = optional
-organizationalUnitName  = supplied
+organizationName        = supplied
+organizationalUnitName  = optional
 commonName              = supplied
 emailAddress            = optional
 
@@ -412,7 +424,7 @@ basicConstraints = CA:true
         os.chmod(subca_priv_key_file, stat.S_IREAD | stat.S_IWRITE)
 
         s_subj = subca_csr.get_subject()
-        s_subj.OU = ca
+        s_subj.O = ca
         s_subj.CN = ca
         s_subj.C = C
         try:
@@ -732,6 +744,8 @@ class ConfigController(object):
     def show(self, **kwargs):
         yield TAG, "Master configuration"
         yield TAG, "=" * 50
+
+        yield DATA, "Config file [%s]" % self.config._fn
 
         ca_path = os.path.dirname(self.config.security.ca)
         if os.path.exists(ca_path):
