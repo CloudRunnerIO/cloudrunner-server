@@ -18,6 +18,11 @@
 #    under the License.
 
 from crontab import CronTab
+from crontab import __version__
+
+if __version__ < '1.7':
+    raise Exception("Scheduler plugin requires python-crontab >= 1.7")
+
 import logging
 import os
 import sys
