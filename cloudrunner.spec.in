@@ -75,6 +75,7 @@ sed -i -e 's,{var_dir},%{_sharedstatedir}/cloudrunner,g' $RPM_BUILD_ROOT/%{_sysc
 mkdir -p $RPM_BUILD_ROOT/var/run/sock/cloudrunner/
 mkdir -p $RPM_BUILD_ROOT/var/run/cloudrunner/
 mkdir -p $RPM_BUILD_ROOT/var/lib/cloudrunner/
+mkdir -p $RPM_BUILD_ROOT/var/lib/cloudrunner/plugins/
 
 %clean
 rm -rf %{buildroot}
@@ -92,6 +93,8 @@ rm -rf %{buildroot}
 %dir /var/run/cloudrunner/
 %dir /var/run/sock/cloudrunner/
 %dir /var/lib/cloudrunner/
+%dir /var/lib/cloudrunner/plugins/
+
 
 %{_bindir}/cloudrunner-dsp
 %{_bindir}/cloudrunner-master
