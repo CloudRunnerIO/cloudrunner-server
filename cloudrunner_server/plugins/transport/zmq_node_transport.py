@@ -40,7 +40,7 @@ from zmq.eventloop import ioloop
 from cloudrunner.core.message import (ADMIN_TOWER, HEARTBEAT)
 from cloudrunner.core.exceptions import ConnectionError
 from cloudrunner.plugins.transport.base import TransportBackend
-from cloudrunner import VAR_DIR
+from cloudrunner import LIB_DIR
 
 from .tlszmq import \
     (ConnectionException, ServerDisconnectedException,
@@ -97,7 +97,7 @@ class NodeTransport(TransportBackend):
         master_reply_uri = 'tcp://%s' % self.config.master_repl
         worker_count = int(self.config.worker_count or 5)
 
-        sock_dir = self.config.sock_dir or os.path.join(VAR_DIR,
+        sock_dir = self.config.sock_dir or os.path.join(LIB_DIR,
                                                         'cloudrunner', 'sock')
         if not os.path.exists(sock_dir):
             os.makedirs(sock_dir)
