@@ -54,7 +54,7 @@ This package contains Dispatcher node service software.
 Summary:    CloudRunner Server transport plugin
 Group:      Cloud tools
 Requires:   %{name} = %{version}-%{release}
-%description openstack-transport
+%description plugin-ssl-node
 CloudRunner engine for running scripts in cloud environment.
 This package contains transport plugin for node-server configuration.
 
@@ -62,7 +62,7 @@ This package contains transport plugin for node-server configuration.
 Summary:    CloudRunner Server transport plugin
 Group:      Cloud tools
 Requires:   %{name} = %{version}-%{release}
-%description openstack-transport
+%description plugin-openstack-node
 CloudRunner engine for running scripts in cloud environment.
 This package contains transport plugin for node-server configuration with OpenStack.
 
@@ -70,7 +70,7 @@ This package contains transport plugin for node-server configuration with OpenSt
 Summary:    CloudRunner OpenStack plugin
 Group:      Cloud tools
 Requires:   %{name} = %{version}-%{release}
-%description openstack-plugin
+%description plugin-openstack-master
 CloudRunner engine for running scripts in cloud environment.
 This package contains OpenStack auto-configure plugin for Master
 
@@ -78,7 +78,7 @@ This package contains OpenStack auto-configure plugin for Master
 Summary:    CloudRunner OpenStack Keystone Auth plugin
 Group:      Cloud tools
 Requires:   %{name} = %{version}-%{release}
-%description openstack-plugin
+%description plugin-keystone
 CloudRunner engine for running scripts in cloud environment.
 This package contains OpenStack Keystone Auth plugin
 
