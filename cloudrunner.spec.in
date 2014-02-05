@@ -53,7 +53,7 @@ This package contains Dispatcher node service software.
 %package plugin-ssl-node
 Summary:    CloudRunner Server transport plugin
 Group:      Cloud tools
-Requires:   %{name} = %{version}-%{release}
+Requires:   cloudrunner-node => 3.0
 %description plugin-ssl-node
 CloudRunner engine for running scripts in cloud environment.
 This package contains transport plugin for node-server configuration.
@@ -61,7 +61,7 @@ This package contains transport plugin for node-server configuration.
 %package plugin-openstack-node
 Summary:    CloudRunner Server transport plugin
 Group:      Cloud tools
-Requires:   %{name} = %{version}-%{release}
+Requires:   cloudrunner-node => 3.0
 %description plugin-openstack-node
 CloudRunner engine for running scripts in cloud environment.
 This package contains transport plugin for node-server configuration with OpenStack.
@@ -118,6 +118,9 @@ rm -rf %{buildroot}
 %defattr(-,root,root,-)
 %doc README.rst
 
+%{_initrddir}/cloudrunner-dsp
+%config(noreplace) %{_sysconfdir}/cloudrunner_server/cloudrunner.conf
+
 %dir %{python_sitelib}/cloudrunner_server/
 %{python_sitelib}/cloudrunner_server/tests/*
 %{python_sitelib}/cloudrunner_server/__init__*
@@ -158,8 +161,6 @@ rm -rf %{buildroot}
 %{python_sitelib}/cloudrunner_server/plugins/auth/keystone_auth.py
 %{_bindir}/cloudrunner-plugins-keystone
 
-%{_initrddir}/cloudrunner-dsp
-%config(noreplace) %{_sysconfdir}/cloudrunner_server/cloudrunner.conf
 
 %changelog
 * Wed Feb 05 2014 Stiliyan Sabchev <ssabchev at cloudrunner dot io> - 0.3-3
