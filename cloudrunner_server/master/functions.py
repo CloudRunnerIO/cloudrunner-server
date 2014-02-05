@@ -350,13 +350,16 @@ class CertController(object):
         ca_dir = os.path.join(self.ca_path, 'org')
         if not os.path.exists(ca_dir):
             os.makedirs(ca_dir)
+        if not os.path.exists(os.path.join(ca_dir, 'certs')):
             os.makedirs(os.path.join(ca_dir, 'certs'))
+        if not os.path.exists(os.path.join(ca_dir, 'newcerts')):
             os.makedirs(os.path.join(ca_dir, 'newcerts'))
+        if not os.path.exists(os.path.join(ca_dir, 'index.txt')):
             open(os.path.join(ca_dir, 'index.txt'), 'w').write('')
+        if not os.path.exists(os.path.join(ca_dir, 'serial')):
             open(os.path.join(ca_dir, 'serial'), 'w').write('1000')
 
         conf_file = os.path.join(ca_dir, "openssl.cnf")
-        print conf_file
         if not os.path.exists(conf_file):
             conf = """
 [ca]
@@ -549,6 +552,10 @@ class ConfigController(object):
         if not os.path.exists(nodes_dir):
             yield TAG, "Creating: ", nodes_dir
             os.makedirs(nodes_dir)
+        subca_dir = os.path.join(ca_path, 'org')
+        if not os.path.exists(subca_dir):
+            yield TAG, "Creating: ", subca_dir
+            os.makedirs(subca_dir)
 
         # set 600 on dirs
         os.chmod(ca_path, stat.S_IRWXU)

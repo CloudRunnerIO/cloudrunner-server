@@ -126,6 +126,8 @@ class ZmqTransport(ServerTransportBackend):
         self._cert_changed()
 
     def _watch_cert_dir(self, _dir):
+        if not self.config.security.use_org:
+            return
         cert_fd = os.open(_dir, 0)
         fcntl.fcntl(cert_fd, fcntl.F_SETSIG, 0)
         fcntl.fcntl(cert_fd, fcntl.F_NOTIFY,

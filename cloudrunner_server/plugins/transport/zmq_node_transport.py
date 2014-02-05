@@ -48,7 +48,7 @@ from .tlszmq import \
 
 from cloudrunner.plugins.transport.zmq_transport import (SockWrapper,
                                                          PollerWrapper)
-LOGC = logging.getLogger('Plain Node Transport')
+LOGC = logging.getLogger('ZMQ+SSL Node Transport')
 STATE_OPS = ("IDENT", "RELOAD", 'FINISHED')
 
 
@@ -142,12 +142,9 @@ class NodeTransport(TransportBackend):
             self.ssl_stop()
 
         # Run worker threads
-        if self.config.mode == 'single-user':
-            LOGC.info('Running client in single-user mode')
-        else:
-            LOGC.info('Running client in server mode')
-            listener = Thread(target=self.listener_device)
-            listener.start()
+        LOGC.info('Running client in server mode')
+        listener = Thread(target=self.listener_device)
+        listener.start()
 
         self.ssl_start()
         self.decrypter = TLSClientDecrypt(self.config.security.server)
