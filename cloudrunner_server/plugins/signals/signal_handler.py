@@ -63,7 +63,7 @@ class SignalHandlerPlugin(JobInOutProcessorPluginBase,
         cls.push_sock = cls.context.socket(zmq.DEALER)
         cls.push_sock.connect(getattr(SignalHandlerPlugin,
                                       'server_uri',
-                                      'tcp://0.0.0.0:38123'))
+                                      'tcp://0.0.0.0:5559'))
 
     @classmethod
     def stop(cls):

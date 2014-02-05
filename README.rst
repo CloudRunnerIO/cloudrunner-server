@@ -6,7 +6,7 @@
 cat > ~/.cloudrunner <<EOF
 export CLOUDRUNNER_USER={username}
 export CLOUDRUNNER_TOKEN={pwd}
-export CLOUDRUNNER_SERVER=tcp://{IP/HOSTNAME}:38123
+export CLOUDRUNNER_SERVER=tcp://{IP/HOSTNAME}:5559
 EOF
 
 # Source it before using cloudrunner client:
@@ -33,7 +33,7 @@ echo 123
 ---cut---
 
 === List / delete from CLI
-cloudrunner plugin --arg='--list-libs' 
+cloudrunner plugin --arg='--list-libs'
 cloudrunner plugin --arg='--show-lib={some_name}'
 
 === Save a script from CLI
