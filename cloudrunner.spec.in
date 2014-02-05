@@ -7,7 +7,7 @@
 
 Name:       cloudrunner_server
 Version:    0.3
-Release:    2.cloudr%{?dist}
+Release:    3.cloudr%{?dist}
 Summary:    CloudRunner Server for running scripts in cloud environment
 Group:      Cloud tools
 License:    Proprietary
@@ -29,6 +29,8 @@ Requires: python-zmq
 Requires: python-httplib2
 Requires: python-setuptools
 Requires: cloudrunner >= 0.3
+
+Obsoletes: cloudrunner-dispatcher
 
 %if 0%{?rhel} < 7 && 0%{?fedora} < 13
 Requires: python-importlib
@@ -108,5 +110,8 @@ rm -rf %{buildroot}
 %config(noreplace) %{_sysconfdir}/cloudrunner_server/cloudrunner.conf
 
 %changelog
+* Wed Feb 05 2014 Stiliyan Sabchev <ssabchev at cloudrunner dot io> - 0.3-3
+- add Obsoletes old package cloudrunner-dispatcher
+
 * Mon Jan 20 2014 Tihomir Trifonov <ttrifonov at cloudrunner dot io> - 0.1-1
 - Initial package config
