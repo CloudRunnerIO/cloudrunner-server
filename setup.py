@@ -51,6 +51,14 @@ setup(
         "console_scripts": [
             "cloudrunner-master = cloudrunner_server.master.cli:main",
             "cloudrunner-dsp = cloudrunner_server.dispatcher.server:main",
+            "cloudrunner-plugins-node = "
+            "cloudrunner_server.plugins.bin.plugins_node:install",
+            "cloudrunner-plugins-openstack-node = "
+            "cloudrunner_server.plugins.bin.plugins_openstack_node:install",
+            "cloudrunner-plugins-openstack-master = "
+            "cloudrunner_server.plugins.bin.plugins_openstack_master:install",
+            "cloudrunner-plugins-keystone = "
+            "cloudrunner_server.plugins.bin.plugins_keystone:install",
         ]
     },
     classifiers=[

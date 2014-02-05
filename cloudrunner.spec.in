@@ -48,6 +48,38 @@ Requires:   %{name} = %{version}-%{release}
 CloudRunner engine for running scripts in cloud environment.
 This package contains Dispatcher node service software.
 
+%package plugin-ssl-node
+Summary:    CloudRunner Server transport plugin
+Group:      Cloud tools
+Requires:   %{name} = %{version}-%{release}
+%description openstack-transport
+CloudRunner engine for running scripts in cloud environment.
+This package contains transport plugin for node-server configuration.
+
+%package plugin-openstack-node
+Summary:    CloudRunner Server transport plugin
+Group:      Cloud tools
+Requires:   %{name} = %{version}-%{release}
+%description openstack-transport
+CloudRunner engine for running scripts in cloud environment.
+This package contains transport plugin for node-server configuration with OpenStack.
+
+%package plugin-openstack-master
+Summary:    CloudRunner OpenStack plugin
+Group:      Cloud tools
+Requires:   %{name} = %{version}-%{release}
+%description openstack-plugin
+CloudRunner engine for running scripts in cloud environment.
+This package contains OpenStack auto-configure plugin for Master
+
+%package plugin-keystone
+Summary:    CloudRunner OpenStack Keystone Auth plugin
+Group:      Cloud tools
+Requires:   %{name} = %{version}-%{release}
+%description openstack-plugin
+CloudRunner engine for running scripts in cloud environment.
+This package contains OpenStack Keystone Auth plugin
+
 %prep
 %setup -q
 
@@ -95,7 +127,6 @@ rm -rf %{buildroot}
 %dir /var/lib/cloudrunner/
 %dir /var/lib/cloudrunner/plugins/
 
-
 %{_bindir}/cloudrunner-dsp
 %{_bindir}/cloudrunner-master
 %{_bindir}/cloudrunner-server-autocomplete
@@ -103,6 +134,27 @@ rm -rf %{buildroot}
 %{python_sitelib}/cloudrunner_server/db
 %{python_sitelib}/cloudrunner_server/dispatcher
 %{python_sitelib}/cloudrunner_server/master
+
+
+%files plugin-ssl-node
+%{python_sitelib}/cloudrunner_server/plugins/auth/keystone_auth.py
+%{python_sitelib}/cloudrunner_server/plugins/transport/zmq_node_transport.py
+%{python_sitelib}/cloudrunner_server/plugins/config/ssl_config.py
+%{_bindir}/cloudrunner-plugins-node
+
+%files plugin-openstack-node
+%{python_sitelib}/cloudrunner_server/plugins/transport/tlszmq.py
+%{python_sitelib}/cloudrunner_server/plugins/transport/zmq_node_transport.py
+%{python_sitelib}/cloudrunner_server/plugins/config/openstack_ssl_config.py
+%{_bindir}/cloudrunner-plugins-openstack-node
+
+%files plugin-openstack-master
+%{python_sitelib}/cloudrunner_server/plugins/auth/openstack_verifier.py
+%{_bindir}/cloudrunner-plugins-openstack-master
+
+%files plugin-keystone
+%{python_sitelib}/cloudrunner_server/plugins/auth/keystone_auth.py
+%{_bindir}/cloudrunner-plugins-keystone
 
 %{_initrddir}/cloudrunner-dsp
 %config(noreplace) %{_sysconfdir}/cloudrunner_server/cloudrunner.conf
