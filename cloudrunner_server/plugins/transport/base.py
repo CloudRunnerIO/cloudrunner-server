@@ -18,7 +18,7 @@
 #    under the License.
 
 import abc
-import md5
+from hashlib import md5
 import time
 
 from cloudrunner.plugins.transport.base import TransportBackend
@@ -65,7 +65,7 @@ class Tenant(object):
 
     def __init__(self, name):
         self.name = str(name)
-        m = md5.new()
+        m = md5()
         m.update(name)
         self.id = str(m.hexdigest())
         del m

@@ -36,7 +36,7 @@ class CROrchestrator(object):
                                         CONFIG.run_as.user)
         self.password = password or environ.get("CLOUDRUNNER_TOKEN",
                                                 CONFIG.run_as.password)
-        self.server = server or CONFIG.master or 'tcp://127.0.0.1:38123'
+        self.server = server or CONFIG.master or 'tcp://127.0.0.1:5559'
         self.timeout = timeout or 600  # Default 10 min
 
     def _check_nodes(self, *nodes):

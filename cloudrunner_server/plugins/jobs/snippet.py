@@ -28,8 +28,9 @@ LOG = logging.getLogger(__name__)
 
 
 def _default_dir():
-    from cloudrunner import VAR_DIR
-    _def_dir = os.path.join(VAR_DIR, "cloudrunner", "plugins", "snippet")
+    from cloudrunner import LIB_DIR
+    _def_dir = os.path.join(LIB_DIR, "cloudrunner",
+                            "plugins", "snippet")
     if not os.path.exists(_def_dir):
         os.makedirs(_def_dir)
     return _def_dir

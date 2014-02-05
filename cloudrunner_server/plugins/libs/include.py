@@ -24,7 +24,7 @@ import os
 import os.path as p
 import re
 
-from cloudrunner import VAR_DIR
+from cloudrunner import LIB_DIR
 from cloudrunner_server.plugins.args_provider import ArgsProvider
 from cloudrunner_server.plugins.args_provider import CliArgsProvider
 from cloudrunner_server.plugins.libs.base import IncludeLibPluginBase
@@ -40,7 +40,7 @@ def sanitize(lib):
 
 
 def _default_dir():
-    _def_dir = p.join(VAR_DIR, "cloudrunner", "plugins", "library")
+    _def_dir = p.join(LIB_DIR, "cloudrunner", "plugins", "library")
     if not p.exists(_def_dir):
         os.makedirs(_def_dir)
     return _def_dir

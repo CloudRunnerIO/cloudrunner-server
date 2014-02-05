@@ -183,6 +183,11 @@ class JobSession(Thread):
                     meta = [str(int(time.time())), self.task_name, self.user,
                             section.targets, tags]
 
+                    # reply: 'PIPE', job_id, run_as, node_id, stdout, stderr
+                    # reply-fwd: session_id, PIPEOUT, session_id, time,
+                    #   task_name, user, targets, tags, job_id, run_as,
+                    #   node_id, stdout, stderr
+
                     self._reply(self.session_id, StatusCodes.PIPEOUT,
                                 [self.session_id] + meta + list(_reply[1:]))
                 else:

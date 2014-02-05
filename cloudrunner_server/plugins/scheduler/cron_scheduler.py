@@ -18,6 +18,11 @@
 #    under the License.
 
 from crontab import CronTab
+from crontab import __version__
+
+if __version__ < '1.7':
+    raise Exception("Scheduler plugin requires python-crontab >= 1.7")
+
 import logging
 import os
 import sys
@@ -25,7 +30,7 @@ import tempfile
 import uuid
 import pwd
 
-from cloudrunner import VAR_DIR
+from cloudrunner import LIB_DIR
 from cloudrunner_server.plugins.args_provider import CliArgsProvider
 
 SEPARATOR = '\t'
@@ -64,7 +69,7 @@ class Job(object):
 
 
 def _default_dir():
-    _def_dir = os.path.join(VAR_DIR, "cloudrunner", "plugins", "scheduler")
+    _def_dir = os.path.join(LIB_DIR, "cloudrunner", "plugins", "scheduler")
     if not os.path.exists(_def_dir):
         os.makedirs(_def_dir)
     return _def_dir

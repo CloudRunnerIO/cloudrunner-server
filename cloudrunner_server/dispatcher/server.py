@@ -123,7 +123,7 @@ class Dispatcher(Daemon):
 
     def init_libs(self):
         self.dispatcher_uri = ''.join(['tcp://',
-                                      CONFIG.listen_uri or '0.0.0.0:38123'])
+                                      CONFIG.listen_uri or '0.0.0.0:5559'])
         self.scheduler_uri = SCHEDULER_URI
 
         # instantiate dispatcher implementation

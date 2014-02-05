@@ -80,7 +80,7 @@ class ZmqTransport(ServerTransportBackend):
         self.master_pub_uri = 'tcp://%s' % config.master_pub
 
         self.buses.requests = Pipe(
-            'tcp://' + (config.listen_uri or '0.0.0.0:38123'),
+            'tcp://' + (config.listen_uri or '0.0.0.0:5559'),
             "inproc://request-queue"
         )
         self.buses.replies = Pipe(
@@ -126,6 +126,8 @@ class ZmqTransport(ServerTransportBackend):
         self._cert_changed()
 
     def _watch_cert_dir(self, _dir):
+        if not self.config.security.use_org:
+            return
         cert_fd = os.open(_dir, 0)
         fcntl.fcntl(cert_fd, fcntl.F_SETSIG, 0)
         fcntl.fcntl(cert_fd, fcntl.F_NOTIFY,
@@ -275,7 +277,7 @@ class ZmqTransport(ServerTransportBackend):
         self.router.start()
 
         def requests_queue():
-            # Routes requests from master listener(pubid:38123) to workers
+            # Routes requests from master listener(pubid:5559) to workers
             router = self.context.socket(zmq.ROUTER)
             router.bind(self.buses.requests.publish)
             worker_proxy = self.context.socket(zmq.DEALER)
@@ -298,7 +300,7 @@ class ZmqTransport(ServerTransportBackend):
             LOGR.info("Exited requests queue")
 
         def finished_jobs_queue():
-            # Routes requests from job_done queue to user (on pubip:38123)
+            # Routes requests from job_done queue to user (on pubip:5559)
             job_done = self.context.socket(zmq.DEALER)
             job_done.bind(self.buses.finished_jobs.consume)
             worker_out_proxy = self.context.socket(zmq.DEALER)

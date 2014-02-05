@@ -22,6 +22,7 @@ import logging
 import os
 import zmq
 
+from cloudrunner import LIB_DIR
 from cloudrunner.core.message import AgentReq
 from cloudrunner_server.plugins.args_provider import ArgsProvider
 from cloudrunner_server.plugins.args_provider import CliArgsProvider
@@ -49,8 +50,7 @@ class SignalHandlerPlugin(JobInOutProcessorPluginBase,
 
     @property
     def _default_dir(self):
-        from cloudrunner import VAR_DIR
-        _def_dir = os.path.join(VAR_DIR, "cloudrunner",
+        _def_dir = os.path.join(LIB_DIR, "cloudrunner",
                                 "plugins", "signal_handler")
         if not os.path.exists(_def_dir):
             os.makedirs(_def_dir)
@@ -63,7 +63,7 @@ class SignalHandlerPlugin(JobInOutProcessorPluginBase,
         cls.push_sock = cls.context.socket(zmq.DEALER)
         cls.push_sock.connect(getattr(SignalHandlerPlugin,
                                       'server_uri',
-                                      'tcp://0.0.0.0:38123'))
+                                      'tcp://0.0.0.0:5559'))
 
     @classmethod
     def stop(cls):
