@@ -38,7 +38,7 @@ setup(
     author='CloudRunner.io',
     author_email='dev@cloudrunner.io',
     description=('Script execution engine for cloud environments.'),
-    license='BSD',
+    license='Proprietary',
     packages=find_packages(),
     package_data={'': ['*.txt', '*.rst'], 'conf': ['.*.conf'], 'db': ['*.py']},
     include_package_data = True,
@@ -51,14 +51,80 @@ setup(
         "console_scripts": [
             "cloudrunner-master = cloudrunner_server.master.cli:main",
             "cloudrunner-dsp = cloudrunner_server.dispatcher.server:main",
-            "cloudrunner-plugins-node = "
-            "cloudrunner_server.plugins.bin.plugins_node:install",
-            "cloudrunner-plugins-openstack-node = "
-            "cloudrunner_server.plugins.bin.plugins_openstack_node:install",
             "cloudrunner-plugins-openstack-master = "
             "cloudrunner_server.plugins.bin.plugins_openstack_master:install",
             "cloudrunner-plugins-keystone = "
             "cloudrunner_server.plugins.bin.plugins_keystone:install",
+        ]
+    },
+    classifiers=[
+        'Development Status :: 3 - Alpha',
+        'Environment :: Console',
+        'Environment :: Plugins',
+        'Environment :: Web Environment',
+        'Intended Audience :: Developers',
+        'Intended Audience :: System Administrators',
+        'Intended Audience :: Information Technology',
+        'License :: Other/Proprietary License',
+        'Operating System :: Unix',
+        'Programming Language :: Python',
+        'Programming Language :: Python :: 2',
+        'Programming Language :: Python :: 2.6',
+        'Programming Language :: Python :: 2.7',
+        'Topic :: Internet :: WWW/HTTP',
+        'Topic :: Software Development :: Libraries :: Application Frameworks',
+        'Topic :: Software Development :: Libraries :: Python Modules',
+    ],
+)
+
+setup(
+    name='cloudrunner-plugin-node',
+    version=VERSION,
+    url='http://www.cloudrunner.io/',
+    author='CloudRunner.io',
+    author_email='dev@cloudrunner.io',
+    description=('Script execution engine for cloud environments.'),
+    license='Proprietary',
+    install_requires=['cloudrunner'],
+    entry_points={
+        "console_scripts": [
+            "cloudrunner-plugins-node = "
+            "cloudrunner_server.plugins.bin.plugins_node:install",
+        ]
+    },
+    classifiers=[
+        'Development Status :: 3 - Alpha',
+        'Environment :: Console',
+        'Environment :: Plugins',
+        'Environment :: Web Environment',
+        'Intended Audience :: Developers',
+        'Intended Audience :: System Administrators',
+        'Intended Audience :: Information Technology',
+        'License :: Other/Proprietary License',
+        'Operating System :: Unix',
+        'Programming Language :: Python',
+        'Programming Language :: Python :: 2',
+        'Programming Language :: Python :: 2.6',
+        'Programming Language :: Python :: 2.7',
+        'Topic :: Internet :: WWW/HTTP',
+        'Topic :: Software Development :: Libraries :: Application Frameworks',
+        'Topic :: Software Development :: Libraries :: Python Modules',
+    ],
+)
+
+setup(
+    name='cloudrunner-plugin-openstack-node',
+    version=VERSION,
+    url='http://www.cloudrunner.io/',
+    author='CloudRunner.io',
+    author_email='dev@cloudrunner.io',
+    description=('Script execution engine for cloud environments.'),
+    license='Proprietary',
+    install_requires=['cloudrunner'],
+    entry_points={
+        "console_scripts": [
+            "cloudrunner-plugins-openstack-node = "
+            "cloudrunner_server.plugins.bin.plugins_openstack_node:install",
         ]
     },
     classifiers=[
