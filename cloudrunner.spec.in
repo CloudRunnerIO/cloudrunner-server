@@ -154,16 +154,16 @@ rm -rf %{buildroot}
 
 
 %files plugin-ssl-node
-%{python_sitelib}/cloudrunner_plugins/plugins/transport/tlszmq.py
-%{python_sitelib}/cloudrunner_plugins/plugins/transport/zmq_node_transport.py
-%{python_sitelib}/cloudrunner_plugins/plugins/config/ssl_config.py
+%{python_sitelib}/cloudrunner_plugins/transport/tlszmq.py
+%{python_sitelib}/cloudrunner_plugins/transport/zmq_node_transport.py
+%{python_sitelib}/cloudrunner_plugins/config/ssl_config.py
 %{_bindir}/cloudrunner-plugins-node
 
 %files plugin-openstack-node
 %dir %{python_sitelib}/cloudrunner_plugins/
-%{python_sitelib}/cloudrunner_plugins/plugins/transport/tlszmq.py
-%{python_sitelib}/cloudrunner_plugins/plugins/transport/zmq_node_transport.py
-%{python_sitelib}/cloudrunner_plugins/plugins/config/openstack_ssl_config.py
+%{python_sitelib}/cloudrunner_plugins/transport/tlszmq.py
+%{python_sitelib}/cloudrunner_plugins/transport/zmq_node_transport.py
+%{python_sitelib}/cloudrunner_plugins/config/openstack_ssl_config.py
 %{_bindir}/cloudrunner-plugins-openstack-node
 
 %files plugin-openstack-master
