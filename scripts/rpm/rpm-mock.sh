@@ -3,11 +3,12 @@
 set -e
 set -b
 # set -x # DEBUG
+# Variables
+PROJECT_NAME=cloudrunner-server
 
 VER_PAT="$(./scripts/rpm/getrev.sh)"
 #VER_PAT=0.1
 BRANCH="$(./scripts/rpm/getbranch.sh)"
-PROJECT_NAME=cloudrunner
 DIRNAME="$PROJECT_NAME-$VER_PAT.$BRANCH"
 
 if [ "$#" != 0 ]; then
