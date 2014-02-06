@@ -105,6 +105,12 @@ install -m755 etc/rc.d/init.d/centos/cloudrunner-dsp $RPM_BUILD_ROOT/%{_initrddi
 install -m755 cloudrunner_server/plugins/bin/plugins_openstack_node.py $RPM_BUILD_ROOT/%{_bindir}/cloudrunner-plugins-openstack-node
 install -m755 cloudrunner_server/plugins/bin/plugins_node.py $RPM_BUILD_ROOT/%{_bindir}/cloudrunner-plugins-node
 
+install -m755 cloudrunner_server/plugins/config/ssl_config.py $RPM_BUILD_ROOT/%{python_sitelib}/cloudrunner_plugins/config/ssl_config.py
+install -m755 cloudrunner_server/plugins/config/openstack_ssl_config.py $RPM_BUILD_ROOT/%{python_sitelib}/cloudrunner_plugins/config/openstack_ssl_config.py
+
+install -m755 cloudrunner_server/plugins/transport/tlszmq.py $RPM_BUILD_ROOT/%{python_sitelib}/cloudrunner_plugins/transport/tlszmq.py
+install -m755 cloudrunner_server/plugins/transport/zmq_node_transport.py $RPM_BUILD_ROOT/%{python_sitelib}/cloudrunner_plugins/transport/zmq_node_transport.py
+
 sed -i -e 's,{lib_dir},%{python_sitelib},g' $RPM_BUILD_ROOT/%{_sysconfdir}/%{name}/cloudrunner.conf
 sed -i -e 's,{ca_dir},%{_sharedstatedir}/cloudrunner/CA,g' $RPM_BUILD_ROOT/%{_sysconfdir}/%{name}/cloudrunner.conf
 sed -i -e 's,{var_dir},%{_sharedstatedir}/cloudrunner,g' $RPM_BUILD_ROOT/%{_sysconfdir}/%{name}/cloudrunner.conf
@@ -145,15 +151,16 @@ rm -rf %{buildroot}
 
 
 %files plugin-ssl-node
-%{python_sitelib}/cloudrunner_server/plugins/transport/tlszmq.py
-%{python_sitelib}/cloudrunner_server/plugins/transport/zmq_node_transport.py
-%{python_sitelib}/cloudrunner_server/plugins/config/ssl_config.py
+%{python_sitelib}/cloudrunner_plugins/plugins/transport/tlszmq.py
+%{python_sitelib}/cloudrunner_plugins/plugins/transport/zmq_node_transport.py
+%{python_sitelib}/cloudrunner_plugins/plugins/config/ssl_config.py
 %{_bindir}/cloudrunner-plugins-node
 
 %files plugin-openstack-node
-%{python_sitelib}/cloudrunner_server/plugins/transport/tlszmq.py
-%{python_sitelib}/cloudrunner_server/plugins/transport/zmq_node_transport.py
-%{python_sitelib}/cloudrunner_server/plugins/config/openstack_ssl_config.py
+%dir %{python_sitelib}/cloudrunner_plugins/
+%{python_sitelib}/cloudrunner_plugins/plugins/transport/tlszmq.py
+%{python_sitelib}/cloudrunner_plugins/plugins/transport/zmq_node_transport.py
+%{python_sitelib}/cloudrunner_plugins/plugins/config/openstack_ssl_config.py
 %{_bindir}/cloudrunner-plugins-openstack-node
 
 %files plugin-openstack-master
