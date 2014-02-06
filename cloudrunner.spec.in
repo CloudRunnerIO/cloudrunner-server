@@ -108,6 +108,11 @@ install -m755 cloudrunner_server/plugins/bin/plugins_node.py $RPM_BUILD_ROOT/%{_
 mkdir -p $RPM_BUILD_ROOT/%{python_sitelib}/cloudrunner_plugins/
 mkdir -p $RPM_BUILD_ROOT/%{python_sitelib}/cloudrunner_plugins/config
 mkdir -p $RPM_BUILD_ROOT/%{python_sitelib}/cloudrunner_plugins/transport
+
+install -m644 cloudrunner_server/plugins/config/ssl_config.py $RPM_BUILD_ROOT/%{python_sitelib}/cloudrunner_plugins/__init__.py
+install -m644 cloudrunner_server/plugins/config/ssl_config.py $RPM_BUILD_ROOT/%{python_sitelib}/cloudrunner_plugins/config/__init__.py
+install -m644 cloudrunner_server/plugins/config/ssl_config.py $RPM_BUILD_ROOT/%{python_sitelib}/cloudrunner_plugins/transport/__init__.py
+
 install -m755 cloudrunner_server/plugins/config/ssl_config.py $RPM_BUILD_ROOT/%{python_sitelib}/cloudrunner_plugins/config/ssl_config.py
 install -m755 cloudrunner_server/plugins/config/openstack_ssl_config.py $RPM_BUILD_ROOT/%{python_sitelib}/cloudrunner_plugins/config/openstack_ssl_config.py
 
