@@ -53,7 +53,7 @@ This package contains Dispatcher node service software.
 %package plugin-ssl-node
 Summary:    CloudRunner Server transport plugin
 Group:      Cloud tools
-Requires:   cloudrunner-node => 3.0
+Requires:   cloudrunner-node => 0.3
 %description plugin-ssl-node
 CloudRunner engine for running scripts in cloud environment.
 This package contains transport plugin for node-server configuration.
@@ -61,7 +61,7 @@ This package contains transport plugin for node-server configuration.
 %package plugin-openstack-node
 Summary:    CloudRunner Server transport plugin
 Group:      Cloud tools
-Requires:   cloudrunner-node => 3.0
+Requires:   cloudrunner-node => 0.3
 %description plugin-openstack-node
 CloudRunner engine for running scripts in cloud environment.
 This package contains transport plugin for node-server configuration with OpenStack.
