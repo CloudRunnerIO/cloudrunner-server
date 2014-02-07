@@ -111,8 +111,6 @@ class ZmqTransport(ServerTransportBackend):
                              self.buses, self.endpoints, self.running)
         self.crypter = TLSServerCrypt(config.security.server_key,
                                       cert_password=config.security.cert_pass)
-        self.tenants = {}
-
         self.subca_dir = p.join(
             p.dirname(p.abspath(self.config.security.ca)), 'org')
         self._watch_cert_dir(self.subca_dir)
@@ -137,7 +135,10 @@ class ZmqTransport(ServerTransportBackend):
     def _cert_changed(self, *args):
         # Reload certs
         active_nodes = self.ccont.get_approved_nodes()
-        orgs = [ca[1] for ca in self.ccont.list_ca()]
+        if self.config.security.use_org:
+            orgs = [ca[1] for ca in self.ccont.list_ca()]
+        else:
+            orgs = [DEFAULT_ORG]
         for org in orgs:
             if org not in self.tenants:
                 LOGR.warn("Adding tenant %s" % org)
