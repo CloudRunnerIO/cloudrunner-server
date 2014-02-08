@@ -24,6 +24,8 @@ import re
 import string
 import sqlite3
 import uuid
+from cloudrunner_server.db import get_db
+from cloudrunner_server.db.columns import Column
 
 from cloudrunner.core.message import DEFAULT_ORG
 from cloudrunner.util.crypto import hash_token
@@ -71,7 +73,7 @@ class UserMap(AuthPluginBase):
             LOG.exception(ex)
             return (False, None)
 
-    def create_token(self, user, password, expiry=None, **kwargs):
+    def create_token(self, user, expiry=None, **kwargs):
         return self.db.get_token(user, expiry or DEFAULT_EXPIRE)
 
     def list_users(self):
@@ -111,182 +113,233 @@ class UserMap(AuthPluginBase):
 
 
 class AuthDb(object):
+    SCHEMA = {
+        "organizations": {
+            "id": Column('integer', primary_key=True, null=False,
+                         autoincrement=True),
+            "name": Column('string', length=80),
+            "org_uid": Column('text'),
+            "active": Column('boolean', default=1),
+        },
+        "users": {
+            "id": Column('integer', primary_key=True, null=False,
+                         autoincrement=True),
+            "username": Column('string', length=80),
+            "token": Column('text'),
+            "org_uid": Column('text'),
+            "role": Column('text'),
+        },
+        "access_map": {
+            "user_id": Column('integer'),
+            "servers": Column('text'),
+            "role": Column('boolean'),
+        },
+        "user_tokens": {
+            "user_id": Column('integer'),
+            "token": Column('text'),
+            "expiry": Column('timestamp'),
+        }
+
+    }
 
     def __init__(self, db_path, use_org):
         try:
             self.use_org = use_org
-            self.db = sqlite3.connect(db_path)
+            self.dbm = get_db(db_path)
         except:
             LOG.error("Cannot connect to auth DB: %s" % db_path)
             return
-        try:
-            cur = self.db.cursor()
-            users_count = cur.execute('SELECT count(*) FROM Users').fetchone()
-        except:
-            # Create tables
-            LOG.warn("Database doesn't exist")
-            cur.execute('CREATE TABLE Organizations (id integer primary key, '
-                        'name text, org_uid text, active int)')
-            cur.execute('CREATE TABLE Users (id integer primary key, '
-                        'username text, token text, org_uid text)')
-            cur.execute('CREATE TABLE AccessMap (user_id integer, '
-                        'servers text, role text)')
-            cur.execute('CREATE TABLE Tokens (user_id integer, '
-                        'token text, expiry timestamp)')
-            self.db.commit()
-            self.create_org('DEFAULT')
+        self.dbm.define_schema(self.SCHEMA)
+        self.dbm.create_tables()
 
     def authenticate(self, username, password):
-        cur = self.db.cursor()
-        user_data = cur.execute("SELECT Users.id FROM Users "
-                                "INNER JOIN Organizations org "
-                                "ON Users.org_uid = org.org_uid "
-                                "WHERE username = ? AND token = ? "
-                                "AND active = 1",
-                                (username, password)).fetchone()
+        res = self.dbm.db.select(
+            ['users', 'organizations org'],
+            what='users.id',
+            where='users.org_uid = org.org_uid '
+                  'AND username = $username '
+                  'AND token = $token '
+                  'AND org.active = 1',
+            vars={'username': username, 'token': password},
+        )
+        user_data=list(res)
         if user_data:
-            return user_data[0], username
+            return user_data[0].id, username
+
         LOG.info("Auth failed for user %s" % username)
 
     def validate(self, username, token):
-        cur = self.db.cursor()
-        user_token = cur.execute("SELECT user_id FROM Tokens "
-                                 "INNER JOIN Users "
-                                 "ON Users.id = Tokens.user_id "
-                                 "WHERE username = ? AND Tokens.token = ? "
-                                 "AND expiry > ?",
-                                (username, token,
-                                    datetime.datetime.now())).fetchone()
+        user_token = self.dbm.db.select(
+            ['user_tokens', 'users'],
+            where="users.id = user_tokens.user_id"
+                  " AND username=$username"
+                  " AND user_tokens.token=$token"
+                  " AND expiry > date('now')",
+            vars = {
+                "username": username,
+                "token": token
+            },
+            what="user_id"
+        )
+        user_token = list(user_token)
+
+        #user_token = cur.execute("SELECT user_id FROM Tokens "
+        #                         "INNER JOIN Users "
+        #                         "ON Users.id = Tokens.user_id "
+        #                         "WHERE username = ? AND Tokens.token = ? "
+        #                         "AND expiry > ?",
+        #                        (username, token,
+        #                            datetime.datetime.now())).fetchone()
         if user_token:
-            return user_token[0], username
+            return user_token[0].user_id, username
         LOG.info("Token validation failed for user %s" % username)
 
     def load(self, user_id, username, *args):
-        cur = self.db.cursor()
-        user_data = cur.execute("SELECT servers, role FROM AccessMap "
-                                "WHERE user_id = ?", (user_id,))
+        user_data = self.dbm.access_map.select(
+            what='servers, role',
+            where='user_id = $user_id',
+            vars=dict(user_id=user_id)
+        )
         access_map = UserRules(username)
+        for data in user_data:
+            access_map.add_role(data.servers, data.role)
 
-        for data in user_data.fetchall():
-            access_map.add_role(data[0], data[1])
-
-        org_data = cur.execute("SELECT org.name FROM Organizations org "
-                               "INNER JOIN Users "
-                               "ON org.org_uid = Users.org_uid "
-                               "WHERE org.active = 1 and Users.id = ?",
-                               (user_id,)).fetchone()
+        org_data = self.dbm.db.select(
+            ['organizations org', 'users'],
+            where='org.org_uid = users.org_uid'
+                  ' AND org.active = 1'
+                  ' AND users.id=$user_id',
+            vars=dict(user_id=user_id),
+            what='org.name'
+        )
+        org_data = list(org_data)
         if org_data and self.use_org:
-            access_map.org = org_data[0]
+            access_map.org = org_data[0].name
         else:
             access_map.org = DEFAULT_ORG
         return access_map
 
     def all(self):
-        cur = self.db.cursor()
-        users_data = cur.execute("SELECT username, org.name FROM Users "
-                                 "INNER JOIN Organizations org "
-                                 "ON Users.org_uid = org.org_uid")
-        users = [(user[0], user[1]) for user in users_data.fetchall()]
-        return users
+        users = self.dbm.db.select(
+            ['users', 'organizations org'],
+            where='users.org_uid=org.org_uid',
+            what='username, org.name as org_name'
+            )
+        return [(u.username, u.org_name) for u in users]
 
     def orgs(self):
-        cur = self.db.cursor()
-        org_data = cur.execute(
-            "SELECT name, org_uid, active FROM Organizations")
-        orgs = [(org[0], org[1], 'Active' if org[2] else 'Inactive')
-                for org in org_data.fetchall()]
+
+        org_data = self.dbm.organizations.select(
+            what="name, org_uid, active",
+        )
+        orgs = [(org.name, org.org_uid, 'Active' if org.active else 'Inactive')
+                for org in org_data]
         return orgs
 
     def create_org(self, org_name):
-        cur = self.db.cursor()
-        cur.execute("SELECT * FROM Organizations WHERE name = ?", (org_name,))
-        if cur.fetchone():
+
+        if list(self.dbm.organizations.select(where="name=$name",
+                                              vars={"name": org_name})):
             return False, "Organization already exists"
 
         try:
             uid = str(uuid.uuid1())
-            cur.execute(
-                "INSERT INTO Organizations (name, org_uid, active) "
-                "VALUES (?, ?, 1)",
-                       (org_name, uid))
-            self.db.commit()
-        except:
+            self.dbm.organizations.insert(name=org_name, org_uid=uid)
+        except Exception as exc:
             return False, "Cannot create organization"
         return True, uid
 
-    def create(self, username, password, org_name):
-        cur = self.db.cursor()
-        cur.execute("SELECT * FROM Users WHERE username = ?", (username,))
-        if cur.fetchone():
+    def create(self, username, password, org_name=None):
+        users = self.dbm.users.select(where="username = $username",
+                                      vars={"username": username})
+        if list(users):
             return False, "User already exists"
 
         try:
             if org_name:
-                org_id = cur.execute("SELECT org_uid from Organizations "
-                                     "WHERE name = ?", (org_name,)).fetchone()
+                org_id = self.dbm.organizations.select(
+                    what='org_uid',
+                    where='name=$org_name',
+                    vars={"org_name": org_name})
+                org_id = list(org_id)
                 if not org_id:
                     return False, "Organization %s doesn't exist" % org_name
             else:
-                org_id = cur.execute("SELECT org_uid from Organizations "
-                                     "LIMIT 1").fetchone()
-                if not org_id:
+                org_id = self.dbm.organizations.select(
+                    what='org_uid', limit=1)
+                org_id = list(org_id)
+                if not org_id and self.use_org:
                     return False, "Default Organization is not set"
 
             token = hash_token(password)
-            cur.execute("INSERT INTO Users (username, token, org_uid) "
-                        "VALUES (?, ?, ?)", (username, token, org_id[0]))
-            self.db.commit()
+            if org_id:
+                org_uid = org_id[0].org_uid
+            else:
+                org_uid = DEFAULT_ORG
+            self.dbm.users.insert(username=username, token=token,
+                                  org_uid=org_uid)
         except Exception, ex:
             return False, "Cannot create user" + str(ex)
         return True, "Added"
 
     def remove_org(self, name):
-        cur = self.db.cursor()
-        cur.execute("DELETE FROM Organizations WHERE name = ?", (name,))
-        self.db.commit()
-        if cur.rowcount:
+        res = self.dbm.organizations.delete(where="name=$name",
+                                            vars=dict(name=name))
+        if res:
             return True, "Organization deleted"
         else:
             return False, "Organization not found"
 
     def toggle_org(self, name, new_status):
-        cur = self.db.cursor()
-        cur.execute("UPDATE Organizations SET active = ?", (new_status,))
-        self.db.commit()
-        if cur.rowcount:
+        res = self.organizations.update(
+            active=new_status,
+            where="org_name=$org_name",
+            vars={"org_name": name}
+        )
+
+        if res:
             return True, "Organization %s" % ('activated' if new_status else
                                               'deactivated')
         else:
             return False, "Organization not found"
 
     def remove(self, username):
-        cur = self.db.cursor()
-        cur.execute("DELETE FROM Users WHERE username = ?", (username,))
-        self.db.commit()
-        if cur.rowcount:
+        res = self.dbm.users.delete(where="username=$username",
+                                    vars={"username": username})
+
+        if res:
             return True, "User deleted"
         else:
             return False, "User not found"
 
+    def get_user_id(self, username):
+        user_data = self.dbm.users.select(
+            what="id",
+            where="username = $username",
+            vars=dict(username=username)
+        )
+
+        user_data = list(user_data)
+        if user_data:
+            return user_data[0].id
+
     def user_roles(self, username):
-        cur = self.db.cursor()
-        user_data = cur.execute("SELECT servers, role FROM AccessMap "
-                                "INNER JOIN Users "
-                                "ON Users.id = AccessMap.user_id "
-                                "WHERE Users.username = ?", (username,))
+        user_data = self.dbm.db.select(
+            ['access_map as am', 'users'],
+            what="am.servers, am.role",
+            where="users.id = am.user_id "
+                  "AND users.username = $username",
+            vars={"username": username},
+        )
         roles = {}
-        for data in user_data.fetchall():
-            roles[data[0]] = data[1]
+        for data in user_data:
+            roles[data.servers] = data.role
 
         return roles
 
     def add_role(self, username, node, role):
-        cur = self.db.cursor()
-        user_data = cur.execute("SELECT id FROM Users WHERE username = ?",
-                               (username,))
-        user_id = user_data.fetchone()
+        user_id = self.get_user_id(username)
         if user_id:
-            user_id = user_id[0]
             # Test role
             if node != "*":
                 try:
@@ -294,32 +347,26 @@ class AuthDb(object):
                 except re.error:
                     return False, "%s is not a valid role/regex"
 
-            if_exists = cur.execute("SELECT * FROM AccessMap "
-                                    "WHERE user_id = ? AND servers = ?",
-                                   (user_id, node))
-            exists = if_exists.fetchone()
-            if exists:
+            exists = self.dbm.access_map.select(
+                where="user_id=$user_id AND servers=$servers",
+                vars=dict(user_id=user_id, servers=node)
+            )
+            if list(exists):
                 return False, "Role already exists"
 
-            cur.execute("INSERT INTO AccessMap VALUES(?, ?, ?)",
-                       (user_id, node, role))
-            self.db.commit()
+            self.dbm.access_map.insert(user_id=user_id, servers=node, role=role)
             return True, "Role added"
         else:
             return False, "User not found"
 
     def remove_role(self, username, node):
-        cur = self.db.cursor()
-        user_data = cur.execute("SELECT id FROM Users WHERE username = ?",
-                               (username,))
-        user_id = user_data.fetchone()
+        user_id = self.get_user_id(username)
         if user_id:
-            user_id = user_id[0]
-            cur.execute("DELETE FROM AccessMap "
-                        "WHERE user_id = ? AND servers = ?",
-                       (user_id, node))
-            self.db.commit()
-            if cur.rowcount:
+            deleted = self.dbm.access_map.delete(
+                where="user_id=$user_id AND servers=$servers",
+                vars=dict(user_id=user_id, servers=node)
+            )
+            if deleted:
                 return True, "Role deleted"
             else:
                 return False, "Role not found"
@@ -333,16 +380,9 @@ class AuthDb(object):
         """
         token = ''.join(random.choice(string.printable[:-6])
                         for x in range(TOKEN_LEN))
-        cur = self.db.cursor()
-        user_c = cur.execute("SELECT Users.id, org.name FROM Users "
-                             "INNER JOIN Organizations org "
-                             "ON Users.org_uid = org.org_uid "
-                             "WHERE username = ?",
-                             (user,))
-        user_org = user_c.fetchone()
-        if user_org:
-            user_id = user_org[0]
-            org = user_org[1]
+
+        user_id = self.get_user_id(user)
+        if user_id:
             if expiry == -1:
                 # Max
                 expiry_date = datetime.datetime.max
@@ -350,15 +390,15 @@ class AuthDb(object):
                 expiry_date = datetime.datetime.now() + \
                     datetime.timedelta(minutes=expiry)
             # Purge old tokens
-            cur.execute("DELETE FROM Tokens WHERE expiry < ?",
-                        (datetime.datetime.now(),))
-            cur.execute("INSERT INTO Tokens VALUES(?, ?, ?)",
-                        (user_id, token, expiry_date))
+            self.dbm.user_tokens.delete(where="expiry<date('now')")
+            self.dbm.user_tokens.insert(
+                user_id=user_id,
+                token=token,
+                expiry=expiry_date
+            )
             LOG.info("Creating api token for user %s, "
                      "expires at: %s" % (user, expiry))
-            self.db.commit()
-            return user, token, org
-        return (None, None, None)
+            return token
 
 
 class UserRules(object):

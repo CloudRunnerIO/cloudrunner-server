@@ -5,7 +5,7 @@ SQL_TYPES = {
         'string': 'VARCHAR(%(length)s)',
         'text': 'LONGTEXT',
         'blob': 'LONGBLOB',
-        'integer': 'INT',
+        'integer': 'INTEGER',
         'bigint': 'BIGINT',
         'float': 'FLOAT',
         'double': 'DOUBLE',
@@ -14,7 +14,7 @@ SQL_TYPES = {
         'time': 'TIME',
         'datetime': 'DATETIME',
         'timestamp': 'TIMESTAMP',
-        'id': 'INT AUTO_INCREMENT',
+        'id': 'INTEGER AUTOINCREMENT NOT NULL',
         'reference': 'INT, INDEX %(index_name)s (%(field_name)s), FOREIGN KEY '
                      '(%(field_name)s) REFERENCES %(foreign_key)s '
                      'ON DELETE %(on_delete_action)s',
@@ -29,10 +29,20 @@ def column_to_sql(column):
             column.col_type, SQL_TYPES.keys()
         ))
     sql_def = col_def % column.kwargs
+
+
     if column.primary_key:
         sql_def += " PRIMARY KEY"
+
+    if column.autoincrement:
+        sql_def += " AUTOINCREMENT"
+
     if not column.null:
         sql_def += " NOT NULL"
+
+    if column.default is not None:
+        sql_def += " DEFAULT {}".format(column.default)
+
     return sql_def
 
 
@@ -45,7 +55,7 @@ def generate_table_str(table_name, **kwargs):
         'CREATE TABLE mytable2 (id INT PRIMARY KEY NOT NULL,\\nname VARCHAR(32))'
     """
     create_table_tpl = "CREATE TABLE %(table_name)s (%(column_definitions)s)"
-    column_definitions = ",\n".join(
+    column_definitions = ", ".join(
         "%s %s" % (name, column_to_sql(column)) for name, column in kwargs.items()
     )
 
@@ -92,6 +102,9 @@ class Table(object):
 
         table_str = generate_table_str(table_name=self.tablename, **self.schema)
         return self.db.query(table_str)
+
+    def join(self, table):
+        pass
 
 
 class SQLDatabase(object):

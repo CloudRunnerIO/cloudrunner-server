@@ -31,7 +31,8 @@ class TestUsersWithoutOrg(base.BaseTestCase):
     def fixture(self):
         _, file_name = tempfile.mkstemp()
         self.db = file_name
-        base.CONFIG.users.db = self.db
+        db_url = "sqlite:///{}".format(self.db)
+        base.CONFIG.users.db = db_url
         base.CONFIG.security.use_org = False
         local_plugin_loader(base.CONFIG.auth)
         self.auth = AuthPluginBase.__subclasses__()[0](base.CONFIG)
@@ -85,10 +86,7 @@ class TestUsersWithoutOrg(base.BaseTestCase):
         self.assertFalse(*self.auth.authenticate("user2", "token2"))
 
     def test_create_token(self):
-        (user, token, org) = self.auth.create_token(
-            "user1", "pass", expiry=1400)
-        self.assertEquals(user, 'user1')
-        self.assertEquals(org, 'DEFAULT')
+        token = self.auth.create_token("user1", expiry=1400)
         self.assertIsNotNone(token)
         success, access_map = self.auth.validate("user1", token)
         self.assertTrue(success, access_map)
@@ -100,7 +98,8 @@ class TestUsersWithOrg(base.BaseTestCase):
     def fixture(self):
         _, file_name = tempfile.mkstemp()
         self.db = file_name
-        base.CONFIG.users.db = self.db
+        db_url = "sqlite:///{}".format(self.db)
+        base.CONFIG.users.db = db_url
         base.CONFIG.security.use_org = True
         local_plugin_loader(base.CONFIG.auth)
         self.auth = AuthPluginBase.__subclasses__()[0](base.CONFIG)
@@ -155,11 +154,25 @@ class TestUsersWithOrg(base.BaseTestCase):
         self.assertFalse(*self.auth.authenticate("user2", "token2"))
 
     def test_create_token(self):
-        (user, token, org) = self.auth.create_token("user1",
-                                                    "password", expiry=1400)
+        token = self.auth.create_token("user1", expiry=1400)
         self.assertIsNotNone(token)
-        self.assertEquals(user, 'user1')
-        self.assertEquals(org, 'MyOrg')
         success, access_map = self.auth.validate("user1", token)
         self.assertTrue(success, access_map)
         self.assertEquals(access_map.org, 'MyOrg')
+
+    def test_list_all(self):
+        users = []
+        for idx in range(10):
+            username = 'user{}'.format(idx)
+            self.auth.create_user(username, 'token', 'MyOrg')
+            users.append((username, 'MyOrg'))
+
+        res = self.auth.db.all()
+        self.assertItemsEqual(users, res)
+
+    def test_rm_org(self):
+        status, msg = self.auth.db.remove_org('MyOrg')
+        self.assertTrue(status)
+
+        status, msg = self.auth.db.remove_org('YourOrg')
+        self.assertFalse(status)
