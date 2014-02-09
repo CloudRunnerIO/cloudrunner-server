@@ -4,7 +4,7 @@ set -e
 set -b
 # set -x # DEBUG
 # Variables
-PROJECT_NAME=cloudrunner-server
+PROJECT_NAME=cloudrunner_server
 
 VER_PAT="$(./scripts/rpm/getrev.sh)"
 #VER_PAT=0.1
