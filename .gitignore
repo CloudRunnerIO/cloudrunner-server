@@ -5,3 +5,7 @@ dist
 .venv
 /.project
 .coverage*
+.tox/
+BRANCH
+VERSION
+
