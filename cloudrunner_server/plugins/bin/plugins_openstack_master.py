@@ -12,7 +12,7 @@ def install():
     _path = p.abspath(p.join(p.dirname(__file__), '..', 'transport'))
 
     config.update('Plugins', 'openstack',
-                  'cloudrunner_server.plugins.config.auth.openstack_verifier')
+                  'cloudrunner_server.plugins.auth.openstack_verifier')
     config.reload()
     if not config.security.use_org:
         print "WARNING: Security::use_org is not set!"

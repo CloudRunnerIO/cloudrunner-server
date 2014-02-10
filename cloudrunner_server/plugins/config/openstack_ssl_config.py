@@ -86,6 +86,8 @@ class SslConfig(ConfigPluginBase):
         subj.CN = node_id
         subj.OU = self.get_meta_data('uuid')
 
+        print "Setting subject:", subject
+
         req.sign(node_key, 'sha1')
         assert req.verify(node_key)
         assert req.verify(req.get_pubkey())

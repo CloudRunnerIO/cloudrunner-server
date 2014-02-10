@@ -16,13 +16,15 @@ class OpenStackVerifier(NodeVerifier):
         self.admin_pass = config.auth_pass
         self.admin_tenant = config.auth_admin_tenant or 'admin'
         self.strict_check = config.auth_strict_check
+        self.timeout = int(config.auth_timeout or 5)
 
     def _get_token(self):
         try:
             keystone = k.Client(tenant_name=self.admin_tenant,
                                 username=self.admin_user,
                                 password=self.admin_pass,
-                                auth_url=self.ADMIN_AUTH_URL)
+                                auth_url=self.ADMIN_AUTH_URL,
+                                timeout=self.timeout)
 
             token = keystone.tokens.authenticate(username=self.admin_user,
                                                  password=self.admin_pass)
@@ -38,13 +40,15 @@ class OpenStackVerifier(NodeVerifier):
 
             keystone = k.Client(token=self._get_token(),
                                 auth_url=self.ADMIN_AUTH_URL,
-                                tenant_name='admin')
+                                tenant_name='admin',
+                                timeout=self.timeout)
 
             tenants = keystone.tenants.list()
 
             conn = n.Client(self.admin_user, self.admin_pass,
                             self.admin_tenant, self.ADMIN_AUTH_URL,
-                            service_type="compute")
+                            service_type="compute",
+                            timeout=self.timeout)
 
             for server in conn.servers.list(True,
                                             search_opts={'all_tenants': True}):
