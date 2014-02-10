@@ -104,6 +104,7 @@ install -m755 etc/rc.d/init.d/centos/cloudrunner-dsp $RPM_BUILD_ROOT/%{_initrddi
 
 install -m755 cloudrunner_server/plugins/bin/plugins_openstack_node.py $RPM_BUILD_ROOT/%{_bindir}/cloudrunner-plugins-openstack-node
 install -m755 cloudrunner_server/plugins/bin/plugins_node.py $RPM_BUILD_ROOT/%{_bindir}/cloudrunner-plugins-node
+install -m755 scripts/common/configure_keystone_plugin.sh $RPM_BUILD_ROOT/%{_bindir}/configure_keystone_plugin.sh
 
 mkdir -p $RPM_BUILD_ROOT/%{python_sitelib}/cloudrunner_plugins/
 mkdir -p $RPM_BUILD_ROOT/%{python_sitelib}/cloudrunner_plugins/config
