@@ -186,7 +186,7 @@ rm -rf %{buildroot}
 %files plugin-keystone
 %{python_sitelib}/cloudrunner_server/plugins/auth/keystone_auth.py
 %{_bindir}/cloudrunner-plugins-keystone
-
+%{_bindir}/configure_keystone_plugin.sh
 
 %changelog
 * Wed Feb 05 2014 Stiliyan Sabchev <ssabchev at cloudrunner dot io> - 0.3-3
