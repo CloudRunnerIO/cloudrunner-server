@@ -29,21 +29,23 @@ from cloudrunner_server.plugins.auth.base import AuthPluginBase
 class TestUsersWithoutOrg(base.BaseTestCase):
 
     def fixture(self):
-        _, file_name = tempfile.mkstemp()
+        _, file_name = tempfile.mkstemp(suffix='.sql3')
         self.db = file_name
-        db_url = "sqlite:///{}".format(self.db)
+        db_url = "sqlite:///%s" % self.db
         base.CONFIG.users.db = db_url
         base.CONFIG.security.use_org = False
         local_plugin_loader(base.CONFIG.auth)
         self.auth = AuthPluginBase.__subclasses__()[0](base.CONFIG)
+        self.auth.create_org('DEFAULT')
         self.auth.create_user("user1", "token1")
 
     def release(self):
-        os.unlink(self.db)
+        pass  # os.unlink(self.db)
 
     def test_login(self):
         self.assertEqual(len(AuthPluginBase.__subclasses__()), 1)
         success, access_map = self.auth.authenticate("user1", "token1")
+        print success, access_map
         self.assertTrue(success, access_map)
         self.assertEquals(access_map.org, 'DEFAULT')
 
@@ -86,7 +88,7 @@ class TestUsersWithoutOrg(base.BaseTestCase):
         self.assertFalse(*self.auth.authenticate("user2", "token2"))
 
     def test_create_token(self):
-        token = self.auth.create_token("user1", expiry=1400)
+        user, token, org = self.auth.create_token("user1", expiry=1400)
         self.assertIsNotNone(token)
         success, access_map = self.auth.validate("user1", token)
         self.assertTrue(success, access_map)
@@ -154,7 +156,7 @@ class TestUsersWithOrg(base.BaseTestCase):
         self.assertFalse(*self.auth.authenticate("user2", "token2"))
 
     def test_create_token(self):
-        token = self.auth.create_token("user1", expiry=1400)
+        user, token, org = self.auth.create_token("user1", expiry=1400)
         self.assertIsNotNone(token)
         success, access_map = self.auth.validate("user1", token)
         self.assertTrue(success, access_map)

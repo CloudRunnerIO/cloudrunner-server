@@ -162,7 +162,8 @@ class AuthDb(object):
                   'AND org.active = 1',
             vars={'username': username, 'token': password},
         )
-        user_data=list(res)
+
+        user_data = list(res)
         if user_data:
             return user_data[0].id, username
 
@@ -175,7 +176,7 @@ class AuthDb(object):
                   " AND username=$username"
                   " AND user_tokens.token=$token"
                   " AND expiry > date('now')",
-            vars = {
+            vars={
                 "username": username,
                 "token": token
             },
@@ -183,7 +184,7 @@ class AuthDb(object):
         )
         user_token = list(user_token)
 
-        #user_token = cur.execute("SELECT user_id FROM Tokens "
+        # user_token = cur.execute("SELECT user_id FROM Tokens "
         #                         "INNER JOIN Users "
         #                         "ON Users.id = Tokens.user_id "
         #                         "WHERE username = ? AND Tokens.token = ? "
@@ -224,7 +225,7 @@ class AuthDb(object):
             ['users', 'organizations org'],
             where='users.org_uid=org.org_uid',
             what='username, org.name as org_name'
-            )
+        )
         return [(u.username, u.org_name) for u in users]
 
     def orgs(self):
@@ -354,7 +355,8 @@ class AuthDb(object):
             if list(exists):
                 return False, "Role already exists"
 
-            self.dbm.access_map.insert(user_id=user_id, servers=node, role=role)
+            self.dbm.access_map.insert(
+                user_id=user_id, servers=node, role=role)
             return True, "Role added"
         else:
             return False, "User not found"
@@ -382,6 +384,20 @@ class AuthDb(object):
                         for x in range(TOKEN_LEN))
 
         user_id = self.get_user_id(user)
+        org_data = self.dbm.db.select(
+            ['organizations org', 'users'],
+            where='org.org_uid = users.org_uid'
+                  ' AND org.active = 1'
+                  ' AND users.id=$user_id',
+            vars=dict(user_id=user_id),
+            what='org.name'
+        )
+        org_data = list(org_data)
+        if org_data and self.use_org:
+            org = org_data[0].name
+        else:
+            org = None
+
         if user_id:
             if expiry == -1:
                 # Max
@@ -398,7 +414,8 @@ class AuthDb(object):
             )
             LOG.info("Creating api token for user %s, "
                      "expires at: %s" % (user, expiry))
-            return token
+            return user, token, org
+        return (None, None, None)
 
 
 class UserRules(object):

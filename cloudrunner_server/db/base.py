@@ -4,11 +4,11 @@ Database API
 """
 
 __all__ = [
-  "UnknownParamstyle", "UnknownDB", "TransactionError",
-  "sqllist", "sqlors", "reparam", "sqlquote",
-  "SQLQuery", "SQLParam", "sqlparam",
-  "SQLLiteral", "sqlliteral",
-  "database", 'DB',
+    "UnknownParamstyle", "UnknownDB", "TransactionError",
+    "sqllist", "sqlors", "reparam", "sqlquote",
+    "SQLQuery", "SQLParam", "sqlparam",
+    "SQLLiteral", "sqlliteral",
+    "database", 'DB',
 ]
 
 import time
@@ -17,7 +17,8 @@ try:
 except ImportError:
     datetime = None
 
-try: set
+try:
+    set
 except NameError:
     from sets import Set as set
 
@@ -31,22 +32,31 @@ except:
     debug = sys.stderr
     config = storage()
 
+
 class UnknownDB(Exception):
+
     """raised for unsupported dbms"""
     pass
 
+
 class _ItplError(ValueError):
+
     def __init__(self, text, pos):
         ValueError.__init__(self)
         self.text = text
         self.pos = pos
+
     def __str__(self):
         return "unfinished expression in %s at char %d" % (
             repr(self.text), self.pos)
 
-class TransactionError(Exception): pass
+
+class TransactionError(Exception):
+    pass
+
 
 class UnknownParamstyle(Exception):
+
     """
     raised for unsupported db paramstyles
 
@@ -54,7 +64,9 @@ class UnknownParamstyle(Exception):
     """
     pass
 
+
 class SQLParam(object):
+
     """
     Parameter in SQLQuery.
 
@@ -95,9 +107,11 @@ class SQLParam(object):
     def __repr__(self):
         return '<param: %s>' % repr(self.value)
 
-sqlparam =  SQLParam
+sqlparam = SQLParam
+
 
 class SQLQuery(object):
+
     """
     You can pass this sort of thing as a clause in any db function.
     Otherwise, you can pass a dictionary to the keyword argument `vars`
@@ -187,7 +201,8 @@ class SQLQuery(object):
             else:
                 x = safestr(x)
                 # automatically escape % characters in the query
-                # For backward compatability, ignore escaping when the query looks already escaped
+                # For backward compatability, ignore escaping when the query
+                # looks already escaped
                 if paramstyle in ['format', 'pyformat']:
                     if '%' in x and '%%' not in x:
                         x = x.replace('%', '%%')
@@ -254,7 +269,9 @@ class SQLQuery(object):
     def __repr__(self):
         return '<sql: %s>' % repr(str(self))
 
+
 class SQLLiteral:
+
     """
     Protects a string from `sqlquote`.
 
@@ -263,6 +280,7 @@ class SQLLiteral:
         >>> sqlquote(SQLLiteral('NOW()'))
         <sql: 'NOW()'>
     """
+
     def __init__(self, v):
         self.v = v
 
@@ -270,6 +288,7 @@ class SQLLiteral:
         return self.v
 
 sqlliteral = SQLLiteral
+
 
 def _sqllist(values):
     """
@@ -285,6 +304,7 @@ def _sqllist(values):
     items.append(')')
     return SQLQuery(items)
 
+
 def reparam(string_, dictionary):
     """
     Takes a string and a dictionary and interpolates the string
@@ -295,7 +315,7 @@ def reparam(string_, dictionary):
         >>> reparam("s IN $s", dict(s=[1, 2]))
         <sql: 's IN (1, 2)'>
     """
-    dictionary = dictionary.copy() # eval mucks with it
+    dictionary = dictionary.copy()  # eval mucks with it
     vals = []
     result = []
     for live, chunk in _interpolate(string_):
@@ -305,6 +325,7 @@ def reparam(string_, dictionary):
         else:
             result.append(chunk)
     return SQLQuery.join(result, '')
+
 
 def sqlify(obj):
     """
@@ -329,8 +350,10 @@ def sqlify(obj):
     elif datetime and isinstance(obj, datetime.datetime):
         return repr(obj.isoformat())
     else:
-        if isinstance(obj, unicode): obj = obj.encode('utf8')
+        if isinstance(obj, unicode):
+            obj = obj.encode('utf8')
         return repr(obj)
+
 
 def sqllist(lst):
     """
@@ -347,6 +370,7 @@ def sqllist(lst):
         return lst
     else:
         return ', '.join(lst)
+
 
 def sqlors(left, lst):
     """
@@ -374,11 +398,12 @@ def sqlors(left, lst):
 
     if isinstance(lst, iters):
         return SQLQuery(['('] +
-          sum([[left, sqlparam(x), ' OR '] for x in lst], []) +
-          ['1=2)']
-        )
+                        sum([[left, sqlparam(x), ' OR '] for x in lst], []) +
+                        ['1=2)']
+                        )
     else:
         return left + sqlparam(lst)
+
 
 def sqlwhere(dictionary, grouping=' AND '):
     """
@@ -392,6 +417,7 @@ def sqlwhere(dictionary, grouping=' AND '):
         'a = %s AND b = %s'
     """
     return SQLQuery.join([k + ' = ' + sqlparam(v) for k, v in dictionary.items()], grouping)
+
 
 def sqlquote(a):
     """
@@ -407,14 +433,19 @@ def sqlquote(a):
     else:
         return sqlparam(a).sqlquery()
 
+
 class Transaction:
+
     """Database transaction."""
+
     def __init__(self, ctx):
         self.ctx = ctx
         self.transaction_count = transaction_count = len(ctx.transactions)
 
         class transaction_engine:
+
             """Transaction Engine used in top level transactions."""
+
             def do_transact(self):
                 ctx.commit(unload=False)
 
@@ -425,7 +456,9 @@ class Transaction:
                 ctx.rollback()
 
         class subtransaction_engine:
+
             """Transaction Engine used in sub transactions."""
+
             def query(self, q):
                 db_cursor = ctx.db.cursor()
                 ctx.db_execute(db_cursor, SQLQuery(q % transaction_count))
@@ -440,6 +473,7 @@ class Transaction:
                 self.query('ROLLBACK TO SAVEPOINT webpy_sp_%s')
 
         class dummy_engine:
+
             """Transaction Engine used instead of subtransaction_engine
             when sub transactions are not supported."""
             do_transact = do_commit = do_rollback = lambda self: None
@@ -468,15 +502,20 @@ class Transaction:
     def commit(self):
         if len(self.ctx.transactions) > self.transaction_count:
             self.engine.do_commit()
-            self.ctx.transactions = self.ctx.transactions[:self.transaction_count]
+            self.ctx.transactions = self.ctx.transactions[
+                :self.transaction_count]
 
     def rollback(self):
         if len(self.ctx.transactions) > self.transaction_count:
             self.engine.do_rollback()
-            self.ctx.transactions = self.ctx.transactions[:self.transaction_count]
+            self.ctx.transactions = self.ctx.transactions[
+                :self.transaction_count]
+
 
 class DB:
+
     """Database"""
+
     def __init__(self, db_module, keywords):
         """Creates a database.
         """
@@ -500,7 +539,8 @@ class DB:
             self.has_pooling = False
 
         # Pooling can be disabled by passing pooling=False in the keywords.
-        self.has_pooling = self.keywords.pop('pooling', True) and self.has_pooling
+        self.has_pooling = self.keywords.pop(
+            'pooling', True) and self.has_pooling
 
     def _getctx(self):
         if not self._ctx.get('db'):
@@ -510,7 +550,7 @@ class DB:
 
     def _load_context(self, ctx):
         ctx.dbq_count = 0
-        ctx.transactions = [] # stack of transactions
+        ctx.transactions = []  # stack of transactions
 
         if self.has_pooling:
             ctx.db = self._connect_with_pooling(self.keywords)
@@ -596,7 +636,8 @@ class DB:
             raise
 
         if self.printing:
-            print >> debug, '%s (%s): %s' % (round(b-a, 2), self.ctx.dbq_count, str(sql_query))
+            print >> debug, '%s (%s): %s' % (
+                round(b - a, 2), self.ctx.dbq_count, str(sql_query))
         return out
 
     def _process_query(self, sql_query):
@@ -633,18 +674,21 @@ class DB:
             >>> db.query("SELECT * FROM foo WHERE x = " + sqlquote('f'), _test=True)
             <sql: "SELECT * FROM foo WHERE x = 'f'">
         """
-        if vars is None: vars = {}
+        if vars is None:
+            vars = {}
 
         if not processed and not isinstance(sql_query, SQLQuery):
             sql_query = reparam(sql_query, vars)
 
-        if _test: return sql_query
+        if _test:
+            return sql_query
 
         db_cursor = self._db_cursor()
         self._db_execute(db_cursor, sql_query)
 
         if db_cursor.description:
             names = [x[0] for x in db_cursor.description]
+
             def iterwrapper():
                 row = db_cursor.fetchone()
                 while row:
@@ -652,8 +696,8 @@ class DB:
                     row = db_cursor.fetchone()
             out = iterbetter(iterwrapper())
             out.__len__ = lambda: int(db_cursor.rowcount)
-            out.list = lambda: [storage(dict(zip(names, x))) \
-                               for x in db_cursor.fetchall()]
+            out.list = lambda: [storage(dict(zip(names, x)))
+                                for x in db_cursor.fetchall()]
         else:
             out = db_cursor.rowcount
 
@@ -661,8 +705,9 @@ class DB:
             self.ctx.commit()
         return out
 
-    def select(self, tables, vars=None, what='*', where=None, order=None, group=None,
-               limit=None, offset=None, _test=False):
+    def select(
+        self, tables, vars=None, what='*', where=None, order=None, group=None,
+        limit=None, offset=None, _test=False):
         """
         Selects `what` from `tables` with clauses `where`, `order`,
         `group`, `limit`, and `offset`. Uses vars to interpolate.
@@ -674,11 +719,15 @@ class DB:
             >>> db.select(['foo', 'bar'], where="foo.bar_id = bar.id", limit=5, _test=True)
             <sql: 'SELECT * FROM foo, bar WHERE foo.bar_id = bar.id LIMIT 5'>
         """
-        if vars is None: vars = {}
-        sql_clauses = self.sql_clauses(what, tables, where, group, order, limit, offset)
-        clauses = [self.gen_clause(sql, val, vars) for sql, val in sql_clauses if val is not None]
+        if vars is None:
+            vars = {}
+        sql_clauses = self.sql_clauses(
+            what, tables, where, group, order, limit, offset)
+        clauses = [self.gen_clause(sql, val, vars)
+                   for sql, val in sql_clauses if val is not None]
         qout = SQLQuery.join(clauses)
-        if _test: return qout
+        if _test:
+            return qout
         return self.query(qout, processed=True)
 
     def where(self, table, what='*', order=None, group=None, limit=None,
@@ -704,8 +753,8 @@ class DB:
             where = None
 
         return self.select(table, what=what, order=order,
-               group=group, limit=limit, offset=offset, _test=_test,
-               where=where)
+                           group=group, limit=limit, offset=offset, _test=_test,
+                           where=where)
 
     def sql_clauses(self, what, tables, where, group, order, limit, offset):
         return (
@@ -725,15 +774,17 @@ class DB:
                 nout = SQLQuery(val)
         #@@@
         elif isinstance(val, (list, tuple)) and len(val) == 2:
-            nout = SQLQuery(val[0], val[1]) # backwards-compatibility
+            nout = SQLQuery(val[0], val[1])  # backwards-compatibility
         elif isinstance(val, SQLQuery):
             nout = val
         else:
             nout = reparam(val, vars)
 
         def xjoin(a, b):
-            if a and b: return a + ' ' + b
-            else: return a or b
+            if a and b:
+                return a + ' ' + b
+            else:
+                return a or b
 
         return xjoin(sql, nout)
 
@@ -752,20 +803,26 @@ class DB:
             >>> q.values()
             [2, 'bob']
         """
-        def q(x): return "(" + x + ")"
+        def q(x):
+            return "(" + x + ")"
 
         if values:
             _keys = SQLQuery.join(values.keys(), ', ')
-            _values = SQLQuery.join([sqlparam(v) for v in values.values()], ', ')
-            sql_query = "INSERT INTO %s " % tablename + q(_keys) + ' VALUES ' + q(_values)
+            _values = SQLQuery.join([sqlparam(v)
+                                    for v in values.values()], ', ')
+            sql_query = "INSERT INTO %s " % tablename + \
+                q(_keys) + ' VALUES ' + q(_values)
         else:
-            sql_query = SQLQuery(self._get_insert_default_values_query(tablename))
+            sql_query = SQLQuery(
+                self._get_insert_default_values_query(tablename))
 
-        if _test: return sql_query
+        if _test:
+            return sql_query
 
         db_cursor = self._db_cursor()
         if seqname is not False:
-            sql_query = self._process_insert_query(sql_query, tablename, seqname)
+            sql_query = self._process_insert_query(
+                sql_query, tablename, seqname)
 
         if isinstance(sql_query, tuple):
             # for some databases, a separate query has to be made to find
@@ -806,7 +863,8 @@ class DB:
             return []
 
         if not self.supports_multiple_insert:
-            out = [self.insert(tablename, seqname=seqname, _test=_test, **v) for v in values]
+            out = [self.insert(tablename, seqname=seqname, _test=_test, **v)
+                   for v in values]
             if seqname is False:
                 return None
             else:
@@ -820,18 +878,22 @@ class DB:
             if v.keys() != keys:
                 raise ValueError, 'Bad data'
 
-        sql_query = SQLQuery('INSERT INTO %s (%s) VALUES ' % (tablename, ', '.join(keys)))
+        sql_query = SQLQuery('INSERT INTO %s (%s) VALUES ' %
+                             (tablename, ', '.join(keys)))
 
         for i, row in enumerate(values):
             if i != 0:
                 sql_query.append(", ")
-            SQLQuery.join([SQLParam(row[k]) for k in keys], sep=", ", target=sql_query, prefix="(", suffix=")")
+            SQLQuery.join([SQLParam(row[k])
+                          for k in keys], sep=", ", target=sql_query, prefix="(", suffix=")")
 
-        if _test: return sql_query
+        if _test:
+            return sql_query
 
         db_cursor = self._db_cursor()
         if seqname is not False:
-            sql_query = self._process_insert_query(sql_query, tablename, seqname)
+            sql_query = self._process_insert_query(
+                sql_query, tablename, seqname)
 
         if isinstance(sql_query, tuple):
             # for some databases, a separate query has to be made to find
@@ -844,14 +906,13 @@ class DB:
 
         try:
             out = db_cursor.fetchone()[0]
-            out = range(out-len(values)+1, out+1)
+            out = range(out - len(values) + 1, out + 1)
         except Exception:
             out = None
 
         if not self.ctx.transactions:
             self.ctx.commit()
         return out
-
 
     def update(self, tables, where, vars=None, _test=False, **values):
         """
@@ -869,15 +930,17 @@ class DB:
             >>> q.values()
             [2, 'bob', 'Joseph']
         """
-        if vars is None: vars = {}
+        if vars is None:
+            vars = {}
         where = self._where(where, vars)
 
         query = (
-          "UPDATE " + sqllist(tables) +
-          " SET " + sqlwhere(values, ', ') +
-          " WHERE " + where)
+            "UPDATE " + sqllist(tables) +
+            " SET " + sqlwhere(values, ', ') +
+            " WHERE " + where)
 
-        if _test: return query
+        if _test:
+            return query
 
         db_cursor = self._db_cursor()
         self._db_execute(db_cursor, query)
@@ -894,14 +957,18 @@ class DB:
             >>> db.delete('foo', where='name = $name', vars=locals(), _test=True)
             <sql: "DELETE FROM foo WHERE name = 'Joe'">
         """
-        if vars is None: vars = {}
+        if vars is None:
+            vars = {}
         where = self._where(where, vars)
 
         q = 'DELETE FROM ' + table
-        if using: q += ' USING ' + sqllist(using)
-        if where: q += ' WHERE ' + where
+        if using:
+            q += ' USING ' + sqllist(using)
+        if where:
+            q += ' WHERE ' + where
 
-        if _test: return q
+        if _test:
+            return q
 
         db_cursor = self._db_cursor()
         self._db_execute(db_cursor, q)
@@ -916,18 +983,23 @@ class DB:
         """Start a transaction."""
         return Transaction(self.ctx)
 
+
 class PostgresDB(DB):
+
     """Postgres driver."""
+
     def __init__(self, **keywords):
         if 'pw' in keywords:
             keywords['password'] = keywords.pop('pw')
 
-        db_module = import_driver(["psycopg2", "psycopg", "pgdb"], preferred=keywords.pop('driver', None))
+        db_module = import_driver(
+            ["psycopg2", "psycopg", "pgdb"], preferred=keywords.pop('driver', None))
         if db_module.__name__ == "psycopg2":
             import psycopg2.extensions
             psycopg2.extensions.register_type(psycopg2.extensions.UNICODE)
 
-        # if db is not provided postgres driver will take it from PGDATABASE environment variable
+        # if db is not provided postgres driver will take it from PGDATABASE
+        # environment variable
         if 'db' in keywords:
             keywords['database'] = keywords.pop('db')
 
@@ -939,7 +1011,8 @@ class PostgresDB(DB):
 
     def _process_insert_query(self, query, tablename, seqname):
         if seqname is None:
-            # when seqname is not provided guess the seqname and make sure it exists
+            # when seqname is not provided guess the seqname and make sure it
+            # exists
             seqname = tablename + "_id_seq"
             if seqname not in self._get_all_sequences():
                 seqname = None
@@ -970,7 +1043,9 @@ class PostgresDB(DB):
         conn._con._con.set_client_encoding('UTF8')
         return conn
 
+
 class MySQLDB(DB):
+
     def __init__(self, **keywords):
         import MySQLdb as db
         if 'pw' in keywords:
@@ -982,7 +1057,7 @@ class MySQLDB(DB):
         elif keywords['charset'] is None:
             del keywords['charset']
 
-        self.paramstyle = db.paramstyle = 'pyformat' # it's both, like psycopg
+        self.paramstyle = db.paramstyle = 'pyformat'  # it's both, like psycopg
         self.dbname = "mysql"
         DB.__init__(self, db, keywords)
         self.supports_multiple_insert = True
@@ -992,6 +1067,7 @@ class MySQLDB(DB):
 
     def _get_insert_default_values_query(self, table):
         return "INSERT INTO %s () VALUES()" % table
+
 
 def import_driver(drivers, preferred=None):
     """Import the first available driver or preferred driver.
@@ -1006,20 +1082,25 @@ def import_driver(drivers, preferred=None):
             pass
     raise ImportError("Unable to import " + " or ".join(drivers))
 
-class SqliteDB(DB):
-    def __init__(self, **keywords):
-        db = import_driver(["sqlite3", "pysqlite2.dbapi2", "sqlite"], preferred=keywords.pop('driver', None))
 
+class SqliteDB(DB):
+
+    def __init__(self, **keywords):
+        db = import_driver(
+            ["sqlite3", "pysqlite2.dbapi2", "sqlite"], preferred=keywords.pop('driver', None))
+        self.db_driver = db.__name__
         if db.__name__ in ["sqlite3", "pysqlite2.dbapi2"]:
             db.paramstyle = 'qmark'
 
         # sqlite driver doesn't create datatime objects for timestamp columns unless `detect_types` option is passed.
-        # It seems to be supported in sqlite3 and pysqlite2 drivers, not surte about sqlite.
+        # It seems to be supported in sqlite3 and pysqlite2 drivers, not surte
+        # about sqlite.
         keywords.setdefault('detect_types', db.PARSE_DECLTYPES)
 
         self.paramstyle = db.paramstyle
         keywords['database'] = keywords.pop('db')
-        keywords['pooling'] = False # sqlite don't allows connections to be shared by threads
+        # sqlite don't allows connections to be shared by threads
+        keywords['pooling'] = False
         self.dbname = "sqlite"
         DB.__init__(self, db, keywords)
 
@@ -1027,14 +1108,22 @@ class SqliteDB(DB):
         return query, SQLQuery('SELECT last_insert_rowid();')
 
     def query(self, *a, **kw):
+        if self.db_driver == 'sqlite3':
+            # No auto-increment
+            if isinstance(a[0], basestring) and a[0].startswith('CREATE '):
+                a = list(a)
+                a[0] = a[0].replace(' AUTOINCREMENT', '')
         out = DB.query(self, *a, **kw)
         if isinstance(out, iterbetter):
             del out.__len__
         return out
 
+
 class FirebirdDB(DB):
+
     """Firebird Database.
     """
+
     def __init__(self, **keywords):
         try:
             import kinterbasdb as db
@@ -1050,7 +1139,7 @@ class FirebirdDB(DB):
 
     def delete(self, table, where=None, using=None, vars=None, _test=False):
         # firebird doesn't support using clause
-        using=None
+        using = None
         return DB.delete(self, table, where, using, vars, _test)
 
     def sql_clauses(self, what, tables, where, group, order, limit, offset):
@@ -1065,7 +1154,9 @@ class FirebirdDB(DB):
             ('ORDER BY', order)
         )
 
+
 class MSSQLDB(DB):
+
     def __init__(self, **keywords):
         import pymssql as db
         if 'pw' in keywords:
@@ -1108,7 +1199,9 @@ class MSSQLDB(DB):
         """
         pass
 
+
 class OracleDB(DB):
+
     def __init__(self, **keywords):
         import cx_Oracle as db
         if 'pw' in keywords:
@@ -1132,6 +1225,8 @@ class OracleDB(DB):
             return query + "; SELECT %s.currval FROM dual" % seqname
 
 _databases = {}
+
+
 def database(dburl=None, **params):
     """Creates appropriate database using params.
 
@@ -1143,6 +1238,7 @@ def database(dburl=None, **params):
         return _databases[dbn](**params)
     else:
         raise UnknownDB, dbn
+
 
 def register_database(name, clazz):
     """
@@ -1164,6 +1260,7 @@ register_database('firebird', FirebirdDB)
 register_database('mssql', MSSQLDB)
 register_database('oracle', OracleDB)
 
+
 def _interpolate(format):
     """
     Takes a format string and returns a list of 2-tuples of the form
@@ -1181,7 +1278,7 @@ def _interpolate(format):
         return match, match.end()
 
     namechars = "abcdefghijklmnopqrstuvwxyz" \
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_";
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_"
     chunks = []
     pos = 0
 

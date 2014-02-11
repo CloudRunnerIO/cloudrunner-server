@@ -194,72 +194,39 @@ class TestServer(base.BaseTestCase):
     def test_login(self):
         disp = Dispatcher('run', config=base.CONFIG)
 
-        auth_db_mock = Mock()
-        cursor_mock = Mock()
-        row_mock = Mock()
-        elem_mock = Mock()
-        elem_mock.__getitem__ = Mock(return_value=2)
-        row_mock.fetchone = Mock(return_value=elem_mock)
-        cursor_mock.execute = Mock(return_value=row_mock)
-        auth_db_mock.cursor = Mock(return_value=cursor_mock)
-
-        with nested(patch('sqlite3.connect', Mock(return_value=auth_db_mock)),
-                    patch('datetime.datetime', now=Mock(return_value=333333333))):
+        with nested(
+            patch.multiple(AuthDb,
+                __init__=Mock(return_value=None),
+                load=Mock(return_value='some_user:[root]:.*-win:admin'),
+                authenticate=Mock(return_value=[True, '123']),
+                validate=Mock(return_value=[True, '123'])),
+            patch('datetime.datetime', now=Mock(return_value=333333333))):
             disp.init_libs()
             self.assertIsNotNone(disp.auth)
             self.assertIsNotNone(disp.transport_class)
             disp.user_id = 'some_user'
             disp.user_token = 'some_token'
 
-            row_mock.fetchall = Mock(return_value=iter([('*', 'root'),
-                                    ('.*-win', 'admin')]))
             auth = disp._login(auth_type=1)
             self.assertEqual((auth[0], str(auth[1])),
                             (True, 'some_user:[root]:.*-win:admin'))
-
-            row_mock.fetchall = Mock(return_value=iter([('*', 'root'),
-                                    ('.*-win', 'admin')]))
 
             disp.user_token = 'some_token'
             auth = disp._login(auth_type=2)
             self.assertEqual((auth[0], str(auth[1])),
                             (True, 'some_user:[root]:.*-win:admin'))
 
-            self.assertEqual(cursor_mock.execute.call_args_list,
-                             [call('SELECT count(*) FROM Users'),
-                              call(
-                              'SELECT Users.id FROM Users INNER JOIN Organizations org ON Users.org_uid = org.org_uid WHERE username = ? AND token = ? AND active = 1',
-                            ('some_user', hash_token('some_token'))),
-                                 call('SELECT count(*) FROM Users'),
-                                 call(
-                                     'SELECT servers, role FROM AccessMap WHERE user_id = ?', (2,)),
-                                 call(
-                                     'SELECT org.name FROM Organizations org INNER JOIN Users ON org.org_uid = Users.org_uid WHERE org.active = 1 and Users.id = ?', (2,)),
-                                 call('SELECT count(*) FROM Users'),
-                                 call(
-                                     'SELECT user_id FROM Tokens INNER JOIN Users ON Users.id = Tokens.user_id WHERE username = ? AND Tokens.token = ? AND expiry > ?',
-                                     ('some_user', 'some_token', 333333333)),
-                                 call('SELECT count(*) FROM Users'),
-                                 call(
-                                     'SELECT servers, role FROM AccessMap WHERE user_id = ?', (2,)),
-                                 call('SELECT org.name FROM Organizations org INNER JOIN Users ON org.org_uid = Users.org_uid WHERE org.active = 1 and Users.id = ?', (2,))]
-            )
-
     def test_get_token(self):
         disp = Dispatcher('run', config=base.CONFIG)
 
-        auth_db_mock = Mock()
-        cursor_mock = Mock()
-        row_mock = Mock()
-        elem_mock = Mock()
-        elem_mock.__getitem__ = Mock(side_effect=iter([2, 'MyOrg']))
-        row_mock.fetchone = Mock(return_value=elem_mock)
-        cursor_mock.execute = Mock(return_value=row_mock)
-        auth_db_mock.cursor = Mock(return_value=cursor_mock)
-
         date_mock = Mock(return_value=datetime.now())
-        with nested(patch('sqlite3.connect', Mock(return_value=auth_db_mock)),
-                    patch('random.choice', Mock(return_value='1'))):
+        with nested(
+            patch.multiple(AuthDb,
+                __init__=Mock(return_value=None),
+                get_token=Mock(return_value=('some_user', '111111111111111111111111111111111111111111111111111111111111', 'MyOrg')),
+                authenticate=Mock(return_value=[True, '123']),
+                validate=Mock(return_value=[True, '123'])),
+            patch('random.choice', Mock(return_value='1'))):
             disp.init_libs()
             self.assertIsNotNone(disp.auth)
             self.assertIsNotNone(disp.transport_class)
