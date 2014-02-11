@@ -244,10 +244,8 @@ class Dispatcher(Daemon):
         return True  # Already logged, kind of echo
 
     def get_api_token(self, *args, **kwargs):
-        x = self.auth.create_token(self.user_id,
+        (user, token, org) = self.auth.create_token(self.user_id,
                                                     self.user_token, **kwargs)
-        print "XXXXXXXXXX", x
-        (user, token, org) = x
         if token:
             return ["TOKEN", token, org]
         else:
