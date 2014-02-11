@@ -28,23 +28,23 @@ class ServerTransportBackend(TransportBackend):
 
     @abc.abstractmethod
     def prepare(self):
-        raise NotImplementedError()
+        pass
 
     @abc.abstractmethod
     def terminate(self):
-        raise NotImplementedError()
+        pass
 
     @abc.abstractmethod
     def create_fanout(self, endpoint, *args, **kwargs):
-        raise NotImplementedError()
+        pass
 
     @abc.abstractmethod
     def subscribe_fanout(self, endpoint, *args, **kwargs):
-        raise NotImplementedError()
+        pass
 
     @abc.abstractmethod
     def verify_node_request(self, node, request):
-        raise NotImplementedError()
+        pass
 
 
 class Node(object):

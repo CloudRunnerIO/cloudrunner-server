@@ -26,7 +26,7 @@ class ArgsProvider(object):
 
     @abc.abstractmethod
     def append_args(self, arg_parser):
-        raise NotImplementedError()
+        pass
 
 
 class CliArgsProvider(object):
@@ -35,11 +35,11 @@ class CliArgsProvider(object):
 
     @abc.abstractmethod
     def append_cli_args(self, arg_parser):
-        raise NotImplementedError()
+        pass
 
     @abc.abstractmethod
     def call(self, user_org, data, ctx, args):
-        raise NotImplementedError()
+        pass
 
 
 class ManagedPlugin(object):
@@ -47,8 +47,8 @@ class ManagedPlugin(object):
 
     @abc.abstractmethod
     def start(self):
-        raise NotImplementedError()
+        pass
 
     @abc.abstractmethod
     def stop(self):
-        raise NotImplementedError()
+        pass

@@ -26,59 +26,59 @@ class AuthPluginBase(object):
 
     @abc.abstractmethod
     def authenticate(self, user, password):
-        raise NotImplementedError()
+        pass
 
     @abc.abstractmethod
     def validate(self, user, token):
-        raise NotImplementedError()
+        pass
 
     @abc.abstractmethod
     def create_token(self, user, password, **kwargs):
-        raise NotImplementedError()
+        pass
 
     @abc.abstractmethod
     def list_users(self, **kwargs):
-        raise NotImplementedError()
+        pass
 
     @abc.abstractmethod
     def list_orgs(self, **kwargs):
-        raise NotImplementedError()
+        pass
 
     @abc.abstractmethod
     def user_roles(self, username):
-        raise NotImplementedError()
+        pass
 
     @abc.abstractmethod
     def create_user(self, username, password, org_name):
-        raise NotImplementedError()
+        pass
 
     @abc.abstractmethod
     def create_org(self, orgname):
-        raise NotImplementedError()
+        pass
 
     @abc.abstractmethod
     def activate_org(self, orgname):
-        raise NotImplementedError()
+        pass
 
     @abc.abstractmethod
     def deactivate_org(self, orgname):
-        raise NotImplementedError()
+        pass
 
     @abc.abstractmethod
     def remove_org(self, username):
-        raise NotImplementedError()
+        pass
 
     @abc.abstractmethod
     def remove_user(self, username):
-        raise NotImplementedError()
+        pass
 
     @abc.abstractmethod
     def add_role(self, username, node, role):
-        raise NotImplementedError()
+        pass
 
     @abc.abstractmethod
     def remove_role(self, username, node):
-        raise NotImplementedError()
+        pass
 
 
 class NodeVerifier(object):
@@ -87,4 +87,4 @@ class NodeVerifier(object):
 
     @abc.abstractmethod
     def verify(self, node, request, **kwargs):
-        raise NotImplementedError()
+        pass

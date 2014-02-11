@@ -23,10 +23,10 @@ from cloudrunner_server.plugins.storage.base import StorePluginBase
 class DBStorage(StorePluginBase):
 
     def save(self, user, response):
-        raise NotImplementedError()
+        pass
 
     def list(self, user, **kwargs):
-        raise NotImplementedError()
+        pass
 
     def search(self, user, **kwargs):
-        raise NotImplementedError()
+        pass

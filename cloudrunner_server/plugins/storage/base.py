@@ -26,12 +26,12 @@ class StorePluginBase(object):
 
     @abc.abstractmethod
     def save(self, user, response):
-        raise NotImplementedError()
+        pass
 
     @abc.abstractmethod
     def list(self, user, **kwargs):
-        raise NotImplementedError()
+        pass
 
     @abc.abstractmethod
     def search(self, user, **kwargs):
-        raise NotImplementedError()
+        pass

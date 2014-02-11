@@ -26,8 +26,8 @@ class StatePluginBase(object):
 
     @abc.abstractmethod
     def set_state_handlers(self):
-        raise NotImplementedError()
+        pass
 
     @abc.abstractmethod
     def save_state(self):
-        raise NotImplementedError()
+        pass

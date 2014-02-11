@@ -26,8 +26,8 @@ class JobInOutProcessorPluginBase(object):
 
     @abc.abstractmethod
     def before(self, user, session_id, job_id, env, args, ctx, **kwargs):
-        raise NotImplementedError()
+        pass
 
     @abc.abstractmethod
     def after(self, user, session_id, job_id, env, resp, args, ctx, **kwargs):
-        raise NotImplementedError()
+        pass

@@ -26,20 +26,20 @@ class IncludeLibPluginBase(object):
 
     @abc.abstractmethod
     def process(self, user, section, env, args):
-        raise NotImplementedError()
+        pass
 
     @abc.abstractmethod
     def add(self, user, name, script, **kwargs):
-        raise NotImplementedError()
+        pass
 
     @abc.abstractmethod
     def show(self, user, name, **kwargs):
-        raise NotImplementedError()
+        pass
 
     @abc.abstractmethod
     def list(self, user, **kwargs):
-        raise NotImplementedError()
+        pass
 
     @abc.abstractmethod
     def delete(self, user, name, **kwargs):
-        raise NotImplementedError()
+        pass
