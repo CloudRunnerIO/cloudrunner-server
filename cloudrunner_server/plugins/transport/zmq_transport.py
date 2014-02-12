@@ -446,7 +446,8 @@ class ZmqTransport(ServerTransportBackend):
         def _ping_nodes(*args):
             try:
                 for name, tenant in self.tenants.items():
-                    self.tenants[name].refresh()
+                    # Set 1 refresh time back to avoid missing active nodes
+                    self.tenants[name].refresh(adjust=-self.heartbeat_timeout)
                     xpub_listener.send_multipart(
                         [tenant.id, StatusCodes.HB])
             except:

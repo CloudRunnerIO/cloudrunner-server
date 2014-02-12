@@ -96,8 +96,8 @@ class Tenant(object):
         if node in self.nodes:
             self.nodes.remove(Node(node))
 
-    def refresh(self):
-        self.refreshed = time.time()
+    def refresh(self, adjust=0):
+        self.refreshed = time.time() + adjust
 
     def active_nodes(self):
         return [node for node in self.nodes if node.refreshed > self.refreshed]
