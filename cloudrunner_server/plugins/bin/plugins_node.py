@@ -20,7 +20,7 @@ def install():
 
     config.update('General', 'transport',
                   'cloudrunner_plugins.transport.zmq_node_transport.NodeTransport')
-    config.update('Plugins', 'node_config',
+    config.update('Plugins', 'config',
                   'cloudrunner_plugins.config.ssl_config')
     config.reload()
 
