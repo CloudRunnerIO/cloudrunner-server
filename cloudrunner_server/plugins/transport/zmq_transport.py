@@ -445,7 +445,8 @@ class ZmqTransport(ServerTransportBackend):
 
         def _ping_nodes(*args):
             try:
-                for tenant in self.tenants.values():
+                for name, tenant in self.tenants.items():
+                    self.tenants[name].refresh()
                     xpub_listener.send_multipart(
                         [tenant.id, StatusCodes.HB])
             except:
@@ -474,7 +475,8 @@ class ZmqTransport(ServerTransportBackend):
                                 [target, StatusCodes.WELCOME])
                         else:
                             tenant = [(t_key, t_val) for t_key, t_val in
-                                      self.tenants.items() if t_val == target][0][0]
+                                      self.tenants.items()
+                                      if t_val == target][0][0]
                             LOGP.info('Started publishing on %s' % tenant)
                             xpub_listener.send_multipart(
                                 [target, StatusCodes.HB])
