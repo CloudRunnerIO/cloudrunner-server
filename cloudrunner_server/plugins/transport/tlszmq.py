@@ -102,8 +102,9 @@ class TLSZmqServerSocket(object):
                 if enc_req == '-255':
                     # Remove me
                     if ident in self.conns:
-                        LOGS.info('Removing %s from cache' % ident)
-                        (_, _conn, _a) = self.conns.pop(ident)
+                        LOGS.info('Removing %s from cache' % repr(ident))
+                        (_, _conn, node_id, org_id) = self.conns.pop(ident)
+                        proc_socket.send_multipart(['QUIT', node_id, org_id])
                         _conn.shutdown()
                         continue
 
@@ -114,7 +115,7 @@ class TLSZmqServerSocket(object):
                                      self.key, self.ca,
                                      verify_loc=self.verify_loc,
                                      cert_password=self.cert_pass),
-                        False]
+                        None, None]
                     LOGS.debug('Adding new conn %s' % ident)
                 LOGS.debug(
                     "Total %s SSL Connection objects" % len(self.conns))
@@ -133,18 +134,27 @@ class TLSZmqServerSocket(object):
                     plain_data = tls.recv()
                     client_id = ''
                     org_id = ''
-                    self.conns[ident][2] = False  # not auth conn
-                    try:
-                        x509 = tls.ssl.get_peer_cert()
-                        if x509:
-                            subj = x509.get_subject()
-                            client_id = subj.CN
-                            org_id = subj.O
-                            self.conns[ident][2] = True  # auth conn
-                    except Exception, ex:
-                        LOGS.exception(ex)
+                    if not self.conns[ident][2]:
+                        try:
+                            x509 = tls.ssl.get_peer_cert()
+                            if x509:
+                                subj = x509.get_subject()
+                                client_id = subj.CN
+                                org_id = subj.O
+                                self.conns[ident][2] = client_id  # auth conn
+                                self.conns[ident][3] = org_id  # auth conn
+                        except Exception, ex:
+                            self.conns[ident][2] = None  # not auth conn
+                            self.conns[ident][3] = None  # not auth conn
+                            LOGS.exception(ex)
+                    else:
+                        client_id = self.conns[ident][2]
+                        org_id = self.conns[ident][3]
 
-                    LOGS.info("PLAIN: %s" % plain_data)
+                    # assert client_id == tls.ssl.get_peer_cert().\
+                    #   get_subject().CN
+
+                    LOGS.debug("PLAIN: %s" % plain_data)
                     packets = plain_data.split('\x00')
                     for packet in packets:
                         if packet:
@@ -312,6 +322,7 @@ class TLSZmqClientSocket(object):
 
         self.poller.unregister(self.zmq_socket)
         self.poller.unregister(self.socket_proc)
+        self.zmq_socket.send('-255')
         self.shutdown()
         LOGC.info("TLSZmqClient exited")
 
@@ -419,7 +430,7 @@ class _TLSZmq(object):
     def _init_ctx(self):
 
         if _TLSZmq._ctx is None:
-            self.LOG.info('Creating SSL Context')
+            self.LOG.debug('Creating SSL Context')
             # Init singleton SSL.Context
             _TLSZmq._ctx = m.SSL.Context(self.proto)
 
@@ -442,12 +453,12 @@ class _TLSZmq(object):
             self.ctx.set_client_CA_list_from_file(self.ca)
             if self.verify_loc:
                 if isinstance(self.verify_loc, basestring):
-                    self.LOG.info("Loading verification CA from %s" %
-                                  self.verify_loc)
+                    self.LOG.debug("Loading verification CA from %s" %
+                                   self.verify_loc)
                     self.ctx.load_verify_locations(self.verify_loc)
                 else:
                     for loc in self.verify_loc:
-                        self.LOG.info("Loading verification CA from %s" % loc)
+                        self.LOG.debug("Loading verification CA from %s" % loc)
                         self.ctx.load_verify_locations(loc)
         elif self.is_client:
             if self.ca:

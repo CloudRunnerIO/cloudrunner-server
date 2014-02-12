@@ -50,12 +50,12 @@ class ServerTransportBackend(TransportBackend):
 class Node(object):
 
     def __init__(self, name):
-        self.created = time.time()
+        self.refreshed = time.time()
         self.name = name
 
     @property
     def last_seen(self):
-        return time.time() - self.created
+        return time.time() - self.refreshed
 
     def __eq__(self, name):
         return self.name == name
@@ -70,13 +70,15 @@ class Tenant(object):
         self.id = str(m.hexdigest())
         del m
         self.nodes = []
+        self.refresh()
 
     def __delitem__(self, node_id):
         if node_id in self.nodes:
             self.nodes.remove(node_id)
 
     def __repr__(self):
-        _repr = '[%s]\n' % self.id
+        _repr = '[%s] [%.f sec ago]\n' % (
+            self.id, time.time() - self.refreshed)
         for node in self.nodes:
             _repr = "%s%s\tLast seen: %.f sec ago\n" % (_repr, node.name,
                                                         node.last_seen)
@@ -88,5 +90,14 @@ class Tenant(object):
     def push(self, node):
         if node not in self.nodes:
             self.nodes.append(Node(node))
-        else:
-            self.nodes[self.nodes.index(node)].created = time.time()
+        self.nodes[self.nodes.index(node)].refreshed = time.time()
+
+    def pop(self, node):
+        if node in self.nodes:
+            self.nodes.remove(Node(node))
+
+    def refresh(self):
+        self.refreshed = time.time()
+
+    def active_nodes(self):
+        return [node for node in self.nodes if node.refreshed > self.refreshed]

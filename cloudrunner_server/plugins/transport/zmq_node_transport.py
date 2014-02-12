@@ -63,6 +63,7 @@ class NodeTransport(TransportBackend):
         self._sockets = []
         self.context = zmq.Context()
         self.ssl_thread_event = Event()
+        self.stopped = Event()
 
     def loop(self):
         ioloop.IOLoop.instance().start()
@@ -199,7 +200,7 @@ class NodeTransport(TransportBackend):
         poller.register(master_sub, zmq.POLLIN)
         poller.register(ssl_proxy, zmq.POLLIN)
         # Sindicate requests from two endpoints and forward to 'requests'
-        while True:
+        while not self.stopped.is_set():
             try:
                 ready = dict(poller.poll(100))
                 if master_sub in ready:
@@ -226,12 +227,15 @@ class NodeTransport(TransportBackend):
                                     (_, ex))
                 if ssl_proxy in ready:
                     frames = ssl_proxy.recv_multipart()
-                    if len(frames) == 2:
+                    if len(frames) == 1 or len(frames) == 2:
                         # ToDo: better command handler
                         master_sub.setsockopt(zmq.UNSUBSCRIBE, self.sub)
                         self.sub = frames[0]
                         master_sub.setsockopt(zmq.SUBSCRIBE, self.sub)
-                        LOGC.info("Subscribed to topic %s" % self.sub)
+                        if len(frames) == 2:
+                            LOGC.info("Listening to %s" % frames[1])
+                        else:
+                            LOGC.info("Listening to %s" % self.sub)
                     else:
                         dispatcher.send_multipart(frames)
             except KeyboardInterrupt:
@@ -247,6 +251,8 @@ class NodeTransport(TransportBackend):
                 LOGC.error("Node listener thread: exception %s" % ex)
 
         ssl_proxy.close()
+
+        master_sub.setsockopt(zmq.UNSUBSCRIBE, self.sub)
         master_sub.close()
         dispatcher.close()
         LOGC.info('Node Listener exited')
@@ -388,7 +394,7 @@ class NodeTransport(TransportBackend):
         reg_sock.setsockopt(zmq.IDENTITY, self.node_id)
         reg_sock.connect(self.endpoints['ssl-proxy'])
 
-        while True:
+        while not self.stopped.is_set():
             try:
                 next_rq = _next(reply)
                 if next_rq == -1:
@@ -435,9 +441,9 @@ class NodeTransport(TransportBackend):
 
     def terminate(self):
         LOGC.info("Received terminate signal")
+        self.stopped.set()
         self.ssl_stop()
         ioloop.IOLoop.instance().stop()
         for sock in self._sockets:
             sock.close()
-        self.context.term()
         LOGC.info('Node transport closed')

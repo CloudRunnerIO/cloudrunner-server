@@ -333,7 +333,7 @@ class Dispatcher(Daemon):
         tenant = self.backend.tenants.get(remote_user_map.org, [])
         nodes = []
         if tenant:
-            nodes = [node.name for node in tenant.nodes]
+            nodes = [n.name for n in tenant.active_nodes()]
         return (True, nodes)
 
     def attach(self, payload, remote_user_map, **kwargs):

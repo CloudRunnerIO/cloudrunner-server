@@ -1,4 +1,5 @@
 import fcntl
+import json
 import logging
 import os
 from os import path as p
@@ -19,6 +20,7 @@ from cloudrunner.core.message import (ClientReq, ClientRep, RerouteReq,
                                       is_valid_host)
 from cloudrunner.plugins.transport.zmq_transport import (SockWrapper,
                                                          PollerWrapper)
+from cloudrunner.util.shell import Timer
 from cloudrunner_server.plugins.transport.base import (ServerTransportBackend,
                                                        Tenant)
 from cloudrunner_server.master.functions import CertController
@@ -131,6 +133,8 @@ class ZmqTransport(ServerTransportBackend):
         fcntl.fcntl(cert_fd, fcntl.F_NOTIFY,
                     fcntl.DN_DELETE | fcntl.DN_CREATE | fcntl.DN_MULTISHOT)
         signal.signal(signal.SIGIO, self._cert_changed)
+
+        self.heartbeat_timeout = int(self.config.heartbeat_timeout or 10)
 
     def _cert_changed(self, *args):
         # Reload certs
@@ -439,16 +443,23 @@ class ZmqTransport(ServerTransportBackend):
         # Subscribe upstream for all feeds
         xsub_listener.send('\x01')
 
+        def _ping_nodes(*args):
+            try:
+                for tenant in self.tenants.values():
+                    xpub_listener.send_multipart(
+                        [tenant.id, StatusCodes.HB])
+            except:
+                pass
+
+        timer = Timer(self.heartbeat_timeout, _ping_nodes)
+        timer.start()
+
         while not self.running.is_set():
             try:
                 socks = dict(poller.poll(1000))
                 if not socks:
                     continue
                 if zmq.POLLERR in socks.values():
-                    # poller.unregister(xpub_listener)
-                    # poller.unregister(xsub_listener)
-                    # poller.unregister(heartbeat)
-                    #poller = rebuild()
                     LOGP.error("Socket error in PUBSUB")
 
                 if xpub_listener in socks:
@@ -456,18 +467,20 @@ class ZmqTransport(ServerTransportBackend):
                     action = packet[0][0]
                     target = packet[0][1:]
                     if action == b'\x01' and target:
-                        LOGP.info('Node started listening to %s' % target)
 
                         if target not in self.tenants.values():
                             # Send welcome message
                             xpub_listener.send_multipart(
                                 [target, StatusCodes.WELCOME])
                         else:
+                            tenant = [(t_key, t_val) for t_key, t_val in
+                                      self.tenants.items() if t_val == target][0][0]
+                            LOGP.info('Started publishing on %s' % tenant)
                             xpub_listener.send_multipart(
                                 [target, StatusCodes.HB])
                     elif action == b'\x00':
                         # Node de-registered
-                        LOGP.info('Node stopped listening to %s' %
+                        LOGP.info('Stopped publishing to %s' %
                                   target)
                         if target in self.tenants.values():
                             # Active node dropped,
@@ -477,7 +490,7 @@ class ZmqTransport(ServerTransportBackend):
                                     LOGP.info("Node dropped from %s, " %
                                               tenant.name)
                                     # Refresh HeartBeat
-                                    self.tenants[tenant.name].nodes = []
+                                    self.tenants[tenant.name].refresh()
                                     xpub_listener.send_multipart(
                                         [target, StatusCodes.HB])
                                     break
@@ -508,13 +521,20 @@ class ZmqTransport(ServerTransportBackend):
                     req = HeartBeatReq.build(*hb_msg)
                     if not req:
                         LOGR.info("Invalid HB request: %s" % hb_msg)
+                        continue
+                    if req.control == 'QUIT':
+                        LOGR.info("Node %s dropped from %s" %
+                                 (req.peer, req.org))
+                        self.tenants[req.org].pop(req.peer)
                     elif req.org not in self.tenants:
                         LOGR.warn("Unrecognized node: %s" % hb_msg[1:3])
-                    elif req.peer not in self.tenants[req.org].nodes:
+                    else:
                         self.tenants[req.org].push(req.peer)
-                        node_reply_queue.send(req.ident, req.peer,
-                                              'SUB_LOC',
-                                              self.tenants[req.org].id)
+                        if req.control == 'IDENT':
+                            node_reply_queue.send(req.ident, req.peer,
+                                                  'SUB_LOC',
+                                                  self.tenants[req.org].id,
+                                                  self.tenants[req.org].name)
 
             except zmq.ZMQError, err:
                 if self.context.closed or \
@@ -527,6 +547,8 @@ class ZmqTransport(ServerTransportBackend):
                 continue
             except KeyboardInterrupt:
                 break
+
+        timer.stop()
         node_reply_queue.close()
         xsub_listener.close()
         xpub_listener.close()
@@ -647,8 +669,13 @@ class Router(Thread):
                         packets = ssl_worker.recv_multipart()
                         req = ClientReq.build(*packets)
                         if not req:
-                            LOGR.error(
-                                "Invalid request from Client %s" % packets)
+                            if packets[0] == 'QUIT':
+                                # Node exited
+                                router.send_multipart(
+                                    [HEARTBEAT] + packets * 2)
+                            else:
+                                LOGR.error(
+                                    "Invalid request from Client %s" % packets)
                             continue
                         if req.dest == HEARTBEAT:
                             LOGR.debug('IN-MSG received: %s' % req)
