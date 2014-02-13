@@ -169,7 +169,7 @@ class TLSZmqServerSocket(object):
                         if flushed and not is_auth:
                             LOGS.debug("Anon connection, dropping %s" % ident)
                             # Remove cached ssl obj for unauth reqs
-                            (_t, conn, _a) = self.conns.pop(ident)
+                            self.conns.pop(ident)
                             conn.shutdown()
                     except ConnectionException, ex:
                         continue
