@@ -611,7 +611,7 @@ class Dispatcher(Daemon):
 
         self.backend.loop()
 
-        LOG.info('Exited RUN')
+        LOG.info('Exited main thread')
 
     def _handle_terminate(self, *args):
         LOG.info("Received terminate signal")
