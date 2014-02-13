@@ -163,7 +163,7 @@ class TLSZmqServerSocket(object):
                     # assert client_id == tls.ssl.get_peer_cert().\
                     #   get_subject().CN
 
-                    LOGS.debug("PLAIN: %s" % plain_data)
+                    #LOGS.debug("PLAIN: %s" % plain_data)
                     packets = plain_data.split('\x00')
                     for packet in packets:
                         if packet:
