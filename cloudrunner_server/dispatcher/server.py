@@ -573,7 +573,6 @@ class Dispatcher(Daemon):
         self.init_libs()
 
         if not self.config.sock_dir:
-            # try to create it
             raise Exception("Socket dir (sock_dir) is not set in config")
         if not os.path.exists(self.config.sock_dir):
             try:
