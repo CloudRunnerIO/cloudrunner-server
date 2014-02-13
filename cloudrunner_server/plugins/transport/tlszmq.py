@@ -80,6 +80,14 @@ class TLSZmqServerSocket(object):
 
     def start(self):
 
+        class Conn(object):
+
+            def __init__(self, ssl_conn, node, org):
+                self.created = time.time()
+                self.conn = ssl_conn
+                self.node = node
+                self.org = org
+
         proc_socket = self.zmq_socket.context.socket(zmq.DEALER)
         proc_socket.connect(self.proc_socket_uri)
 
@@ -103,23 +111,23 @@ class TLSZmqServerSocket(object):
                     # Remove me
                     if ident in self.conns:
                         LOGS.info('Removing %s from cache' % repr(ident))
-                        (_, _conn, node_id, org_id) = self.conns.pop(ident)
-                        proc_socket.send_multipart(['QUIT', node_id, org_id])
-                        _conn.shutdown()
+                        conn = self.conns.pop(ident)
+                        proc_socket.send_multipart(
+                            ['QUIT', conn.node, conn.org])
+                        conn.conn.shutdown()
                         continue
 
                 if ident not in self.conns:
-                    self.conns[ident] = [
-                        time.time(),
+                    self.conns[ident] = Conn(
                         TLSZmqServer(ident, self.cert,
                                      self.key, self.ca,
                                      verify_loc=self.verify_loc,
                                      cert_password=self.cert_pass),
-                        None, None]
+                        None, None)
                     LOGS.debug('Adding new conn %s' % ident)
                 LOGS.debug(
                     "Total %s SSL Connection objects" % len(self.conns))
-                tls = self.conns[ident][1]
+                tls = self.conns[ident].conn
                 LOGS.debug("conns: %s" % self.conns.keys())
 
                 if enc_req:
@@ -134,22 +142,22 @@ class TLSZmqServerSocket(object):
                     plain_data = tls.recv()
                     client_id = ''
                     org_id = ''
-                    if not self.conns[ident][2]:
+                    if not self.conns[ident].node:
                         try:
                             x509 = tls.ssl.get_peer_cert()
                             if x509:
                                 subj = x509.get_subject()
                                 client_id = subj.CN
                                 org_id = subj.O
-                                self.conns[ident][2] = client_id  # auth conn
-                                self.conns[ident][3] = org_id  # auth conn
+                                self.conns[ident].node = client_id  # auth conn
+                                self.conns[ident].org = org_id  # auth conn
                         except Exception, ex:
-                            self.conns[ident][2] = None  # not auth conn
-                            self.conns[ident][3] = None  # not auth conn
+                            self.conns[ident].node = None  # not auth conn
+                            self.conns[ident].org = None  # not auth conn
                             LOGS.exception(ex)
                     else:
-                        client_id = self.conns[ident][2]
-                        org_id = self.conns[ident][3]
+                        client_id = self.conns[ident].node
+                        org_id = self.conns[ident].org
 
                     # assert client_id == tls.ssl.get_peer_cert().\
                     #   get_subject().CN
@@ -165,12 +173,11 @@ class TLSZmqServerSocket(object):
                     tls.send(data)
                     try:
                         flushed = tls.update()
-                        is_auth = self.conns[ident][2]
-                        if flushed and not is_auth:
+                        if flushed and not self.conns[ident].node:
                             LOGS.debug("Anon connection, dropping %s" % ident)
                             # Remove cached ssl obj for unauth reqs
-                            (_t, conn, user, org) = self.conns.pop(ident)
-                            conn.shutdown()
+                            conn = self.conns.pop(ident)
+                            conn.conn.shutdown()
                     except ConnectionException, ex:
                         continue
 
@@ -194,7 +201,7 @@ class TLSZmqServerSocket(object):
     def terminate(self):
         self.zmq_socket.close()
         for conn in self.conns.values():
-            conn[1].shutdown()
+            conn.conn.shutdown()
 
 
 class TLSZmqClientSocket(object):
