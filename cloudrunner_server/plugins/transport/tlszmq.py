@@ -128,7 +128,6 @@ class TLSZmqServerSocket(object):
                 LOGS.debug(
                     "Total %s SSL Connection objects" % len(self.conns))
                 tls = self.conns[ident].conn
-                LOGS.debug("conns: %s" % self.conns.keys())
 
                 if enc_req:
                     try:
