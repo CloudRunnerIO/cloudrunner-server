@@ -146,14 +146,16 @@ class TLSZmqServerSocket(object):
                         try:
                             x509 = tls.ssl.get_peer_cert()
                             if x509:
+                                # auth conn
                                 subj = x509.get_subject()
                                 client_id = subj.CN
                                 org_id = subj.O
-                                self.conns[ident].node = client_id  # auth conn
-                                self.conns[ident].org = org_id  # auth conn
+                                self.conns[ident].node = client_id
+                                self.conns[ident].org = org_id
                         except Exception, ex:
-                            self.conns[ident].node = None  # not auth conn
-                            self.conns[ident].org = None  # not auth conn
+                            # anon conn
+                            self.conns[ident].node = None
+                            self.conns[ident].org = None
                             LOGS.exception(ex)
                     else:
                         client_id = self.conns[ident].node
