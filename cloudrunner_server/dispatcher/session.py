@@ -175,13 +175,12 @@ class JobSession(Thread):
                                       remote_user_map=self.remote_user_map,
                                       libs=libs), timeout=timeout)
             for _reply in section_it:
-
                 if _reply[0] == 'PIPE':
                     job_id = _reply[1]
                     run_as = str(_reply[2])
-                    args = _reply[2:]
+                    args = _reply[3:]
                     meta = [str(int(time.time())), self.task_name, self.user,
-                            section.targets, tags]
+                            self.remote_user_map.org, section.targets, tags]
 
                     # reply: 'PIPE', job_id, run_as, node_id, stdout, stderr
                     # reply-fwd: session_id, PIPEOUT, session_id, time,
@@ -234,7 +233,7 @@ class JobSession(Thread):
                                  nodes=exec_result))
 
         meta = [self.session_id, str(int(time.time())),
-                self.task_name, self.user, tags]
+                self.task_name, self.user, self.remote_user_map.org, tags]
         self._reply(self.session_id, StatusCodes.FINISHED,
                     meta + [self.payload, json.dumps(response)])
 
@@ -327,6 +326,7 @@ class JobSession(Thread):
                     continue
 
                 job_rep = JobRep.build(*frames)
+
                 if not job_rep:
                     LOG.error("Invalid reply from node: %s" % frames)
                     continue
@@ -363,7 +363,6 @@ class JobSession(Thread):
 
                 state['data'].update(job_rep.data)
                 state['status'] = job_rep.control
-
                 if job_rep.control == StatusCodes.FINISHED:
                     #job_reply.send(job_rep.ident, job_rep.peer, job_id, 'ACK')
                     state['data']['stdout'] = state['stdout'] + \
@@ -371,18 +370,18 @@ class JobSession(Thread):
                     state['data']['stderr'] = job_rep.data.pop('stderr')
                     if state['data']['stdout'] and state['data']['stderr']:
                         yield ('PIPE', job_id,
-                               node_map[job_rep.peer]['remote_user'],
+                               job_rep.run_as,
                                job_rep.peer,
                                state['data']['stdout'],
                                state['data']['stderr'])
                 elif job_rep.control == StatusCodes.STDOUT:
                     yield ('PIPE', job_id,
-                           node_map[job_rep.peer]['remote_user'],
+                           job_rep.run_as,
                            job_rep.peer,
                            job_rep.data['stdout'], '')
                 elif job_rep.control == StatusCodes.STDERR:
                     yield ('PIPE', job_id,
-                           node_map[job_rep.peer]['remote_user'],
+                           job_rep.run_as,
                            job_rep.peer,
                            '', job_rep.data['stderr'])
                 elif job_rep.control == StatusCodes.EVENTS:
@@ -420,7 +419,7 @@ class JobSession(Thread):
                         node['stderr'] = \
                             node['data'].setdefault('stderr', '') + \
                             'Job execution stopped: [%s]' % self.stop_reason
-                        yield ('PIPE', job_id, node['remote_user'], name,
+                        yield ('PIPE', job_id, job_rep.run_as, name,
                                node['stdout'], node['stderr'])
 
             job_event.set()

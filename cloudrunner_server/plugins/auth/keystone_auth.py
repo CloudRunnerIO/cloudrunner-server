@@ -143,7 +143,7 @@ class KeystoneAuth(AuthPluginBase):
                     dt = datetime.strptime(
                         token.expires, "%Y-%m-%dT%H:%M:%S%z")
 
-            # remove 10 sec to avoid time diffs
+            # remove 5 sec to avoid time diffs
             dt -= timedelta(seconds=5)
             self._token_cache['admin_token'] = (mktime(dt.utctimetuple()),
                                                 token.id)
@@ -152,7 +152,7 @@ class KeystoneAuth(AuthPluginBase):
     def list_orgs(self):
         admin_token = self._admin_token()
         c = client.Client(token=admin_token, auth_url=self.ADMIN_AUTH_URL,
-                          tenant_name='admin', timeout=self.timeout)
+                          tenant_name=self.admin_tenant, timeout=self.timeout)
         tenants_list = c.tenants.list()
         tenants = [tenant.name for tenant in tenants_list
                    if tenant.enabled]

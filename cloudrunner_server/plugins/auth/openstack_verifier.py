@@ -40,7 +40,7 @@ class OpenStackVerifier(NodeVerifier):
 
             keystone = k.Client(token=self._get_token(),
                                 auth_url=self.ADMIN_AUTH_URL,
-                                tenant_name='admin',
+                                tenant_name=self.admin_tenant,
                                 timeout=self.timeout)
 
             tenants = keystone.tenants.list()
