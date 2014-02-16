@@ -20,7 +20,7 @@ class DbTest(TestCase):
             pass
 
     def test_get_database(self):
-        dbw = get_db('sqlite:////tmp/test')
+        dbw = get_db('sqlite:///tmp/test')
 
     def test_create_database_tables(self):
         schema = {
@@ -47,7 +47,7 @@ class DbTest(TestCase):
                 "expiry": Column('timestamp'),
             }
         }
-        dbw = get_db('sqlite:////tmp/test')
+        dbw = get_db('sqlite:///tmp/test')
         dbw.define_schema(schema)
         dbw.create_tables()
 

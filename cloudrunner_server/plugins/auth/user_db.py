@@ -41,6 +41,7 @@ class UserMap(AuthPluginBase):
 
     def __init__(self, config):
         self.config = config
+        assert self.db
 
     @property
     def db(self):
@@ -148,7 +149,7 @@ class AuthDb(object):
             self.dbm = get_db(db_path)
         except:
             LOG.error("Cannot connect to auth DB: %s" % db_path)
-            return
+            raise
         self.dbm.define_schema(self.SCHEMA)
         self.dbm.create_tables()
 

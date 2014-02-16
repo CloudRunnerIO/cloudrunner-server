@@ -2,6 +2,7 @@ __author__ = 'Ivelin Slavov'
 
 from urlparse import urlparse
 
+
 def parse_dburl(dburl):
     '''
     Parses a db url to dictionary. Available keys are
@@ -29,5 +30,5 @@ def parse_dburl(dburl):
         res['host'] = parsed.hostname
     if parsed.port:
         res['port'] = parsed.port
-    res['db'] = parsed.path[1:] if parsed.path.startswith("/") else parsed.path
+    res['db'] = parsed.path
     return res

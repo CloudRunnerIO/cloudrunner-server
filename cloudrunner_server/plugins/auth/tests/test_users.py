@@ -31,7 +31,7 @@ class TestUsersWithoutOrg(base.BaseTestCase):
     def fixture(self):
         _, file_name = tempfile.mkstemp(suffix='.sql3')
         self.db = file_name
-        db_url = "sqlite:///%s" % self.db
+        db_url = "sqlite://%s" % self.db
         base.CONFIG.users.db = db_url
         base.CONFIG.security.use_org = False
         local_plugin_loader(base.CONFIG.auth)

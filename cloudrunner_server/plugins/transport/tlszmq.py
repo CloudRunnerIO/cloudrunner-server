@@ -141,29 +141,23 @@ class TLSZmqServerSocket(object):
                     plain_data = tls.recv()
                     client_id = ''
                     org_id = ''
-                    if not self.conns[ident].node:
-                        try:
-                            x509 = tls.ssl.get_peer_cert()
-                            if x509:
-                                # auth conn
-                                subj = x509.get_subject()
-                                client_id = subj.CN
-                                org_id = subj.O
-                                self.conns[ident].node = client_id
-                                self.conns[ident].org = org_id
-                        except Exception, ex:
-                            # anon conn
-                            self.conns[ident].node = None
-                            self.conns[ident].org = None
-                            LOGS.exception(ex)
-                    else:
-                        client_id = self.conns[ident].node
-                        org_id = self.conns[ident].org
+                    try:
+                        x509 = tls.ssl.get_peer_cert()
+                        if x509:
+                            # auth conn
+                            subj = x509.get_subject()
+                            client_id = subj.CN
+                            org_id = subj.O
+                            self.conns[ident].node = client_id
+                            self.conns[ident].org = org_id
+                    except Exception, ex:
+                        # anon conn
+                        self.conns[ident].node = None
+                        self.conns[ident].org = None
+                        LOGS.exception(ex)
 
-                    # assert client_id == tls.ssl.get_peer_cert().\
-                    #   get_subject().CN
+                    LOGS.debug("GOT DATA: %s" % plain_data)
 
-                    #LOGS.debug("PLAIN: %s" % plain_data)
                     packets = plain_data.split('\x00')
                     for packet in packets:
                         if packet:
