@@ -74,8 +74,9 @@ class UserMap(AuthPluginBase):
             LOG.exception(ex)
             return (False, None)
 
-    def create_token(self, user, expiry=None, **kwargs):
-        return self.db.get_token(user, expiry or DEFAULT_EXPIRE)
+    def create_token(self, user, password, **kwargs):
+        return self.db.get_token(user,
+                                 expiry=kwargs.get('expiry', DEFAULT_EXPIRE))
 
     def list_users(self):
         return self.db.all()
@@ -293,10 +294,10 @@ class AuthDb(object):
             return False, "Organization not found"
 
     def toggle_org(self, name, new_status):
-        res = self.organizations.update(
+        res = self.dbm.organizations.update(
             active=new_status,
-            where="org_name=$org_name",
-            vars={"org_name": name}
+            where="name=$name",
+            vars={"name": name}
         )
 
         if res:
