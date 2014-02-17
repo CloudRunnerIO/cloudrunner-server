@@ -7,7 +7,7 @@
 
 Name:       cloudrunner_server
 Version:    0.3
-Release:    3.cloudr%{?dist}
+Release:    4.cloudr%{?dist}
 Summary:    CloudRunner Server for running scripts in cloud environment
 Group:      Cloud tools
 License:    Proprietary
@@ -42,13 +42,13 @@ CloudRunner Server. Consists of three modules:
 This package contains common libs and files.
 
 
-%package dispatcher
-Summary:    CloudRunner dispatcher
-Group:      Cloud tools
-Requires:   %{name} = %{version}-%{release}
-%description dispatcher
-CloudRunner engine for running scripts in cloud environment.
-This package contains Dispatcher node service software.
+#%package dispatcher
+#Summary:    CloudRunner dispatcher
+#Group:      Cloud tools
+#Requires:   %{name} = %{version}-%{release}
+#%description dispatcher
+#CloudRunner engine for running scripts in cloud environment.
+#This package contains Dispatcher node service software.
 
 %package plugin-ssl-node
 Summary:    CloudRunner Server transport plugin
@@ -96,8 +96,9 @@ rm -rf %{buildroot}
 %{__python} setup.py install -O1 --skip-build --root $RPM_BUILD_ROOT
 
 
-mkdir -p $RPM_BUILD_ROOT/%{_sysconfdir}/%{name}
-install -m644 conf/cloudrunner.conf $RPM_BUILD_ROOT/%{_sysconfdir}/%{name}/
+mkdir -p $RPM_BUILD_ROOT/%{_sysconfdir}/cloudrunner/
+install -m644 conf/cloudrunner.conf $RPM_BUILD_ROOT/%{_sysconfdir}/cloudrunner/
+
 
 mkdir -p $RPM_BUILD_ROOT/%{_initrddir}
 install -m755 etc/rc.d/init.d/centos/cloudrunner-dsp $RPM_BUILD_ROOT/%{_initrddir}
@@ -120,9 +121,9 @@ install -m755 cloudrunner_server/plugins/config/openstack_ssl_config.py $RPM_BUI
 install -m755 cloudrunner_server/plugins/transport/tlszmq.py $RPM_BUILD_ROOT/%{python_sitelib}/cloudrunner_plugins/transport/tlszmq.py
 install -m755 cloudrunner_server/plugins/transport/zmq_node_transport.py $RPM_BUILD_ROOT/%{python_sitelib}/cloudrunner_plugins/transport/zmq_node_transport.py
 
-sed -i -e 's,{lib_dir},%{python_sitelib},g' $RPM_BUILD_ROOT/%{_sysconfdir}/%{name}/cloudrunner.conf
-sed -i -e 's,{ca_dir},%{_sharedstatedir}/cloudrunner/CA,g' $RPM_BUILD_ROOT/%{_sysconfdir}/%{name}/cloudrunner.conf
-sed -i -e 's,{var_dir},%{_sharedstatedir}/cloudrunner,g' $RPM_BUILD_ROOT/%{_sysconfdir}/%{name}/cloudrunner.conf
+sed -i -e 's,{lib_dir},%{python_sitelib},g'                     $RPM_BUILD_ROOT/%{_sysconfdir}/cloudrunner/cloudrunner.conf
+sed -i -e 's,{ca_dir},%{_sharedstatedir}/cloudrunner/CA,g'      $RPM_BUILD_ROOT/%{_sysconfdir}/cloudrunner/cloudrunner.conf
+sed -i -e 's,{var_dir},%{_sharedstatedir}/cloudrunner,g'        $RPM_BUILD_ROOT/%{_sysconfdir}/cloudrunner/cloudrunner.conf
 
 mkdir -p $RPM_BUILD_ROOT/var/run/sock/cloudrunner/
 mkdir -p $RPM_BUILD_ROOT/var/run/cloudrunner/
@@ -137,18 +138,13 @@ rm -rf %{buildroot}
 %doc README.rst
 
 %{_initrddir}/cloudrunner-dsp
-%config(noreplace) %{_sysconfdir}/cloudrunner_server/cloudrunner.conf
+%config(noreplace) %{_sysconfdir}/cloudrunner/cloudrunner.conf
 
-%dir %{python_sitelib}/cloudrunner_server/
 %{python_sitelib}/cloudrunner_server/tests/*
 %{python_sitelib}/cloudrunner_server/__init__*
 %{python_sitelib}/cloudrunner_server/plugins
 %{python_sitelib}/cloudrunner_server-%{version}-py*.egg-info
 
-%dir /var/run/cloudrunner/
-%dir /var/run/sock/cloudrunner/
-%dir /var/lib/cloudrunner/
-%dir /var/lib/cloudrunner/plugins/
 
 %{_bindir}/cloudrunner-dsp
 %{_bindir}/cloudrunner-master
@@ -189,6 +185,9 @@ rm -rf %{buildroot}
 %{_bindir}/configure_keystone_plugin.sh
 
 %changelog
+* Mon Feb 17 2014 Stiliyan Sabchev <ssabchev at cloudrunner dot io> - 0.3-4
+- Clean duplicated directories with main package
+
 * Wed Feb 05 2014 Stiliyan Sabchev <ssabchev at cloudrunner dot io> - 0.3-3
 - add Obsoletes old package cloudrunner-dispatcher
 
