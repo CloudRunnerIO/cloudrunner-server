@@ -96,7 +96,7 @@ rm -rf %{buildroot}
 %{__python} setup.py install -O1 --skip-build --root $RPM_BUILD_ROOT
 
 
-###mkdir -p $RPM_BUILD_ROOT/%{_sysconfdir}/%{name}
+mkdir -p $RPM_BUILD_ROOT/%{_sysconfdir}/cloudrunner/
 install -m644 conf/cloudrunner.conf $RPM_BUILD_ROOT/%{_sysconfdir}/cloudrunner/
 
 
