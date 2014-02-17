@@ -211,6 +211,9 @@ class Dispatcher(Daemon):
 
         self.config = CONFIG
         self.auth = self.auth_klass(self.config)
+        LOG.info("Using %s.%s for Auth backend" % (
+            self.auth_klass.__module__,
+            self.auth_klass.__name__))
 
         self.plugin_context = PluginContext(self.auth)
 

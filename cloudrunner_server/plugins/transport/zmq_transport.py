@@ -134,7 +134,7 @@ class ZmqTransport(ServerTransportBackend):
                     fcntl.DN_DELETE | fcntl.DN_CREATE | fcntl.DN_MULTISHOT)
         signal.signal(signal.SIGIO, self._cert_changed)
 
-        self.heartbeat_timeout = int(self.config.heartbeat_timeout or 10)
+        self.heartbeat_timeout = int(self.config.heartbeat_timeout or 30)
 
     def _cert_changed(self, *args):
         # Reload certs
@@ -532,6 +532,7 @@ class ZmqTransport(ServerTransportBackend):
                     elif req.org not in self.tenants:
                         LOGR.warn("Unrecognized node: %s" % hb_msg[1:3])
                     else:
+                        LOGR.info("HB from %s" % req.peer)
                         self.tenants[req.org].push(req.peer)
                         if req.control == 'IDENT':
                             node_reply_queue.send(req.ident, req.peer,
@@ -695,8 +696,8 @@ class Router(Thread):
                             req.org = DEFAULT_ORG
 
                         rer_packet = RerouteReq(req).pack()
-                        LOGR.info('IN-MSG re-routed: %s' %
-                                  rer_packet)
+                        if rer_packet and rer_packet[0] != HEARTBEAT:
+                            LOGR.info('IN-MSG re-routed: %s' % rer_packet)
 
                         router.send_multipart(rer_packet)
 
