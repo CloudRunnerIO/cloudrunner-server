@@ -97,8 +97,8 @@ rm -rf %{buildroot}
 
 
 ###mkdir -p $RPM_BUILD_ROOT/%{_sysconfdir}/%{name}
-#install -m644 conf/cloudrunner.conf $RPM_BUILD_ROOT/%{_sysconfdir}/cloudrunner/
-install -m644 conf/cloudrunner.conf $RPM_BUILD_ROOT/%{_sysconfdir}/%{name/_server/}/
+install -m644 conf/cloudrunner.conf $RPM_BUILD_ROOT/%{_sysconfdir}/cloudrunner/
+
 
 mkdir -p $RPM_BUILD_ROOT/%{_initrddir}
 install -m755 etc/rc.d/init.d/centos/cloudrunner-dsp $RPM_BUILD_ROOT/%{_initrddir}
