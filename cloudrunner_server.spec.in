@@ -138,8 +138,7 @@ rm -rf %{buildroot}
 %doc README.rst
 
 %{_initrddir}/cloudrunner-dsp
-#%config(noreplace) %{_sysconfdir}/cloudrunner/cloudrunner.conf
-%config(noreplace) %{_sysconfdir}/%{name/_server/}/cloudrunner.conf
+%config(noreplace) %{_sysconfdir}/cloudrunner/cloudrunner.conf
 
 %{python_sitelib}/cloudrunner_server/tests/*
 %{python_sitelib}/cloudrunner_server/__init__*
