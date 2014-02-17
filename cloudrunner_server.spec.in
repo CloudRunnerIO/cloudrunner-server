@@ -121,9 +121,9 @@ install -m755 cloudrunner_server/plugins/config/openstack_ssl_config.py $RPM_BUI
 install -m755 cloudrunner_server/plugins/transport/tlszmq.py $RPM_BUILD_ROOT/%{python_sitelib}/cloudrunner_plugins/transport/tlszmq.py
 install -m755 cloudrunner_server/plugins/transport/zmq_node_transport.py $RPM_BUILD_ROOT/%{python_sitelib}/cloudrunner_plugins/transport/zmq_node_transport.py
 
-sed -i -e 's,{lib_dir},%{python_sitelib},g'                     $RPM_BUILD_ROOT/%{_sysconfdir}/%{name/_server/}/cloudrunner.conf
-sed -i -e 's,{ca_dir},%{_sharedstatedir}/cloudrunner/CA,g'      $RPM_BUILD_ROOT/%{_sysconfdir}/%{name/_server/}/cloudrunner.conf
-sed -i -e 's,{var_dir},%{_sharedstatedir}/cloudrunner,g'        $RPM_BUILD_ROOT/%{_sysconfdir}/%{name/_server/}/cloudrunner.conf
+sed -i -e 's,{lib_dir},%{python_sitelib},g'                     $RPM_BUILD_ROOT/%{_sysconfdir}/cloudrunner/cloudrunner.conf
+sed -i -e 's,{ca_dir},%{_sharedstatedir}/cloudrunner/CA,g'      $RPM_BUILD_ROOT/%{_sysconfdir}/cloudrunner/cloudrunner.conf
+sed -i -e 's,{var_dir},%{_sharedstatedir}/cloudrunner,g'        $RPM_BUILD_ROOT/%{_sysconfdir}/cloudrunner/cloudrunner.conf
 
 mkdir -p $RPM_BUILD_ROOT/var/run/sock/cloudrunner/
 mkdir -p $RPM_BUILD_ROOT/var/run/cloudrunner/
