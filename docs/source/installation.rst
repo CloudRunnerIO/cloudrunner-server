@@ -13,7 +13,7 @@ RedHat/Fedora/CentOS
 
 Set the CloudRunner repo::
 
-      rpm -uhv https://www.cloudrunner.io/crn_repo
+      wget -O /etc/yum.repos.d/cr.repo http://www.cloudrunner.io/cr.repo
 
 
 Then install the repo packages::
