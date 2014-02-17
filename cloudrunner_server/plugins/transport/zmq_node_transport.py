@@ -136,19 +136,17 @@ class NodeTransport(TransportBackend):
                               'node_csr=path_to_file\n')
                     exit(1)
 
-            self.ssl_start()
             if not self._register():
                 LOGC.error("Cannot register node at master")
                 return False
-            self.ssl_stop()
 
         # Run worker threads
         LOGC.info('Running client in server mode')
+        self.decrypter = TLSClientDecrypt(self.config.security.server)
         listener = Thread(target=self.listener_device)
         listener.start()
 
         self.ssl_start()
-        self.decrypter = TLSClientDecrypt(self.config.security.server)
 
         return True
 
@@ -281,7 +279,6 @@ class NodeTransport(TransportBackend):
                 del csr
             return False
 
-        self.ssl_start()
         start_reg = time.time()
 
         def _next(reply):
@@ -389,6 +386,8 @@ class NodeTransport(TransportBackend):
 
         reply = None
         approved = False
+
+        self.ssl_start()
 
         reg_sock = self.context.socket(zmq.DEALER)
         reg_sock.setsockopt(zmq.IDENTITY, self.node_id)
