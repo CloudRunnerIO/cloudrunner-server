@@ -113,7 +113,7 @@ class TLSZmqServerSocket(object):
                         LOGS.info('Removing %s from cache' % repr(ident))
                         conn = self.conns.pop(ident)
                         proc_socket.send_multipart(
-                            ['QUIT', conn.node, conn.org])
+                            ['QUIT', conn.node or '', conn.org or ''])
                         conn.conn.shutdown()
                         continue
 

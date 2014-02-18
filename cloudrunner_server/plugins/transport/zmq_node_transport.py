@@ -146,6 +146,8 @@ class NodeTransport(TransportBackend):
         listener = Thread(target=self.listener_device)
         listener.start()
 
+        time.sleep(.5)  # wait for sockets to start
+
         self.ssl_start()
 
         return True
@@ -170,7 +172,7 @@ class NodeTransport(TransportBackend):
                 raise Exception("Socket uri is not accessible: %s" %
                                 uri)
             else:
-                console.red(zerr)
+                LOGC.exception(zerr)
 
         wrap = SockWrapper(uri, sock)
         self._sockets.append(wrap)
@@ -183,16 +185,16 @@ class NodeTransport(TransportBackend):
 
     def listener_device(self):
         self.sub = str(uuid.uuid1())
-        master_sub = self.context.socket(zmq.SUB)
-        master_sub.setsockopt(zmq.SUBSCRIBE, self.sub)
-        master_sub.connect(self.buses['requests'][0])
-
         dispatcher = self.context.socket(zmq.DEALER)
         dispatcher.bind(self.buses['requests'][1])
 
         ssl_proxy = self.context.socket(zmq.DEALER)
         ssl_proxy.setsockopt(zmq.IDENTITY, 'SUB_LOC')
         ssl_proxy.connect(self.endpoints['ssl-proxy'])
+
+        master_sub = self.context.socket(zmq.SUB)
+        master_sub.setsockopt(zmq.SUBSCRIBE, self.sub)
+        master_sub.connect(self.buses['requests'][0])
 
         poller = zmq.Poller()
         poller.register(master_sub, zmq.POLLIN)
@@ -244,7 +246,6 @@ class NodeTransport(TransportBackend):
                     or zerr.errno == zmq.ENOTSOCK:
                     break
                 LOGC.exception(zerr)
-                LOGC.error(zerr.errno)
             except Exception, ex:
                 LOGC.error("Node listener thread: exception %s" % ex)
 

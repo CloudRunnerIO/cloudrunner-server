@@ -122,6 +122,7 @@ class ZmqTransport(ServerTransportBackend):
         self._watch_cert_dir(self.cert_dir)
 
         # init
+        self.heartbeat_timeout = int(self.config.heartbeat_timeout or 30)
         self.tenants = {}
         self._cert_changed()
 
@@ -133,8 +134,6 @@ class ZmqTransport(ServerTransportBackend):
         fcntl.fcntl(cert_fd, fcntl.F_NOTIFY,
                     fcntl.DN_DELETE | fcntl.DN_CREATE | fcntl.DN_MULTISHOT)
         signal.signal(signal.SIGIO, self._cert_changed)
-
-        self.heartbeat_timeout = int(self.config.heartbeat_timeout or 30)
 
     def _cert_changed(self, *args):
         # Reload certs
@@ -528,7 +527,8 @@ class ZmqTransport(ServerTransportBackend):
                     if req.control == 'QUIT':
                         LOGR.info("Node %s dropped from %s" %
                                  (req.peer, req.org))
-                        self.tenants[req.org].pop(req.peer)
+                        if req.org in self.tenants:
+                            self.tenants[req.org].pop(req.peer)
                     elif req.org not in self.tenants:
                         LOGR.warn("Unrecognized node: %s" % hb_msg[1:3])
                     else:

@@ -46,6 +46,8 @@ class JobSession(Thread):
                 if self.manager.context.closed or zerr.errno == zmq.ETERM \
                         or zerr.errno == zmq.ENOTSOCK:
                     break
+            except ConnectionError:
+                break
 
     def parse_script(self, env):
         self.sections = []
