@@ -166,7 +166,7 @@ class JobSession(Thread):
                 except Exception, ex:
                     LOG.error('Plugin error(%s):  %r' % (plugin, ex))
 
-            if section.args.timeout:
+            if section.args and section.args.timeout:
                 try:
                     timeout = int(section.args.timeout)
                 except ValueError:
