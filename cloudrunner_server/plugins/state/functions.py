@@ -34,6 +34,7 @@ else:
     from cloudrunner.util.nix import chown
 
 ENV_FILE_NAME = "__ENV__FILE__"
+ENV_SEP = "__ENV__SEP__LINE__"
 DISABLED_ENV = ('_', 'PIPESTATUS', ENV_FILE_NAME,
                 '___ENV___', 'SHELLOPTS',
                 'BASH_LINENO', 'BASH_SOURCE', 'FUNCNAME', 'IFS', 'PS4')
@@ -179,8 +180,8 @@ class Perl(Base, StatePluginBase):
         return (prepare_env, store_env, ".pl")
 
 
-class Bash(Base, StatePluginBase):
-    lang = "bash"
+class Sh(Base, StatePluginBase):
+    lang = "sh"
 
     def set_state_handlers(self):
         prepare_env = []
@@ -211,6 +212,80 @@ set +e
 set +v
 __exit 0"""
         return ('\n'.join(prepare_env), store_env, '.sh')
+
+
+START_LINE = re.compile('^declare\s-[\S*]\s+(.*)')
+DATA_LINE = re.compile('^\s(.*)')
+
+
+class Bash(Base, StatePluginBase):
+    lang = "bash"
+
+    def set_state_handlers(self):
+        prepare_env = []
+        prepare_env.append('set +e')
+        prepare_env.append('set +v')
+        for k, v in self.env.items():
+            if not isinstance(v, list):
+                v = [v]
+            for i in range(len(v)):
+                if BASH_VARS.match(k):
+                    if len(v) == 1:
+                        prepare_env.append('%s="%s"' % (k, v[i]))
+                    else:
+                        prepare_env.append('%s[%i]="%s"' % (k, i, v[i]))
+
+        prepare_env.append("""
+function __exit(){
+  echo -e "$(declare -p)" >> %(env_file_name)s
+  exit $1
+}
+echo -e "$(declare -p)" > %(env_file_name)s
+echo %(sep)s >> %(env_file_name)s
+readonly %(env_var)s=%(env_file_name)s\n""" %
+                           dict(env_var=ENV_FILE_NAME,
+                                env_file_name=self.env[ENV_FILE_NAME],
+                                sep=ENV_SEP))
+        store_env = """
+set +e
+set +v
+__exit 0"""
+        return ('\n'.join(prepare_env), store_env, '.sh')
+
+    def parse_state_file(self, state_file_name):
+        state_file = open(state_file_name)
+        _lines = state_file.read()
+        state_file.close()
+
+        before, after = {}, {}
+        current = before
+        last_key = None
+
+        lines = [line for line in _lines.split('\n') if line]
+
+        for line in lines:
+            if line == ENV_SEP:
+                current = after
+                continue
+
+            m = START_LINE.match(line)
+            if m:
+                k, _, v = m.group(1).partition('=')
+                if k in DISABLED_ENV or not KEY_RE.match(k):
+                    continue
+                current[k] = v
+                last_key = k
+
+            elif line and DATA_LINE.match(line) and last_key:
+                current[last_key] += DATA_LINE.match(line).group(1)
+
+        for k, v in before.items():
+            if k in after:
+                if after[k] == v:
+                    after.pop(k)
+
+        os.unlink(state_file_name)
+        return self.env
 
 
 class NodeJS(Base, StatePluginBase):
