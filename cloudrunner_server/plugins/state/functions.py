@@ -285,6 +285,11 @@ __exit 0"""
                     after.pop(k)
 
         os.unlink(state_file_name)
+        for k, v in after.items():
+            if v.startswith('"') and v.endswith('"'):
+                v = v.strip('"')
+            self.env[k] = v
+
         return self.env
 
 
