@@ -236,7 +236,7 @@ class ZmqTransport(ServerTransportBackend):
         crt_file_name = p.join(base_path, 'nodes',
                                '.'.join([node, 'crt']))
 
-        if node in self.ccont.list_approved():
+        if node in self.ccont.list_all_approved():
             # cert already issued
             return self._build_cert_response(node, request, crt_file_name)
         # Saving CSR

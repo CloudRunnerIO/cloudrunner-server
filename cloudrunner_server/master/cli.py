@@ -63,7 +63,8 @@ def main():
                 pass
         except:
             _config = _eval_config()
-            __ACT_NODES__ = functions.CertController(_config).list_approved()
+            __ACT_NODES__ = functions.CertController(_config).\
+                list_all_approved()
         return (c for c in __ACT_NODES__ if c.startswith(prefix))
 
     def _list_pending_nodes(prefix, parsed_args, **kwargs):

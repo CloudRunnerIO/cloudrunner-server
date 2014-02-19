@@ -108,7 +108,11 @@ class CertController(object):
                 csr = None
                 try:
                     csr = m.X509.load_request(os.path.join(_dir, req))
-                    yield DATA, csr.get_subject().CN
+                    subj = csr.get_subject()
+                    if subj.O:
+                        yield DATA, "%-40s %s" % (subj.CN, subj.O)
+                    else:
+                        yield DATA, subj.CN
                     total_cnt += 1
                 except:
                     pass
@@ -124,9 +128,14 @@ class CertController(object):
                 node_cert = None
                 try:
                     node_cert = m.X509.load_cert(os.path.join(_dir, node))
-                    yield DATA, node_cert.get_subject().CN
+                    subj = node_cert.get_subject()
+                    if subj.O:
+                        yield DATA, "%-40s %s" % (subj.CN, subj.O)
+                    else:
+                        yield DATA, subj.CN
                     total_cnt += 1
-                except:
+                except Exception, ee:
+                    print ee
                     pass
                 finally:
                     node_cert
@@ -134,7 +143,7 @@ class CertController(object):
             yield DATA, '--None--'
 
     @yield_wrap
-    def list_approved(self):
+    def list_all_approved(selF):
         approved_nodes = []
         for (_dir, _, nodes) in os.walk(os.path.join(self.ca_path, 'nodes')):
             for node in nodes:
@@ -149,7 +158,7 @@ class CertController(object):
         return approved_nodes
 
     @yield_wrap
-    def list_pending(self, org):
+    def list_pending(self, org=None):
         pending_nodes = []
         for (_dir, _, reqs) in os.walk(os.path.join(self.ca_path, 'reqs')):
             for req in reqs:
@@ -157,7 +166,7 @@ class CertController(object):
                 try:
                     csr = m.X509.load_request(os.path.join(_dir, req))
                     subj = csr.get_subject()
-                    if org == subj.O:
+                    if not org or subj.O == org:
                         pending_nodes.append(subj.CN)
                 except:
                     pass
