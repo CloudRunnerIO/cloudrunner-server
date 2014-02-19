@@ -79,6 +79,7 @@ whoami
                 self.config.security = Mock(use_org=False)
 
         remote_user_map = Mock(org="MyOrg")
+
         class PluginCtx(object):
             def __init__(self):
                 self.args_plugins = []
