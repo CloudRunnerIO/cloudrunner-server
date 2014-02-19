@@ -109,8 +109,8 @@ class CertController(object):
                 try:
                     csr = m.X509.load_request(os.path.join(_dir, req))
                     subj = csr.get_subject()
-                    if subj.O:
-                        yield DATA, "%-40s %s" % (subj.CN, subj.O)
+                    if self.config.security.use_org and subj.OU:
+                        yield DATA, "%-40s %s" % (subj.CN, subj.OU)
                     else:
                         yield DATA, subj.CN
                     total_cnt += 1
@@ -129,7 +129,7 @@ class CertController(object):
                 try:
                     node_cert = m.X509.load_cert(os.path.join(_dir, node))
                     subj = node_cert.get_subject()
-                    if subj.O:
+                    if self.config.security.use_org and subj.O:
                         yield DATA, "%-40s %s" % (subj.CN, subj.O)
                     else:
                         yield DATA, subj.CN
@@ -143,7 +143,7 @@ class CertController(object):
             yield DATA, '--None--'
 
     @yield_wrap
-    def list_all_approved(selF):
+    def list_all_approved(self):
         approved_nodes = []
         for (_dir, _, nodes) in os.walk(os.path.join(self.ca_path, 'nodes')):
             for node in nodes:
@@ -198,13 +198,22 @@ class CertController(object):
                     if node == csr.get_subject().CN:
                         ca = kwargs.get('ca', '')
                         if self.config.security.use_org and not ca:
-                            for verifier in NodeVerifier.__subclasses__():
-                                ca = verifier(self.config).verify(node, csr)
-                                if ca:
-                                    break
+                            if kwargs.get('auto'):
+                                # Load from CSR
+                                ca = csr.get_subject().OU
+                                if not ca:
+                                    yield ERR, "OU is not found in CSR subject"
+                                    return
                             else:
-                                yield ERR, "CA is mandatory for signing a node"
-                                return
+                                for verifier in NodeVerifier.__subclasses__():
+                                    ca = verifier(
+                                        self.config).verify(node, csr)
+                                    if ca:
+                                        break
+                                else:
+                                    yield ERR, "CA is mandatory for " \
+                                        "signing a node"
+                                    return
                         if not self.config.security.use_org and ca:
                             yield ERR, "Although CA value is passed, " \
                                 "it will be skipped for No-org setup."

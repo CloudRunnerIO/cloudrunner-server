@@ -75,7 +75,7 @@ def main():
         except:
             _config = _eval_config()
             __PEND_NODES__ = functions.CertController(_config).list_pending()
-        return (c[0] for c[0] in __PEND_NODES__ if c.startswith(prefix))
+        return (c for c in __PEND_NODES__ if c.startswith(prefix))
 
     def _list_sub_ca(prefix, parsed_args, **kwargs):
         try:
@@ -103,9 +103,11 @@ def main():
         _list_pending_nodes
 
     if _eval_config().security.use_org:
-        cert_sign.add_argument('--ca', required=True,
-                               help='Node organization/Sub-CA name').\
+        sign_opts = cert_sign.add_mutually_exclusive_group(required=True)
+        sign_opts.add_argument('--ca', help='Node organization/Sub-CA name').\
             completer = _list_sub_ca
+        sign_opts.add_argument('--auto', action='store_true',
+                               help='Get organization from client request')
 
     cert_ca = c_subcmd.add_parser('create_ca',
                                   help='Create an organization CA certificate')
