@@ -137,7 +137,6 @@ class JobSession(Thread):
 
         for section in self.sections:
             libs = user_libs
-            section.update_targets(env)
 
             for plugin in self.plugin_context.job_plugins:
                 try:
@@ -167,6 +166,7 @@ class JobSession(Thread):
                 except Exception, ex:
                     LOG.error('Plugin error(%s):  %r' % (plugin, ex))
 
+            section.update_targets(env)
             msg_ret = []
             #
             # Exec section
