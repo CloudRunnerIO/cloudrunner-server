@@ -166,6 +166,12 @@ class JobSession(Thread):
                 except Exception, ex:
                     LOG.error('Plugin error(%s):  %r' % (plugin, ex))
 
+            if section.args.timeout:
+                try:
+                    timeout = int(section.args.timeout)
+                except ValueError:
+                    pass
+
             section.update_targets(env)
             msg_ret = []
             #

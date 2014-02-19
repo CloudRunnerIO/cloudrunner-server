@@ -135,6 +135,7 @@ class Dispatcher(Daemon):
         load_plugins(CONFIG)
 
         args_plugins = argparse.ArgumentParser(add_help=False)
+        args_plugins.add_argument('-t', '--timeout', help="Timeout")
 
         self.plugin_register = {}
         self.plugin_cli_register = {}
