@@ -88,9 +88,12 @@ class Tenant(object):
         return self.id == _id
 
     def push(self, node):
+        new_node = False
         if node not in self.nodes:
             self.nodes.append(Node(node))
+            new_node = True
         self.nodes[self.nodes.index(node)].refreshed = time.time()
+        return new_node
 
     def pop(self, node):
         if node in self.nodes:

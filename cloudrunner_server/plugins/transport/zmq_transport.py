@@ -144,7 +144,7 @@ class ZmqTransport(ServerTransportBackend):
             orgs = [DEFAULT_ORG]
         for org in orgs:
             if org not in self.tenants:
-                LOGR.warn("Adding tenant %s" % org)
+                LOGR.warn("Registering tenant %s" % org)
                 self.tenants[org] = Tenant(org)
         current_orgs = self.tenants.keys()
         for org in current_orgs:
@@ -482,8 +482,8 @@ class ZmqTransport(ServerTransportBackend):
                                 [target, StatusCodes.HB])
                     elif action == b'\x00':
                         # Node de-registered
-                        LOGP.info('Stopped publishing to %s' %
-                                  target)
+                        LOGP.debug('Stopped publishing to %s' %
+                                   target)
                         if target in self.tenants.values():
                             # Active node dropped,
                             # force tenant nodes to reload
@@ -533,7 +533,10 @@ class ZmqTransport(ServerTransportBackend):
                         LOGR.warn("Unrecognized node: %s" % hb_msg[1:3])
                     else:
                         LOGR.info("HB from %s" % req.peer)
-                        self.tenants[req.org].push(req.peer)
+                        if self.tenants[req.org].push(req.peer):
+                            # New node
+                            LOGR.info("Node %s attached to %s" % (req.peer,
+                                                                  req.org))
                         if req.control == 'IDENT':
                             node_reply_queue.send(req.ident, req.peer,
                                                   'SUB_LOC',
