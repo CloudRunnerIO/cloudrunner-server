@@ -289,6 +289,7 @@ class LibIncludePlugin(IncludeLibPluginBase, ArgsProvider, CliArgsProvider):
             return success, items
         elif args.action == 'add':
             return self.add(user_org, args.name, data,
+                            overwrite=args.overwrite,
                             is_public=not args.private)
 
         elif args.action == 'show':
