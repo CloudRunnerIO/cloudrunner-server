@@ -79,12 +79,13 @@ class SslConfig(ConfigPluginBase):
             subj.C = "US"
 
         subj.CN = node_id
-        subj.OU = 'CloudRunner'
+        subj.OU = 'DEFAULT'
 
         req.sign(node_key, 'sha1')
         assert req.verify(node_key)
         assert req.verify(req.get_pubkey())
 
+        print ("CSR Subject %s" % subj)
         print ("Saving CSR file %s" % csr_file)
         req.save_pem(csr_file)
         os.chmod(csr_file, stat.S_IREAD | stat.S_IWRITE)

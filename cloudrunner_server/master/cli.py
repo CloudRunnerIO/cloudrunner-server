@@ -131,10 +131,13 @@ def main():
 
     cert_revoke = c_subcmd.add_parser('revoke',
                                       help='Revoke already issued certificate')
-    cert_revoke_node = cert_revoke.add_argument('node', nargs="+",
-                                                help='Node common name')
+    cert_revoke.add_argument('node', nargs="+", help='Node common name').\
+        completer = _list_active_nodes
 
-    cert_revoke_node.completer = _list_active_nodes
+    if _eval_config().security.use_org:
+        cert_revoke.add_argument('--ca',  required=True,
+                                 help='Node organization/Sub-CA name').\
+            completer = _list_sub_ca
 
     cert_revoke_ca = c_subcmd.add_parser('revoke_ca',
                                          help='Revoke existing Sub-CA')
@@ -152,6 +155,16 @@ def main():
                                             ' to wait for node to make request.'
                                             ' Default is %(default)s sec.',
                                             required=False)
+
+    clear_req = c_subcmd.add_parser('clear_req',
+                                    help='Clear pending node request')
+    clear_req.add_argument('node', nargs="+", help='Node common name').\
+        completer = _list_pending_nodes
+
+    if _eval_config().security.use_org:
+        clear_req.add_argument('--ca', help='Node organization/Sub-CA name',
+                               required=True).completer = _list_sub_ca
+
     # Configure command
 
     config = commands.add_parser('config', parents=[_common],

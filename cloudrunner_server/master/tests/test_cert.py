@@ -38,7 +38,7 @@ class TestCert(base.BaseTestCase):
             assert line[0] != ERR, line
         if os.path.exists('/tmp/cloudrunner-tests/org'):
             shutil.rmtree('/tmp/cloudrunner-tests/org')
-        gen = CertController(base.CONFIG).create_ca('MyOrg')
+        CertController(base.CONFIG).create_ca('MyOrg')
 
     @classmethod
     def release_class(cls):
@@ -48,50 +48,80 @@ class TestCert(base.BaseTestCase):
             shutil.rmtree('/tmp/cloudrunner-tests/reqs')
         if os.path.exists('/tmp/cloudrunner-tests/org'):
             shutil.rmtree('/tmp/cloudrunner-tests/org')
+        if os.path.exists('/tmp/cloudrunner-tests/issued'):
+            shutil.rmtree('/tmp/cloudrunner-tests/issued')
 
         base.CONFIG.update('Security', 'cert_pass', "")
 
-    def test_sign(self):
+    def test_sign_revoke(self):
         self._create_csr('TEST_NODE')
-        gen = iter(CertController(base.CONFIG).list())
-        next(gen)  # Pending nodes
-        self.assertEqual(next(gen), (2, 'TEST_NODE'))
-        next(gen)  # Approved nodes
-        self.assertEqual(next(gen), (2, '--None--'))
+        messages = [x for x in CertController(base.CONFIG).list()]
 
-        gen = iter(CertController(base.CONFIG).sign(['TEST_NODE'],
-                                                    org="MyOrg"))
-        self.assertEqual(next(gen), (1, 'Signing TEST_NODE'))
-        self.assertEqual(next(gen), (1, 'Setting serial to 5'))
-        self.assertEqual(next(gen), (2, 'TEST_NODE signed'))
+        self.assertEqual(messages.pop(0), (1, 'Pending node requests:'))
+        self.assertEqual(messages.pop(0), (2, 'TEST_NODE'))
+        self.assertEqual(messages.pop(0), (1, 'Approved nodes:'))
+        self.assertEqual(messages.pop(0), (2, '--None--'))
+        self.assertEqual(messages, [])
 
-        gen = iter(CertController(base.CONFIG).list())
-        next(gen)  # Pending nodes
-        self.assertEqual(next(gen), (2, '--None--'))
-        next(gen)  # Approved nodes
-        self.assertEqual(next(gen), (2, 'TEST_NODE'))
+        messages = [x for x in CertController(base.CONFIG).sign(['TEST_NODE'],
+                                                                org="MyOrg")]
+        self.assertEqual(messages.pop(0), (1, 'Signing TEST_NODE'))
+        self.assertEqual(messages.pop(0), (1, 'Setting serial to 3'))
+        self.assertEqual(messages.pop(0), (2, 'TEST_NODE signed'))
 
-    def test_revoke(self):
+        messages = [x for x in CertController(base.CONFIG).list()]
+
+        self.assertEqual(messages.pop(0), (1, 'Pending node requests:'))
+        self.assertEqual(messages.pop(0), (2, '--None--'))
+        self.assertEqual(messages.pop(0), (1, 'Approved nodes:'))
+        self.assertEqual(messages.pop(0), (2, 'TEST_NODE'))
+        self.assertEqual(messages, [])
+
         self._create_csr('TEST_NODE_2')
-        self._create_csr('TEST_NODE_3')
-        gen = iter(CertController(base.CONFIG).sign(['TEST_NODE_2'],
-                                                    org='MyOrg'))
-        self.assertEqual(next(gen), (1, 'Signing TEST_NODE_2'))
-        self.assertEqual(next(gen), (1, 'Setting serial to 3'))
-        self.assertEqual(next(gen), (2, 'TEST_NODE_2 signed'))
-        gen = CertController(base.CONFIG).revoke(['TEST_NODE_2'])
-        gen = iter(CertController(base.CONFIG).list())
-        next(gen)  # Pending nodes
-        self.assertEqual(next(gen), (2, 'TEST_NODE_3'))
-        next(gen)  # Approved nodes
-        self.assertEqual(next(gen), (2, '--None--'))
+        self._create_csr('TEST_NODE_PEND')
+        messages = [x for x in CertController(
+            base.CONFIG).sign(['TEST_NODE_2'],
+                              org='MyOrg')]
 
-        gen = iter(CertController(base.CONFIG).sign(['TEST_NODE_3'],
-                                                    org="MyOrg"))
-        self.assertEqual(next(gen), (1, 'Signing TEST_NODE_3'))
-        self.assertEqual(next(gen), (1, 'Setting serial to 4'))
+        self.assertEqual(messages.pop(0), (1, 'Signing TEST_NODE_2'))
+        self.assertEqual(messages.pop(0), (1, 'Setting serial to 4'))
+        self.assertEqual(messages.pop(0), (2, 'TEST_NODE_2 signed'))
 
-        gen = CertController(base.CONFIG).revoke(['TEST_NODE_3'])
+        messages = [x for x in CertController(base.CONFIG).revoke(
+            ['TEST_NODE_2'])]
+        messages = [x for x in CertController(base.CONFIG).list()]
+
+        self.assertEqual(messages.pop(0), (1, 'Pending node requests:'))
+        self.assertEqual(messages.pop(0), (2, 'TEST_NODE_PEND'))
+        self.assertEqual(messages.pop(0), (1, 'Approved nodes:'))
+        self.assertEqual(messages.pop(0), (2, 'TEST_NODE'))
+        self.assertEqual(messages, [])
+
+        CertController(base.CONFIG).revoke(['TEST_NODE_2'])
+
+        messages = [x for x in CertController(base.CONFIG).list()]
+
+        self.assertEqual(messages.pop(0), (1, 'Pending node requests:'))
+        self.assertEqual(messages.pop(0), (2, 'TEST_NODE_PEND'))
+        self.assertEqual(messages.pop(0), (1, 'Approved nodes:'))
+        self.assertEqual(messages.pop(0), (2, 'TEST_NODE'))
+        self.assertEqual(messages, [])
+
+        messages = [x for x in CertController(base.CONFIG).sign(
+            ['TEST_NODE_PEND'],
+            org="MyOrg")]
+
+        self.assertEqual(messages.pop(0), (1, 'Signing TEST_NODE_PEND'))
+        self.assertEqual(messages.pop(0), (1, 'Setting serial to 5'))
+
+        messages = [x for x in CertController(base.CONFIG).list()]
+
+        self.assertEqual(messages.pop(0), (1, 'Pending node requests:'))
+        self.assertEqual(messages.pop(0), (2, '--None--'))
+        self.assertEqual(messages.pop(0), (1, 'Approved nodes:'))
+        self.assertEqual(messages.pop(0), (2, 'TEST_NODE_PEND'))
+        self.assertEqual(messages.pop(0), (2, 'TEST_NODE'))
+        self.assertEqual(messages, [])
 
     def _create_csr(self, node):
         node_key = m.EVP.PKey()
@@ -107,10 +137,11 @@ class TestCert(base.BaseTestCase):
         subj = req.get_subject()
         subj.C = "US"
         subj.CN = node
+        subj.OU = 'DEFAULT'
 
         req.sign(node_key, 'sha1')
         csr_file = os.path.join(os.path.dirname(base.CONFIG.security.ca),
                                 'reqs',
-                                '%s.csr' % node)
+                                'DEFAULT.%s.csr' % node)
         req.save_pem(csr_file)
         del node_key

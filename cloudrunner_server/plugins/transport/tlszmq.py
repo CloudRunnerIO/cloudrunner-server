@@ -39,6 +39,7 @@ class ServerDisconnectedException(Exception):
 
 
 class TLSZmqServerSocket(object):
+    CRL = []
 
     def __init__(self, socket, proc_socket_uri, cert, key, ca=None,
                  ssl_proto='sslv3', verify_loc=None, cert_password=None):
@@ -143,13 +144,16 @@ class TLSZmqServerSocket(object):
                     org_id = ''
                     try:
                         x509 = tls.ssl.get_peer_cert()
-                        if x509:
+                        if x509 and x509.get_serial_number() not in self.CRL:
                             # auth conn
                             subj = x509.get_subject()
                             client_id = subj.CN
                             org_id = subj.O
                             self.conns[ident].node = client_id
                             self.conns[ident].org = org_id
+                        else:
+                            self.conns[ident].node = None
+                            self.conns[ident].org = None
                     except Exception, ex:
                         # anon conn
                         self.conns[ident].node = None

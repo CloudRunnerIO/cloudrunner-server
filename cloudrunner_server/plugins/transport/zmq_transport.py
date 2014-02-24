@@ -1,6 +1,7 @@
 import fcntl
 import json
 import logging
+import M2Crypto as m
 import os
 from os import path as p
 import signal
@@ -8,8 +9,6 @@ from threading import Event
 from threading import Thread
 import time
 import zmq
-import M2Crypto as m
-from os import path as p
 from zmq.eventloop import ioloop
 
 from .tlszmq import TLSZmqServerSocket
@@ -115,25 +114,71 @@ class ZmqTransport(ServerTransportBackend):
                                       cert_password=config.security.cert_pass)
         self.subca_dir = p.join(
             p.dirname(p.abspath(self.config.security.ca)), 'org')
-        self._watch_cert_dir(self.subca_dir)
+        self._watch_dir('CD', self.subca_dir, callback=self._cert_changed)
+
+        # Check for crl file
+        crl_file = p.join(
+            p.dirname(p.abspath(self.config.security.ca)), 'crl')
+        if not p.exists(crl_file):
+            crl = open(crl_file, 'w')
+            crl.write('')
+            crl.close()
 
         self.cert_dir = p.join(
             p.dirname(p.abspath(self.config.security.ca)), 'nodes')
-        self._watch_cert_dir(self.cert_dir)
+        # Watch deletes, which occur on revoke
+        self._watch_dir('D', self.cert_dir, callback=self._nodes_changed)
 
         # init
         self.heartbeat_timeout = int(self.config.heartbeat_timeout or 30)
         self.tenants = {}
         self._cert_changed()
+        self._nodes_changed(wait=False)
 
-    def _watch_cert_dir(self, _dir):
-        if not self.config.security.use_org:
-            return
+    def _watch_dir(self, mode, _dir, callback):
         cert_fd = os.open(_dir, 0)
         fcntl.fcntl(cert_fd, fcntl.F_SETSIG, 0)
-        fcntl.fcntl(cert_fd, fcntl.F_NOTIFY,
-                    fcntl.DN_DELETE | fcntl.DN_CREATE | fcntl.DN_MULTISHOT)
-        signal.signal(signal.SIGIO, self._cert_changed)
+        watch_mode = fcntl.DN_MULTISHOT
+        if 'C' in mode:
+            watch_mode |= fcntl.DN_CREATE
+        if 'D' in mode:
+            watch_mode |= fcntl.DN_DELETE
+        if 'M' in mode:
+            watch_mode |= fcntl.DN_MODIFY
+
+        fcntl.fcntl(cert_fd, fcntl.F_NOTIFY, watch_mode)
+        signal.signal(signal.SIGIO, callback)
+
+    def _nodes_changed(self, wait=True, *args):
+        fd = None
+
+        def read():
+            crl_file = p.join(
+                p.dirname(p.abspath(self.config.security.ca)), 'crl')
+            fd = open(crl_file, 'r')
+            CRL_LIST = [line for line in fd.read().split('\n') if line]
+            for cert_serial in CRL_LIST:
+                try:
+                    ser_no = int(cert_serial)
+                    if ser_no not in TLSZmqServerSocket.CRL:
+                        TLSZmqServerSocket.CRL.append(ser_no)
+                except ValueError, er:
+                    LOGR.exception(er)
+
+            fd.close()
+
+        if wait:
+            time.sleep(1)  # wait 1 sec for file closing
+        try:
+            read()
+        except Exception, ex:
+            LOGR.exception(ex)
+            # try again...
+            time.sleep(2)
+            try:
+                read()
+            except Exception, ex:
+                LOGR.exception(ex)
 
     def _cert_changed(self, *args):
         # Reload certs
@@ -169,19 +214,20 @@ class ZmqTransport(ServerTransportBackend):
         """
         crt = None
         if not p.exists(crt_file):
-            return False
+            return False, None, None
         try:
             crt = m.X509.load_cert(crt_file)
+            subj = crt.get_subject()
             if req.verify(crt.get_pubkey()):
                 if self.config.security.use_org:
-                    return crt.get_subject().O
+                    return subj.O, subj.CN, crt.get_serial_number()
                 else:
-                    return 1
+                    return 'DEFAULT', subj.CN, crt.get_serial_number()
             else:
-                return False
+                return False, None, None
         except Exception, ex:
             LOGP.exception(ex)
-            return False
+            return False, None, None
         finally:
             del crt
 
@@ -192,7 +238,7 @@ class ZmqTransport(ServerTransportBackend):
             if not csr:
                 return False, 'INV_CSR'
 
-            cert_id = self._check_cert2req(crt_file_name, csr)
+            cert_id, cn, ser_no = self._check_cert2req(crt_file_name, csr)
             if cert_id:
                 # All is fine, cert is verified to be issued
                 # from the sent request and is OK to be send to node
@@ -210,6 +256,12 @@ class ZmqTransport(ServerTransportBackend):
                         # Return CA
                         ca_cert = open(self.config.security.ca).read()
 
+                    # Write record in /nodes
+                    node_cert_name = p.join(
+                        p.dirname(p.abspath(self.config.security.ca)),
+                        'nodes',
+                        '%s.%s.crt' % (cert_id, cn))
+                    open(node_cert_name, 'w').write(str(ser_no))
                     return True, (open(crt_file_name).read() +
                                   TOKEN_SEPARATOR +
                                   ca_cert +
@@ -225,29 +277,37 @@ class ZmqTransport(ServerTransportBackend):
             LOGP.exception(ex)
             return False, 'UNKNOWN'
         finally:
+            # clear locally stored crt files
+            if p.exists(crt_file_name):
+                os.unlink(crt_file_name)
             del csr
 
     def verify_node_request(self, node, request):
         base_path = p.join(p.dirname(
             p.abspath(self.config.security.ca)))
         # Check if node is already requested or signed
-        csr_file_name = p.join(base_path, 'reqs',
-                               '.'.join([node, 'csr']))
-        crt_file_name = p.join(base_path, 'nodes',
-                               '.'.join([node, 'crt']))
 
-        if node in self.ccont.list_all_approved():
+        # if node in self.ccont.list_all_approved():
             # cert already issued
-            return self._build_cert_response(node, request, crt_file_name)
+        #    return self._build_cert_response(node, request, crt_file_name)
         # Saving CSR
         csr = None
         try:
             csr = m.X509.load_request_string(str(request))
-            CN = csr.get_subject().CN
+            subj = csr.get_subject()
+            CN = subj.CN
+            OU = subj.OU or 'no--org'
+            csr_file_name = p.join(base_path, 'reqs',
+                                   '.'.join([OU, node, 'csr']))
+            crt_file_name = p.join(base_path,
+                                   'issued',
+                                   '.'.join([OU, node, 'crt']))
             if CN != node:
                 return False, "ERR_CN_FAIL"
             if not is_valid_host(CN):
                 return False, "ERR_NAME_FORBD"
+            if p.exists(crt_file_name):
+                return self._build_cert_response(node, request, crt_file_name)
             csr.save(csr_file_name)
             LOGP.info("Saved CSR file: %s" % csr_file_name)
         except Exception, ex:
@@ -257,12 +317,14 @@ class ZmqTransport(ServerTransportBackend):
             del csr
 
         if self.ccont.can_approve(node):
-            sign_res = self.ccont.sign(node=[node])
-            for _, data in sign_res:
+            kwargs = {}
+            if self.config.security.trust_verify:
+                kwargs['auto'] = True
+            messages, crt_file = self.ccont.sign_node(node, **kwargs)
+            for _, data in messages:
                 LOGP.info(data)
-                if data == '%s signed' % node:
-                    return self._build_cert_response(node, request,
-                                                     crt_file_name)
+            if crt_file:
+                return self._build_cert_response(node, request, crt_file)
             else:
                 return False, 'APPR_FAIL'
         else:

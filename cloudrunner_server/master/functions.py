@@ -23,10 +23,12 @@ from cloudrunner.util.loader import local_plugin_loader
 from cloudrunner_server.dispatcher import SCHEDULER_URI_TEMPLATE
 from cloudrunner_server.plugins.auth.base import NodeVerifier
 
+import fcntl
 import M2Crypto as m
 import json
 import os
 import random
+import re
 from socket import gethostname
 import stat
 from string import ascii_letters
@@ -47,6 +49,8 @@ try:
     C = l_c[0].rpartition('_')[-1]
 except:
     C = 'US'
+
+VALID_NAME = re.compile('^[a-zA-Z0-9\-_]+$')
 
 
 def yield_wrap(func):
@@ -75,14 +79,23 @@ class CertController(object):
         assert serial
         return int(serial) + 1
 
-    @serial_no.setter
-    def serial_no(self, value):
+    def serial_no_inc(self):
         serial_fn = os.path.join(self.ca_path, 'serial')
-        serial = open(serial_fn).read()
-        assert serial
-        open(serial_fn, 'w').write('%02s' % (int(serial) + 1))
+        if not os.path.exists(serial_fn):
+            serial = open(serial_fn, 'w')
+        else:
+            serial = os.open(serial_fn, os.O_RDWR)
+            current = os.read(serial, 1000)
+            os.ftruncate(serial, 0)
+            os.lseek(serial, 0, 0)
+        if not current:
+            current = 0
+        fcntl.flock(serial, fcntl.LOCK_EX)
+        new_serial = int(current) + 1
+        os.write(serial, '%02s' % new_serial)
+        os.close(serial)
+        return new_serial
 
-    @yield_wrap
     def get_approved_nodes(self, org=None):
         approved = []
         for (_dir, _, nodes) in os.walk(os.path.join(self.ca_path, 'nodes')):
@@ -92,7 +105,8 @@ class CertController(object):
                     node_cert = m.X509.load_cert(os.path.join(_dir, node))
                     subj = node_cert.get_subject()
                     if not org or subj.O == org:
-                        approved.append(subj.CN)
+                        approved.append((subj.CN,
+                                         node_cert.get_serial_number()))
                 except:
                     pass
                 finally:
@@ -125,20 +139,39 @@ class CertController(object):
         yield TAG, "Approved nodes:"
         for (_dir, _, nodes) in os.walk(os.path.join(self.ca_path, 'nodes')):
             for node in nodes:
-                node_cert = None
                 try:
-                    node_cert = m.X509.load_cert(os.path.join(_dir, node))
-                    subj = node_cert.get_subject()
-                    if self.config.security.use_org and subj.O:
-                        yield DATA, "%-40s %s" % (subj.CN, subj.O)
+                    if not node.endswith('.crt'):
+                        continue
+                    node = node.rstrip('.crt')
+                    org, _, node = node.partition('.')
+                    if self.config.security.use_org:
+                        yield DATA, "%-40s %s" % (node, org)
                     else:
-                        yield DATA, subj.CN
+                        if not node:
+                            node = org
+                        yield DATA, node
                     total_cnt += 1
                 except Exception, ee:
                     print ee
                     pass
-                finally:
-                    node_cert
+
+        for (_dir, _, nodes) in os.walk(os.path.join(self.ca_path, 'issued')):
+            for node in nodes:
+                try:
+                    if not node.endswith('.crt'):
+                        continue
+                    node = node.rstrip('.crt')
+                    org, _, node = node.partition('.')
+                    if self.config.security.use_org:
+                        yield DATA, "%-40s %s" % (node, org)
+                    else:
+                        if not node:
+                            node = org
+                        yield DATA, node
+                    total_cnt += 1
+                except Exception, ee:
+                    print ee
+                    pass
         if not total_cnt:
             yield DATA, '--None--'
 
@@ -147,14 +180,14 @@ class CertController(object):
         approved_nodes = []
         for (_dir, _, nodes) in os.walk(os.path.join(self.ca_path, 'nodes')):
             for node in nodes:
-                node_cert = None
                 try:
-                    node_cert = m.X509.load_cert(os.path.join(_dir, node))
-                    approved_nodes.append(node_cert.get_subject().CN)
+                    if not node.endswith('.crt'):
+                        continue
+                    node = node.rstrip('.crt')
+                    org, _, node = node.partition('.')
+                    approved_nodes.append(node)
                 except:
                     pass
-                finally:
-                    node_cert
         return approved_nodes
 
     @yield_wrap
@@ -178,12 +211,13 @@ class CertController(object):
     def sign(self, node=None, **kwargs):
         if node:
             for n in node:
-                for line in self.sign_node(n, **kwargs):
+                messages, _ = self.sign_node(n, **kwargs)
+                for line in messages:
                     yield line
 
-    @yield_wrap
     def sign_node(self, node, **kwargs):
         is_signed = False
+        messages = []
 
         for (_dir, _, reqs) in os.walk(os.path.join(self.ca_path, 'reqs')):
             for req in reqs:
@@ -202,8 +236,9 @@ class CertController(object):
                                 # Load from CSR
                                 ca = csr.get_subject().OU
                                 if not ca:
-                                    yield ERR, "OU is not found in CSR subject"
-                                    return
+                                    messages.append(
+                                        (ERR, "OU is not found in CSR subject"))
+                                    return messages, None
                             else:
                                 for verifier in NodeVerifier.__subclasses__():
                                     ca = verifier(
@@ -211,29 +246,46 @@ class CertController(object):
                                     if ca:
                                         break
                                 else:
-                                    yield ERR, "CA is mandatory for " \
-                                        "signing a node"
-                                    return
+                                    messages.append((
+                                        ERR, "CA is mandatory for "
+                                        "signing a node"))
+                                    return messages, None
                         if not self.config.security.use_org and ca:
-                            yield ERR, "Although CA value is passed, " \
-                                "it will be skipped for No-org setup."
+                            messages.append((
+                                ERR, "Although CA value is passed, "
+                                "it will be skipped for No-org setup."))
 
-                        yield TAG, "Signing %s" % node
+                        # Validate names
+                        if not VALID_NAME.match(node):
+                            messages.append((ERR, "Invalid node name"))
+                            return messages, None
+                        if self.config.security.use_org and \
+                            not VALID_NAME.match(ca):
+                            messages.append((ERR, "Invalid org name"))
+                            return messages, None
+
+                        if not csr.get_subject().OU:
+                            messages.append((ERR, "subject.OU is empty"))
+                            return messages, None
+
+                        messages.append((TAG, "Signing %s" % node))
                         if ca:
                             ca_cert_file = os.path.join(self.ca_path, 'org',
                                                         ca + '.ca.crt')
                             if not os.path.exists(ca_cert_file):
-                                yield ERR, "No CA certificate found " \
-                                    "for %s" % ca
-                                return
+                                messages.append((
+                                    ERR, "No CA certificate found "
+                                    "for %s" % ca))
+                                return messages, None
                             try:
                                 ca_priv_key = m.RSA.load_key(
                                     os.path.join(self.ca_path, 'org',
                                                  ca + '.key'),
                                     self.pass_cb)
                             except Exception, ca_ex:
-                                yield ERR, "Cannot load Sub-CA cert: %s" % ca_ex
-                                return
+                                messages.append((
+                                    ERR, "Cannot load Sub-CA cert: %s" % ca_ex))
+                                return messages, None
 
                         else:
                             # Use Master CA
@@ -250,8 +302,9 @@ class CertController(object):
 
                         cert = m.X509.X509()
                         cert.set_version(2)
-                        yield TAG, "Setting serial to %d" % self.serial_no
-                        cert.set_serial_number(self.serial_no)
+                        ser_no = self.serial_no_inc()
+                        messages.append((TAG, "Setting serial to %d" % ser_no))
+                        cert.set_serial_number(ser_no)
                         csr_subj = csr.get_subject()
                         cert.get_subject().C = csr_subj.C
                         cert.get_subject().CN = csr_subj.CN
@@ -271,23 +324,30 @@ class CertController(object):
                         assert cert.verify(ca_crt.get_pubkey())
 
                         if res < 0:
-                            yield ERR, "Sign failed"
+                            messages.append((ERR, "Sign failed"))
                         else:
-                            cert_file_name = os.path.join(self.ca_path,
-                                                          'nodes',
-                                                          '.'.join([node,
-                                                                    'crt']))
+                            if not os.path.exists(os.path.join(self.ca_path,
+                                                               'issued')):
+                                os.makedirs(os.path.join(self.ca_path,
+                                                         'issued'))
+                            cert_file_name = os.path.join(
+                                self.ca_path, 'issued',
+                                '.'.join([csr.get_subject().OU, node, 'crt']))
                             cert.save_pem(cert_file_name)
                             os.chmod(
                                 cert_file_name, stat.S_IREAD | stat.S_IWRITE)
+                            cert.save_pem(cert_file_name)
                             is_signed = True
-                            self.serial_no = self.serial_no + 1
                             os.unlink(os.path.join(_dir, req))
-                            yield DATA, "%s signed" % node
-                            yield DATA, "Issuer %s" % cert.get_issuer()
-                            yield DATA, "Subject %s" % cert.get_subject()
+                            messages.append((DATA, "%s signed" % node))
+                            messages.append((DATA,
+                                             "Issuer %s" % cert.get_issuer()))
+                            messages.append((DATA,
+                                             "Subject %s" % cert.get_subject()))
+                            return messages, cert_file_name
                 except Exception, ex:
                     print "Error: %r" % ex
+                    messages.append((ERR, "Error: %r" % ex))
                 finally:
                     del csr
                     del cert
@@ -297,7 +357,8 @@ class CertController(object):
                     del nowPlusYear
 
         if not is_signed:
-            yield EMPTY, "Nothing found to sign for %s" % node
+            messages.append((EMPTY, "Nothing found to sign for %s" % node))
+        return messages, None
 
     def _ensure_autosign(self):
         autosign = os.path.join(self.ca_path, 'autosign')
@@ -347,15 +408,56 @@ class CertController(object):
     @yield_wrap
     def revoke(self, node, **kwargs):
         for n in node:
-            yield TAG, "Revoking certificate for ", n
+            ca = kwargs.get('ca')
+            if self.config.security.use_org and not ca:
+                yield ERR, "OEG param is required to revoke"
+                return
+            if ca:
+                yield TAG, "Revoking certificate for %s:%s" % (ca, n)
+            else:
+                ca = 'DEFAULT'
+                yield TAG, "Revoking certificate for ", n
 
-            cert_fn = os.path.join(self.ca_path, 'nodes', n + '.crt')
-            if not os.path.exists(cert_fn):
-                yield DATA, "No signed certificate found for %s " % n
+            cert_fn = os.path.join(
+                self.ca_path, 'nodes', '%s.%s.crt' % (ca, n))
+            if os.path.exists(cert_fn):
+                ser_no = open(cert_fn).read().strip()
+                assert int(ser_no)
+                # Update CRL file
+                crl_file = open(os.path.join(self.ca_path, 'crl'), 'w')
+                fcntl.flock(crl_file, fcntl.LOCK_EX)
+                crl_file.write('%s\n' % ser_no)
+                crl_file.close()
+                yield DATA, "Removing signed certificate found for %s " % n
+                os.unlink(cert_fn)
+            issued_fn = os.path.join(
+                self.ca_path, 'issued', '%s.%s.crt' % (ca, n))
+            if os.path.exists(issued_fn):
+                yield DATA, "Removing issued certificate found for %s " % n
+                os.unlink(issued_fn)
+
+            yield DATA, "Certificate for node [%s] revoked" % n
+
+    @yield_wrap
+    def clear_req(self, node, **kwargs):
+        for n in node:
+            ca = kwargs.get('ca')
+            if self.config.security.use_org and not ca:
+                yield ERR, "OEG param is required to revoke"
+                return
+            if ca:
+                yield TAG, "Clearing requests for %s:%s" % (ca, n)
+            else:
+                yield TAG, "Clearing requests for ", n
+
+            req_fn = os.path.join(
+                self.ca_path, 'reqs', '%s.%s.csr' % (ca, n))
+            if not os.path.exists(req_fn):
+                yield DATA, "No pending request found for %s " % n
                 return
 
-            os.unlink(cert_fn)
-            yield DATA, "Certificate for node [%s] revoked" % n
+            os.unlink(req_fn)
+            yield DATA, "Request for node [%s] deleted" % n
 
     @yield_wrap
     def create_ca(self, ca, **kwargs):
@@ -570,6 +672,10 @@ class ConfigController(object):
         if not os.path.exists(nodes_dir):
             yield TAG, "Creating: ", nodes_dir
             os.makedirs(nodes_dir)
+        issued_dir = os.path.join(ca_path, 'issued')
+        if not os.path.exists(issued_dir):
+            yield TAG, "Creating: ", issued_dir
+            os.makedirs(issued_dir)
         subca_dir = os.path.join(ca_path, 'org')
         if not os.path.exists(subca_dir):
             yield TAG, "Creating: ", subca_dir

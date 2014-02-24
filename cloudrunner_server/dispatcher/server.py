@@ -331,7 +331,7 @@ class Dispatcher(Daemon):
         cert = CertController(CONFIG)
         org = remote_user_map.org if self.config.security.use_org else None
         nodes = cert.list_pending(org)
-        return (True, [node for node in nodes])
+        return (True, [node[0] for node in nodes])
 
     def list_active_nodes(self, payload, remote_user_map, **kwargs):
         tenant = self.backend.tenants.get(remote_user_map.org, [])
