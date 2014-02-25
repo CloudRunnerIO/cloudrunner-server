@@ -593,7 +593,10 @@ class ZmqTransport(ServerTransportBackend):
                     elif req.org not in self.tenants:
                         LOGR.warn("Unrecognized node: %s" % hb_msg[1:3])
                     else:
-                        LOGR.info("HB from %s" % req.peer)
+                        if self.config.security.use_org:
+                            LOGR.info("HB from %s@%s" % (req.peer, req.org))
+                        else:
+                            LOGR.info("HB from %s" % req.peer)
                         if self.tenants[req.org].push(req.peer):
                             # New node
                             LOGR.info("Node %s attached to %s" % (req.peer,
