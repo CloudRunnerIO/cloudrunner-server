@@ -104,7 +104,8 @@ class SignalHandlerPlugin(JobInOutProcessorPluginBase,
                              "from signal %(signal)s for user %(user)s" %
                              (meta))
 
-                    req = self._request(meta['user'], 'pwd123')
+                    token = ctx.create_auth_token(expiry=30)
+                    req = self._request(meta['user'], token)
                     req.append(control='dispatch')
                     script_name = None
                     if meta['is_link']:
@@ -120,8 +121,7 @@ class SignalHandlerPlugin(JobInOutProcessorPluginBase,
                         auth_kwargs = {}
                         if meta['auth']:
                             auth_kwargs['auth_user'] = meta['user']
-                            auth_kwargs['auth_token'] = ctx.create_auth_token(
-                                expiry=30)
+                            auth_kwargs['auth_token'] = token
 
                         status, script_content = load_from_link(
                             proto_tokens[0],
@@ -167,7 +167,8 @@ class SignalHandlerPlugin(JobInOutProcessorPluginBase,
 
     def _request(self, login, password):
         _req = AgentReq(login=login,
-                        password=password)
+                        password=password,
+                        auth_type=2)
         return _req
 
     def append_cli_args(self, arg_parser):

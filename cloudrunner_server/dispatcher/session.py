@@ -11,6 +11,7 @@ from cloudrunner.core.exceptions import ConnectionError
 from cloudrunner.core.message import JobInput
 from cloudrunner.core.message import JobRep
 from cloudrunner.core.message import StatusCodes
+from cloudrunner.util.string import stringify
 
 LOG = logging.getLogger('ServerSession')
 
@@ -41,7 +42,7 @@ class JobSession(Thread):
         for sub in self.manager.subscriptions.get(session_id, []):
             try:
                 self.job_done.send(
-                    *[sub.peer, ret_type] + [str(x) for x in data])
+                    *[sub.peer, ret_type] + [x for x in stringify(*data)])
             except zmq.ZMQError as e:
                 if self.manager.context.closed or zerr.errno == zmq.ETERM \
                         or zerr.errno == zmq.ENOTSOCK:

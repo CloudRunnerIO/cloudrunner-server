@@ -245,7 +245,7 @@ class Dispatcher(Daemon):
 
     # Actions
     def check_login(self, user, remote_user_map, **kwargs):
-        return True  # Already logged, kind of echo
+        return (True, remote_user_map.org)  # Already logged, return org
 
     def get_api_token(self, *args, **kwargs):
         (user, token, org) = self.auth.create_token(self.user_id,

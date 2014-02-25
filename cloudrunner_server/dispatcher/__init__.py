@@ -49,7 +49,8 @@ class PluginContext(object):
         return ctx
 
     def create_auth_token(self, expiry):
-        return self.auth.create_token(self.user_id, self.password, expiry)[1]
+        return self.auth.create_token(self.user_id, self.password,
+                                      expiry=expiry)[1]
 
 
 class Promise(object):
