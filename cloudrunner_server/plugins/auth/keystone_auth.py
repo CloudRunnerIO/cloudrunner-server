@@ -65,9 +65,12 @@ class KeystoneAuth(AuthPluginBase):
                 tenant_map = self._load_tenant_map(keystone, user, password)
                 return (True, tenant_map)
             return (False, None)
+        except client.exceptions.Unauthorized:
+            LOG.warn("Invalid login from %s" % user)
         except Exception, ex:
             LOG.exception(ex)
-            return (False, None)
+
+        return (False, None)
 
     def _get_tenants(self, client):
         if VERSION == 3:
@@ -98,9 +101,12 @@ class KeystoneAuth(AuthPluginBase):
                 tenant_map = self._load_tenant_map(keystone, user, token)
                 return (True, tenant_map)
             return (False, None)
+        except client.exceptions.Unauthorized:
+            LOG.warn("Invalid login from %s" % user)
         except Exception, ex:
             LOG.exception(ex)
-            return (False, None)
+
+        return (False, None)
 
     def create_token(self, user, password, expiry=None, **kwargs):
         try:
