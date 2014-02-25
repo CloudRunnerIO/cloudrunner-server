@@ -182,7 +182,6 @@ class ZmqTransport(ServerTransportBackend):
 
     def _cert_changed(self, *args):
         # Reload certs
-        appr_nodes = self.ccont.get_approved_nodes()
         if self.config.security.use_org:
             orgs = [ca[1] for ca in self.ccont.list_ca()]
         else:

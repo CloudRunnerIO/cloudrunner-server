@@ -100,17 +100,24 @@ class CertController(object):
         approved = []
         for (_dir, _, nodes) in os.walk(os.path.join(self.ca_path, 'nodes')):
             for node in nodes:
-                node_cert = None
                 try:
-                    node_cert = m.X509.load_cert(os.path.join(_dir, node))
-                    subj = node_cert.get_subject()
-                    if not org or subj.O == org:
-                        approved.append((subj.CN,
-                                         node_cert.get_serial_number()))
+                    node = node.rstrip('.crt')
+                    org, _, node = node.partition('.')
+                    if not node:
+                        node = org
+                    approved.append(node)
                 except:
                     pass
-                finally:
-                    del node_cert
+        for (_dir, _, nodes) in os.walk(os.path.join(self.ca_path, 'issued')):
+            for node in nodes:
+                try:
+                    node = node.rstrip('.crt')
+                    org, _, node = node.partition('.')
+                    if not node:
+                        node = org
+                    approved.append(node)
+                except:
+                    pass
         return approved
 
     @yield_wrap
@@ -144,11 +151,12 @@ class CertController(object):
                         continue
                     node = node.rstrip('.crt')
                     org, _, node = node.partition('.')
+                    if not node:
+                        node = org
+                        org = ''
                     if self.config.security.use_org:
                         yield DATA, "%-40s %s" % (node, org)
                     else:
-                        if not node:
-                            node = org
                         yield DATA, node
                     total_cnt += 1
                 except Exception, ee:
@@ -162,11 +170,12 @@ class CertController(object):
                         continue
                     node = node.rstrip('.crt')
                     org, _, node = node.partition('.')
+                    if not node:
+                        node = org
+                        org = ''
                     if self.config.security.use_org:
                         yield DATA, "%-40s %s" % (node, org)
                     else:
-                        if not node:
-                            node = org
                         yield DATA, node
                     total_cnt += 1
                 except Exception, ee:
@@ -410,7 +419,7 @@ class CertController(object):
         for n in node:
             ca = kwargs.get('ca')
             if self.config.security.use_org and not ca:
-                yield ERR, "OEG param is required to revoke"
+                yield ERR, "ORG param is required to revoke"
                 return
             if ca:
                 yield TAG, "Revoking certificate for %s:%s" % (ca, n)
