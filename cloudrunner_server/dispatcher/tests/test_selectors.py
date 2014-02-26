@@ -45,6 +45,7 @@ class TestSelectors(base.BaseTestCase):
         self.assertIsNotNone(disp.transport_class)
         disp.user_id = 'some_user'
         disp.user_token = 'some_token'
+        disp.auth_type = 2
 
         ret_data3 = [
             ['PIPE', 'JOB_ID', 'admin', '["STDOUT", "RUN 3 OUT"]'],

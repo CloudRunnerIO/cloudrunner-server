@@ -232,6 +232,7 @@ class TestServer(base.BaseTestCase):
             self.assertIsNotNone(disp.transport_class)
             disp.user_id = 'some_user'
             disp.user_token = 'some_token'
+            disp.auth_type = 2
 
             self.assertEqual(disp.get_api_token('xxx', {}),
                              ['TOKEN', '1' * 60, 'MyOrg'])

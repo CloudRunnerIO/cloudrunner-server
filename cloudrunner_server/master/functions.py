@@ -102,9 +102,11 @@ class CertController(object):
             for node in nodes:
                 try:
                     node = node.rstrip('.crt')
-                    org, _, node = node.partition('.')
+                    o, _, node = node.partition('.')
+                    if org and o != org:
+                        continue
                     if not node:
-                        node = org
+                        node = o
                     approved.append(node)
                 except:
                     pass
@@ -112,9 +114,12 @@ class CertController(object):
             for node in nodes:
                 try:
                     node = node.rstrip('.crt')
-                    org, _, node = node.partition('.')
+                    o, _, node = node.partition('.')
+                    o, _, node = node.partition('.')
+                    if org and o != org:
+                        continue
                     if not node:
-                        node = org
+                        node = o
                     approved.append(node)
                 except:
                     pass
