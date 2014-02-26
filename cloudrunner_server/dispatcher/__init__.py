@@ -40,17 +40,18 @@ class PluginContext(object):
             self.props[name] = prop
         super(PluginContext, self).__setattr__(name, prop)
 
-    def instance(self, user_id, password):
+    def instance(self, user_id, password, auth_type=1):
         ctx = PluginContext(self.auth)
         ctx.user_id = user_id
         ctx.password = password
+        ctx.is_token = auth_type == 2
         for name, prop in self.props.items():
             setattr(ctx, name, prop)
         return ctx
 
     def create_auth_token(self, expiry):
         return self.auth.create_token(self.user_id, self.password,
-                                      expiry=expiry)[1]
+                                      expiry=expiry, is_token=self.is_token)[1]
 
 
 class Promise(object):

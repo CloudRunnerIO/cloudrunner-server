@@ -90,7 +90,7 @@ class KeystoneAuth(AuthPluginBase):
         return access_map
 
     def validate(self, user, token):
-        """x
+        """
         Authenticate using issued auth token
         """
         try:
@@ -109,17 +109,23 @@ class KeystoneAuth(AuthPluginBase):
         return (False, None)
 
     def create_token(self, user, password, expiry=None, **kwargs):
+        # create new token from token
+        auth_kwargs = dict(username=user)
+        if kwargs.get('is_token'):
+            auth_kwargs['token'] = password
+        else:
+            auth_kwargs['password'] = password
         try:
-            keystone = client.Client(username=user, password=password,
-                                     auth_url=self.AUTH_URL,
-                                     timeout=self.timeout)
+            keystone = client.Client(auth_url=self.AUTH_URL,
+                                     timeout=self.timeout, **auth_kwargs)
             if keystone.authenticate():
                 tenant_map = self._load_tenant_map(keystone, user, password)
-                token = keystone.tokens.authenticate(
-                    username=user, password=password)
+                token = keystone.tokens.authenticate(**auth_kwargs)
                 return user, token.token['id'], tenant_map.org
         except Exception, ex:
-            LOG.exception(ex)
+            LOG.error(ex)
+            LOG.error(user)
+            LOG.error(password)
             return (None, None, None)
 
     def list_users(self):

@@ -95,6 +95,7 @@ class SignalHandlerPlugin(JobInOutProcessorPluginBase,
             for sig in signals:
                 key = '%s__%s' % (user_org[1], sig)
                 handlers[sig] = red.smembers(key)
+
         for sig, handlers in handlers.items():
             for handler in set(handlers):
                 meta = red.hgetall(handler + '__meta')

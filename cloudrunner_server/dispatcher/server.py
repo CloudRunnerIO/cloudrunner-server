@@ -234,6 +234,7 @@ class Dispatcher(Daemon):
         self.plugin_context.lib_plugins = lib_plugins
 
     def _login(self, auth_type=1):
+        self.auth_type = auth_type
         LOG.debug("[Login][%s]: %s" % (auth_type, self.user_id))
 
         if auth_type == 1:
@@ -249,7 +250,9 @@ class Dispatcher(Daemon):
 
     def get_api_token(self, *args, **kwargs):
         (user, token, org) = self.auth.create_token(self.user_id,
-                                                    self.user_token, **kwargs)
+                                                    self.user_token,
+                                                    is_token=self.auth_type,
+                                                    **kwargs)
         if token:
             return ["TOKEN", token, org]
         else:
@@ -309,7 +312,8 @@ class Dispatcher(Daemon):
                 ns, _ = plugin.parser.parse_known_args(args)
                 ret = plugin().call(user_org, payload,
                                     self.plugin_context.instance(
-                                    self.user_id, self.user_token),
+                                    self.user_id, self.user_token,
+                                    auth_type=self.auth_type),
                                     ns)
                 if ret:
                     resp.append(ret)
@@ -398,7 +402,8 @@ class Dispatcher(Daemon):
 
         promise = self.manager.prepare_session(
             self.user_id, session_id, payload, remote_user_map,
-            self.plugin_context.instance(self.user_id, self.user_token),
+            self.plugin_context.instance(self.user_id, self.user_token,
+                                         auth_type=self.auth_type),
             **kwargs)
         promise.main = True
         return promise
