@@ -17,20 +17,20 @@ all: clean
 
 .PHONY: sdist
 sdist: clean
-	rm -rf dist/cloudrunner_server*.tar.gz
+	rm -rf dist/cloudrunner-server*.tar.gz
 	$(__python) setup.py sdist
 
 
 .PHONY: rpm
 rpm: sdist
 	rm -rf ~/rpmbuild/SOURCES/cloudrunner_server*.tar.gz
-	rm -rf ~/rpmbuild/RPMS/noarch/cloudrunner_server*.rpm
-	rm -rf ~/rpmbuild/SRPMS/cloudrunner_server*.src.rpm
+	rm -rf ~/rpmbuild/RPMS/noarch/cloudrunner-server*.rpm
+	rm -rf ~/rpmbuild/SRPMS/cloudrunner-server*.src.rpm
 	cp dist/cloudrunner_server*.tar.gz ~/rpmbuild/SOURCES/
-	cp cloudrunner_server.spec.in cloudrunner_server.spec
-	sed -i 's/^Release:.*/Release:        $(REV).$(BRANCH)%{?dist}/g' cloudrunner_server.spec
-	rpmbuild -ba cloudrunner_server.spec
-	rm cloudrunner_server.spec
+	cp cloudrunner-server.spec.in cloudrunner-server.spec
+	sed -i 's/^Release:.*/Release:        $(REV).$(BRANCH)%{?dist}/g' cloudrunner-server.spec
+	rpmbuild -ba cloudrunner-server.spec
+	rm cloudrunner-server.spec
 
 .PHONY: rpm-el5_64
 rpm-el5_64: sdist
