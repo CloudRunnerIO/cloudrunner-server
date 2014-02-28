@@ -177,7 +177,7 @@ class CronScheduler(CliArgsProvider):
         return (False, 'Not found')
 
     def view(self, user, name, **kwargs):
-        crons = self._own(name=name)
+        crons = self._own(user)
         for job in crons:
             try:
                 content = open(job.file).read()

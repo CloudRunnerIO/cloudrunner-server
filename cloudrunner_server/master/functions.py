@@ -966,7 +966,7 @@ class SchedulerController(object):
             print colors.red("=" * 50, bold=1)
             exit(1)
         if self.config.transport:
-            backend_class = local_plugin_loader(self.config.transport)
+            self.backend_class = local_plugin_loader(self.config.transport)
         else:
             print colors.red("=" * 50, bold=1)
             print colors.red("Cannot find backend transport class. "
@@ -974,7 +974,7 @@ class SchedulerController(object):
             print colors.red("=" * 50, bold=1)
             exit(1)
 
-        self.backend = backend_class(self.config)
+        self.scheduler = scheduler_class()
 
     @yield_wrap
     def list(self, **kwargs):
@@ -989,11 +989,18 @@ class SchedulerController(object):
         Run Cloudrunner script from scheduled task.
         Usually invoked from CronTab or other scheduler.
         '''
-        sched_queue = self.backend.publish_queue('scheduler')
-
         _req = ScheduleReq('schedule', job_id)
-        sched_queue.send(*_req.pack())
-        yield DATA, "Job %s sent for execution" % job_id
+        scheduler_queue = None
+        try:
+            backend = self.backend_class(self.config)
+            scheduler_queue = backend.publish_queue('scheduler')
+            scheduler_queue.send(*_req.pack())
+            yield DATA, "Job %s sent for execution" % job_id
+        except Exception, ex:
+            yield ERR, str(ex)
+        finally:
+            if scheduler_queue:
+                scheduler_queue.close()
 
 
 class UserController(object):
