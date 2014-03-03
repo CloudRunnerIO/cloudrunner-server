@@ -144,6 +144,8 @@ rm -rf %{buildroot}
 
 %{python_sitelib}/cloudrunner_server/tests/*
 %{python_sitelib}/cloudrunner_server/__init__*
+%{python_sitelib}/cloudrunner_server/version.*
+
 %{python_sitelib}/cloudrunner_server/plugins
 %{python_sitelib}/cloudrunner_server-%{version}-py*.egg-info
 
