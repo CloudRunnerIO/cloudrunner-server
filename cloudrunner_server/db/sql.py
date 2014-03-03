@@ -24,10 +24,9 @@ def column_to_sql(column):
     col_def = SQL_TYPES.get(column.col_type, None)
 
     if col_def is None:
-        raise Exception("Cannot define column as {}. "
-                        "Supported types are {}".format(
-            column.col_type, SQL_TYPES.keys()
-        ))
+        raise Exception("Cannot define column as %s. "
+                        "Supported types are %s" %
+            (column.col_type, SQL_TYPES.keys()))
     sql_def = col_def % column.kwargs
 
 
@@ -41,7 +40,7 @@ def column_to_sql(column):
         sql_def += " NOT NULL"
 
     if column.default is not None:
-        sql_def += " DEFAULT {}".format(column.default)
+        sql_def += " DEFAULT %s" % (column.default)
 
     return sql_def
 
@@ -93,12 +92,12 @@ class Table(object):
 
     def create(self):
         if self.schema is None:
-            raise Exception('There is no schema defined for table "{}"'.format(
+            raise Exception('There is no schema defined for table "%s"' % (
                 self.tablename
             ))
 
         if self.exists():
-            raise Exception('Table {} already exist'.format(self.tablename))
+            raise Exception('Table %s already exist' % (self.tablename))
 
         table_str = generate_table_str(table_name=self.tablename, **self.schema)
         return self.db.query(table_str)

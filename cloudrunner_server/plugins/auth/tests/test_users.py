@@ -101,7 +101,7 @@ class TestUsersWithOrg(base.BaseTestCase):
     def fixture(self):
         _, file_name = tempfile.mkstemp()
         self.db = file_name
-        db_url = "sqlite:///{}".format(self.db)
+        db_url = "sqlite:///%s" % (self.db)
         base.CONFIG.users.db = db_url
         base.CONFIG.security.use_org = True
         local_plugin_loader(base.CONFIG.auth)
@@ -167,7 +167,7 @@ class TestUsersWithOrg(base.BaseTestCase):
     def test_list_all(self):
         users = []
         for idx in range(10):
-            username = 'user{}'.format(idx)
+            username = 'user%s' % (idx)
             self.auth.create_user(username, 'token', 'MyOrg')
             users.append((username, 'MyOrg'))
 
