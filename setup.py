@@ -27,7 +27,7 @@ if sys.version_info < (2, 7):
 from distutils.core import setup
 from setuptools import find_packages
 
-from version import VERSION
+from cloudrunner_server.version import VERSION
 
 test_requirements = ['nose>=1.0', 'mock', 'coverage']
 
