@@ -95,24 +95,28 @@ class ZmqTransport(ServerTransportBackend):
         )
 
         self.buses.scheduler = Pipe(
-            "inproc://scheduler-push",
+            "ipc://%(sock_dir)s/scheduler-push.sock" % config,
             "inproc://scheduler-pull"
         )
 
-        self.endpoints = {
-            'logger': "inproc://logger-queue",
-            'logger_fanout': config.logger_uri or (
+        self.endpoints={
+            'logger':
+                "inproc://logger-queue",
+            'logger_fanout':
+                config.logger_uri or (
                 "ipc://%(sock_dir)s/logger.sock" % config),
-            'node_reply': 'tcp://%s' % config.master_repl,
-            'publisher': "inproc://pub-proxy.sock",
+            'node_reply':
+                'tcp://%s' % config.master_repl,
+            'publisher':
+                "inproc://pub-proxy.sock",
         }
 
         self.config = config
         self.router = Router(self.config, self.context,
                              self.buses, self.endpoints, self.running)
-        self.crypter = TLSServerCrypt(config.security.server_key,
-                                      cert_password=config.security.cert_pass)
-        self.subca_dir = p.join(
+        self.crypter=TLSServerCrypt(config.security.server_key,
+                                      cert_password = config.security.cert_pass)
+        self.subca_dir=p.join(
             p.dirname(p.abspath(self.config.security.ca)), 'org')
         self._watch_dir('CD', self.subca_dir, callback=self._cert_changed)
 

@@ -184,15 +184,9 @@ class AuthDb(object):
             },
             what="user_id"
         )
+
         user_token = list(user_token)
 
-        # user_token = cur.execute("SELECT user_id FROM Tokens "
-        #                         "INNER JOIN Users "
-        #                         "ON Users.id = Tokens.user_id "
-        #                         "WHERE username = ? AND Tokens.token = ? "
-        #                         "AND expiry > ?",
-        #                        (username, token,
-        #                            datetime.datetime.now())).fetchone()
         if user_token:
             return user_token[0].user_id, username
         LOG.info("Token validation failed for user %s" % username)
@@ -408,14 +402,14 @@ class AuthDb(object):
                 expiry_date = datetime.datetime.now() + \
                     datetime.timedelta(minutes=expiry)
             # Purge old tokens
-            self.dbm.user_tokens.delete(where="expiry<date('now')")
+            self.dbm.user_tokens.delete(where="expiry < date('now')")
             self.dbm.user_tokens.insert(
                 user_id=user_id,
                 token=token,
                 expiry=expiry_date
             )
             LOG.info("Creating api token for user %s, "
-                     "expires at: %s" % (user, expiry))
+                     "expires at %s" % (user, expiry_date))
             return user, token, org
         return (None, None, None)
 

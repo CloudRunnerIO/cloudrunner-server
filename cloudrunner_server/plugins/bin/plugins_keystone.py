@@ -52,7 +52,7 @@ def install():
         print "Enter Keystone admin password:"
         admin_pass = raw_input('> ')
 
-    print "Testing..."
+    print "Testing connection to Keystone server:"
 
     class ConfigMock(object):
 
