@@ -99,24 +99,24 @@ class ZmqTransport(ServerTransportBackend):
             "inproc://scheduler-pull"
         )
 
-        self.endpoints={
+        self.endpoints = {
             'logger':
-                "inproc://logger-queue",
+            "inproc://logger-queue",
             'logger_fanout':
-                config.logger_uri or (
+            config.logger_uri or (
                 "ipc://%(sock_dir)s/logger.sock" % config),
             'node_reply':
-                'tcp://%s' % config.master_repl,
+            'tcp://%s' % config.master_repl,
             'publisher':
-                "inproc://pub-proxy.sock",
+            "inproc://pub-proxy.sock",
         }
 
         self.config = config
         self.router = Router(self.config, self.context,
                              self.buses, self.endpoints, self.running)
-        self.crypter=TLSServerCrypt(config.security.server_key,
-                                      cert_password = config.security.cert_pass)
-        self.subca_dir=p.join(
+        self.crypter = TLSServerCrypt(config.security.server_key,
+                                      cert_password=config.security.cert_pass)
+        self.subca_dir = p.join(
             p.dirname(p.abspath(self.config.security.ca)), 'org')
         self._watch_dir('CD', self.subca_dir, callback=self._cert_changed)
 
@@ -338,7 +338,6 @@ class ZmqTransport(ServerTransportBackend):
                 return False, 'SEND_CSR'
 
     def loop(self):
-        Thread(target=self.pubsub_queue).start()
         ioloop.IOLoop.instance().start()
 
     def prepare(self):
@@ -481,6 +480,8 @@ class ZmqTransport(ServerTransportBackend):
         self.bindings['scheduler'] = True
 
         Thread(target=user_input_queue).start()
+
+        Thread(target=self.pubsub_queue).start()
 
         self.bindings["user_input"] = True
 
