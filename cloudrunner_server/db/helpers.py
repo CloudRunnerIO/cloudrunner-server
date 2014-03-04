@@ -30,5 +30,8 @@ def parse_dburl(dburl):
         res['host'] = parsed.hostname
     if parsed.port:
         res['port'] = parsed.port
-    res['db'] = parsed.path
+    db_path = parsed.path
+    if parsed.netloc:
+        db_path = parsed.path.lstrip('/')
+    res['db'] = db_path
     return res

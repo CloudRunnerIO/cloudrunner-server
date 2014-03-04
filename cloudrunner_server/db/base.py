@@ -983,10 +983,16 @@ class DB:
         """Start a transaction."""
         return Transaction(self.ctx)
 
+    def supports(self, what):
+        # Assume True if not specified
+        return self.__SUPPORTS__.get(what, True)
+
 
 class PostgresDB(DB):
 
     """Postgres driver."""
+
+    __SUPPORTS__ = {'autoincrement': False}
 
     def __init__(self, **keywords):
         if 'pw' in keywords:
@@ -1085,6 +1091,8 @@ def import_driver(drivers, preferred=None):
 
 class SqliteDB(DB):
 
+    __SUPPORTS__ = {'autoincrement': False}
+
     def __init__(self, **keywords):
         db = import_driver(
             ["sqlite3", "pysqlite2.dbapi2", "sqlite"], preferred=keywords.pop('driver', None))
@@ -1108,11 +1116,6 @@ class SqliteDB(DB):
         return query, SQLQuery('SELECT last_insert_rowid();')
 
     def query(self, *a, **kw):
-        if self.db_driver == 'sqlite3':
-            # No auto-increment
-            if isinstance(a[0], basestring) and a[0].startswith('CREATE '):
-                a = list(a)
-                a[0] = a[0].replace(' AUTOINCREMENT', '')
         out = DB.query(self, *a, **kw)
         if isinstance(out, iterbetter):
             del out.__len__

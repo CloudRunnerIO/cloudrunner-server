@@ -1,39 +1,56 @@
 __author__ = 'Ivelin Slavov'
 
 SQL_TYPES = {
-        'boolean': 'CHAR(1)',
-        'string': 'VARCHAR(%(length)s)',
-        'text': 'LONGTEXT',
-        'blob': 'LONGBLOB',
-        'integer': 'INTEGER',
-        'bigint': 'BIGINT',
-        'float': 'FLOAT',
-        'double': 'DOUBLE',
-        'decimal': 'NUMERIC(%(precision)s,%(scale)s)',
-        'date': 'DATE',
-        'time': 'TIME',
-        'datetime': 'DATETIME',
-        'timestamp': 'TIMESTAMP',
-        'id': 'INTEGER AUTOINCREMENT NOT NULL',
-        'reference': 'INT, INDEX %(index_name)s (%(field_name)s), FOREIGN KEY '
-                     '(%(field_name)s) REFERENCES %(foreign_key)s '
-                     'ON DELETE %(on_delete_action)s',
-        }
+    'boolean': 'CHAR(1)',
+    'string': 'VARCHAR(%(length)s)',
+    'text': 'LONGTEXT',
+    'blob': 'LONGBLOB',
+    'integer': 'INTEGER',
+    'bigint': 'BIGINT',
+    'float': 'FLOAT',
+    'double': 'DOUBLE',
+    'decimal': 'NUMERIC(%(precision)s,%(scale)s)',
+    'date': 'DATE',
+    'time': 'TIME',
+    'datetime': 'DATETIME',
+    'timestamp': 'TIMESTAMP',
+    'id': 'INTEGER AUTOINCREMENT NOT NULL',
+    'reference': 'INT, INDEX %(index_name)s (%(field_name)s), FOREIGN KEY '
+    '(%(field_name)s) REFERENCES %(foreign_key)s '
+    'ON DELETE %(on_delete_action)s',
+}
 
-def column_to_sql(column):
-    col_def = SQL_TYPES.get(column.col_type, None)
+SQL_OVERRIDES = {
+    'postgres': {
+    'id': 'INTEGER SERIAL NOT NULL',
+    'text': 'TEXT',
+    },
+    'sqlite3': {
+    'id': 'INTEGER NOT NULL'
+    }
+}
+
+
+def column_to_sql(db, column):
+
+    col_def = None
+    if db.dbname in SQL_OVERRIDES:
+        # Check for override
+        col_def = SQL_OVERRIDES[db.dbname].get(column.col_type)
+
+    if not col_def:
+        col_def = SQL_TYPES.get(column.col_type, None)
 
     if col_def is None:
         raise Exception("Cannot define column as %s. "
                         "Supported types are %s" %
-            (column.col_type, SQL_TYPES.keys()))
+                       (column.col_type, SQL_TYPES.keys()))
     sql_def = col_def % column.kwargs
-
 
     if column.primary_key:
         sql_def += " PRIMARY KEY"
 
-    if column.autoincrement:
+    if column.autoincrement and db.supports('autoincrement'):
         sql_def += " AUTOINCREMENT"
 
     if not column.null:
@@ -45,7 +62,7 @@ def column_to_sql(column):
     return sql_def
 
 
-def generate_table_str(table_name, **kwargs):
+def generate_table_str(db, table_name, **kwargs):
     """
     Generate create table sql:
         >>> generate_table_str('mytable2', \
@@ -53,15 +70,17 @@ def generate_table_str(table_name, **kwargs):
         name=Column('string', length=32))
         'CREATE TABLE mytable2 (id INT PRIMARY KEY NOT NULL,\\nname VARCHAR(32))'
     """
+
     create_table_tpl = "CREATE TABLE %(table_name)s (%(column_definitions)s)"
     column_definitions = ", ".join(
-        "%s %s" % (name, column_to_sql(column)) for name, column in kwargs.items()
+        "%s %s" % (name, column_to_sql(db, column))
+        for name, column in kwargs.items()
     )
 
     create_table_str = create_table_tpl % {
         "table_name": table_name,
         "column_definitions": column_definitions
-        }
+    }
     return create_table_str
 
 
@@ -70,7 +89,9 @@ def proxy_for_table(func, table_name):
         return func(table_name, *args, **kwargs)
     return wrapped
 
+
 class Table(object):
+
     def __init__(self, db, tablename, schema=None):
         self.tablename = tablename
         self.db = db
@@ -99,7 +120,9 @@ class Table(object):
         if self.exists():
             raise Exception('Table %s already exist' % (self.tablename))
 
-        table_str = generate_table_str(table_name=self.tablename, **self.schema)
+        table_str = generate_table_str(db=self.db,
+                                       table_name=self.tablename,
+                                       **self.schema)
         return self.db.query(table_str)
 
     def join(self, table):
