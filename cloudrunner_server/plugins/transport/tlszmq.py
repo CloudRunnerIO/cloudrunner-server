@@ -526,7 +526,7 @@ class _TLSZmq(object):
             # 2: SSL_ERROR_WANT_READ
             return True
         if err:
-            self.LOG.error("SSL Error: [%s] %s" % (err,
+            self.LOG.warn("SSL Error: [%s] %s" % (err,
                           (m.m2.err_reason_error_string(err))))
             return False
         return True
@@ -539,7 +539,7 @@ class _TLSZmq(object):
                 # break
                 if self.is_client:
                     raise ConnectionException(ex.message)
-                self.LOG.error("SSL ERROR: %s" % str(ex))
+                self.LOG.warn("SSL ERROR: %s" % str(ex))
                 break
             if rc is None:
                 break

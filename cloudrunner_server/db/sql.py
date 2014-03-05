@@ -27,6 +27,9 @@ SQL_OVERRIDES = {
     },
     'sqlite3': {
     'id': 'INTEGER NOT NULL'
+    },
+    'sqlite': {
+    'id': 'INTEGER NOT NULL'
     }
 }
 
