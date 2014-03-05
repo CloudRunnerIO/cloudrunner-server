@@ -117,15 +117,13 @@ class UserMap(AuthPluginBase):
 class AuthDb(object):
     SCHEMA = {
         "organizations": {
-            "id": Column('integer', primary_key=True, null=False,
-                         autoincrement=True),
+            "id": Column('id', primary_key=True, null=False),
             "name": Column('string', length=80),
             "org_uid": Column('text'),
             "active": Column('boolean', default=1),
         },
         "users": {
-            "id": Column('integer', primary_key=True, null=False,
-                         autoincrement=True),
+            "id": Column('id', primary_key=True, null=False),
             "username": Column('string', length=80),
             "token": Column('text'),
             "org_uid": Column('text'),
@@ -134,7 +132,7 @@ class AuthDb(object):
         "access_map": {
             "user_id": Column('integer'),
             "servers": Column('text'),
-            "role": Column('boolean'),
+            "role": Column('string', length=120),
         },
         "user_tokens": {
             "user_id": Column('integer'),
@@ -243,7 +241,7 @@ class AuthDb(object):
             uid = str(uuid.uuid1())
             self.dbm.organizations.insert(name=org_name, org_uid=uid)
         except Exception as exc:
-            return False, "Cannot create organization"
+            return False, "Cannot create organization, error: %r" % exc
         return True, uid
 
     def create(self, username, password, org_name=None):

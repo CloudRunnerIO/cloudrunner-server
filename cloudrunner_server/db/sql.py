@@ -22,8 +22,9 @@ SQL_TYPES = {
 
 SQL_OVERRIDES = {
     'postgres': {
-    'id': 'INTEGER SERIAL NOT NULL',
+    'id': 'SERIAL NOT NULL',
     'text': 'TEXT',
+    'boolean': 'INTEGER'
     },
     'sqlite3': {
     'id': 'INTEGER NOT NULL'

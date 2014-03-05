@@ -54,6 +54,12 @@ class LibIncludePlugin(IncludeLibPluginBase, ArgsProvider, CliArgsProvider):
         if not p.exists(self.lib_dir):
             os.makedirs(self.lib_dir)
 
+    def _system(self):
+            system_lib_dir = p.join(self.lib_dir, '__system__')
+            if not p.exists(system_lib_dir):
+                os.makedirs(system_lib_dir)
+            return system_lib_dir
+
     def _dir(self, is_public, user_org):
         if is_public:
             public_lib_dir = p.join(self.lib_dir, user_org[1],
@@ -125,7 +131,11 @@ class LibIncludePlugin(IncludeLibPluginBase, ArgsProvider, CliArgsProvider):
 
     def _load_local(self, user_org, name, **kwargs):
         is_public = kwargs.get('is_public', False)
-        _lib_dir = self._dir(is_public, user_org)
+        is_system = kwargs.get('is_system', False)
+        if is_system:
+            _lib_dir = self._system()
+        else:
+            _lib_dir = self._dir(is_public, user_org)
 
         lib_file = self._append_path(_lib_dir, name)
         if not lib_file:
@@ -134,6 +144,11 @@ class LibIncludePlugin(IncludeLibPluginBase, ArgsProvider, CliArgsProvider):
         if not is_public and not p.exists(lib_file):
             # try last resort to lookup in Public, if is_public is ommited
             _lib_dir = self._dir(True, user_org)
+            lib_file = self._append_path(_lib_dir, name)
+
+        if not is_public and not is_system and not p.exists(lib_file):
+            # try last resort to lookup in Public, if is_public is ommited
+            _lib_dir = self._system()
             lib_file = self._append_path(_lib_dir, name)
 
         if not p.exists(lib_file):
@@ -145,6 +160,7 @@ class LibIncludePlugin(IncludeLibPluginBase, ArgsProvider, CliArgsProvider):
         scripts = {}
         scripts['public'] = []
         scripts['private'] = []
+        scripts['system'] = []
 
         # Private
         lib_path = self._dir(False, user_org)
@@ -180,6 +196,19 @@ class LibIncludePlugin(IncludeLibPluginBase, ArgsProvider, CliArgsProvider):
                                                   p.join(_dir,
                                                          _file),
                                               pub_dir)))
+
+        # System
+        sys_dir = self._system()
+        for (_dir, _, _files) in os.walk(sys_dir):
+            for _file in _files:
+                if _file.endswith('.meta'):
+                    continue
+                owner = 'system'
+                scripts['system'].append(dict(owner=owner,
+                                              name=p.relpath(
+                                                  p.join(_dir,
+                                                         _file),
+                                              sys_dir)))
 
         return True, scripts
 
@@ -253,6 +282,10 @@ class LibIncludePlugin(IncludeLibPluginBase, ArgsProvider, CliArgsProvider):
         show = lib_actions.add_parser('show', add_help=False,
                                       help='Show a library item')
         show.add_argument('name', help='Library item name')
+        show.add_argument('--public', help='Search in Public',
+                          action='store_true')
+        show.add_argument('--system', help='Search in System',
+                          action='store_true')
 
         add = lib_actions.add_parser('add', add_help=False,
                                      help='Add new library item')
@@ -284,6 +317,10 @@ class LibIncludePlugin(IncludeLibPluginBase, ArgsProvider, CliArgsProvider):
                     rows.append('PRIVATE')
                     for item in items['private']:
                         rows.append('%-40s%s' % (item['name'], item['owner']))
+                if items['system']:
+                    rows.append('SYSTEM')
+                    for item in items['system']:
+                        rows.append('%-40s%s' % (item['name'], item['owner']))
 
                 return (True, '\n'.join(rows))
             return success, items
@@ -293,7 +330,9 @@ class LibIncludePlugin(IncludeLibPluginBase, ArgsProvider, CliArgsProvider):
                             is_public=not args.private)
 
         elif args.action == 'show':
-            return self.show(user_org, args.name)
+            return self.show(user_org, args.name,
+                             is_public=args.public,
+                             is_system=args.system)
 
         elif args.action == 'delete':
             return self.delete(user_org, args.name)
