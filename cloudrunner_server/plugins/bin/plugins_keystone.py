@@ -63,6 +63,7 @@ def install():
             self.auth_pass = password
             self.auth_admin_tenant = None
             self.auth_timeout = None
+            self.token_expiration = None
 
     mock_config = ConfigMock(auth_url, admin_url, admin_user, admin_pass)
 

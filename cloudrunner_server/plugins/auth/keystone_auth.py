@@ -50,6 +50,7 @@ class KeystoneAuth(AuthPluginBase):
         self.admin_pass = config.auth_pass
         self.admin_tenant = config.auth_admin_tenant or 'admin'
         self.timeout = int(config.auth_timeout or 5)
+        self.token_expiration = int(config.token_expiration or 1440)
         self._token_cache = {}
         LOG.info("Keystone Auth with %s" % self.AUTH_URL)
 
@@ -140,25 +141,13 @@ class KeystoneAuth(AuthPluginBase):
                                      password=self.admin_pass,
                                      auth_url=self.ADMIN_AUTH_URL,
                                      timeout=self.timeout)
-            token = keystone.tokens.authenticate(username=self.admin_user,
-                                                 password=self.admin_pass)
-            if token.expires.endswith('Z'):
-                _exp = token.expires[:-1]
-                dt = datetime.strptime(_exp, "%Y-%m-%dT%H:%M:%S")
-            else:
-                # has time zone
-                token.expires = token.expires[:-1]
-                try:
-                    dt = datetime.strptime(
-                        token.expires, "%Y-%m-%dT%H:%M:%S%Z")
-                except:
-                    dt = datetime.strptime(
-                        token.expires, "%Y-%m-%dT%H:%M:%S%z")
+            token = keystone.auth_token
 
-            # remove 5 sec to avoid time diffs
-            dt -= timedelta(seconds=5)
+            dt = datetime.now() + timedelta(minutes=self.token_expiration)
+            dt -= timedelta(seconds=15)
+
             self._token_cache['admin_token'] = (mktime(dt.utctimetuple()),
-                                                token.id)
+                                                token)
         return self._token_cache['admin_token'][1]
 
     def list_orgs(self):
