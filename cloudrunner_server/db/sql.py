@@ -146,8 +146,10 @@ class SQLDatabase(object):
         for key, sch in self.schema.items():
             setattr(self, key, Table(self.db, key, sch))
 
-    def create_tables(self):
+    def create_tables(self, create_callback=None):
         for table_name in self.schema:
             table = getattr(self, table_name)
             if not table.exists():
                 table.create()
+                if create_callback:
+                    create_callback(table_name)

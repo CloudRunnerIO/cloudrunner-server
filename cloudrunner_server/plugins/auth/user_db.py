@@ -150,7 +150,12 @@ class AuthDb(object):
             LOG.error("Cannot connect to auth DB: %s" % db_path)
             raise
         self.dbm.define_schema(self.SCHEMA)
-        self.dbm.create_tables()
+
+        def on_create(table_name):
+            if table_name == 'organizations':
+                # Create initial Default record
+                self.create_org('DEFAULT')
+        self.dbm.create_tables(create_callback=on_create)
 
     def authenticate(self, username, password):
         res = self.dbm.db.select(
