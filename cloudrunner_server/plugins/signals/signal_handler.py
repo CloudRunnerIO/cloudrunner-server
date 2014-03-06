@@ -222,7 +222,7 @@ class SignalHandlerPlugin(JobInOutProcessorPluginBase,
         LOG.info("[%s] Detaching %s from %s" % (user[0], target, signal))
         org = user[1]
         key = '__'.join([org, user[0], signal, target])
+        is_rem = red.srem('signals', key)
         red.srem('%s__%s' % (org, signal), key)
-        red.srem('signals', key)
         red.hdel(key + '__meta', 'user', 'target', 'auth', 'is_link')
-        return True, 'Detached'
+        return is_rem, 'Detached'
