@@ -152,8 +152,8 @@ class AuthDb(object):
         self.dbm.define_schema(self.SCHEMA)
 
         def on_create(table_name):
-            if table_name == 'organizations':
-                # Create initial Default record
+            if not self.use_org and table_name == 'organizations':
+                # Create initial Default record for single-tenant
                 self.create_org('DEFAULT')
         self.dbm.create_tables(create_callback=on_create)
 

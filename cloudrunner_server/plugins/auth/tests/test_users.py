@@ -36,7 +36,6 @@ class TestUsersWithoutOrg(base.BaseTestCase):
         base.CONFIG.security.use_org = False
         local_plugin_loader(base.CONFIG.auth)
         self.auth = AuthPluginBase.__subclasses__()[0](base.CONFIG)
-        self.auth.create_org('DEFAULT')
         self.auth.create_user("user1", "token1")
 
     def release(self):
@@ -116,6 +115,7 @@ class TestUsersWithOrg(base.BaseTestCase):
         self.assertEqual(len(AuthPluginBase.__subclasses__()), 1)
         success, access_map = self.auth.authenticate("user1", "token1")
         self.assertTrue(success, access_map)
+        self.assertCount(self.auth.list_orgs(), 1)
         self.assertEquals(access_map.org, 'MyOrg')
 
     def test_default_role(self):
