@@ -249,9 +249,13 @@ class Dispatcher(Daemon):
         return (True, remote_user_map.org)  # Already logged, return org
 
     def get_api_token(self, *args, **kwargs):
+        if self.auth_type == 2:
+            is_token = True
+        else:
+            is_token = False
         (user, token, org) = self.auth.create_token(self.user_id,
                                                     self.user_token,
-                                                    is_token=self.auth_type,
+                                                    is_token=is_token,
                                                     **kwargs)
         if token:
             return ["TOKEN", token, org]

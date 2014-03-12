@@ -126,7 +126,6 @@ class KeystoneAuth(AuthPluginBase):
         except Exception, ex:
             LOG.error(ex)
             LOG.error(user)
-            LOG.error(password)
             return (None, None, None)
 
     def list_users(self):

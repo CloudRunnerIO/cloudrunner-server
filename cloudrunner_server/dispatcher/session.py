@@ -10,6 +10,8 @@ from cloudrunner.core import parser
 from cloudrunner.core.exceptions import ConnectionError
 from cloudrunner.core.message import JobInput
 from cloudrunner.core.message import JobRep
+from cloudrunner.core.message import PipeMessage
+from cloudrunner.core.message import FinishedMessage
 from cloudrunner.core.message import StatusCodes
 from cloudrunner.util.string import stringify
 
@@ -38,11 +40,10 @@ class JobSession(Thread):
         self.manager = manager
         self.plugin_context = plugin_ctx
 
-    def _reply(self, session_id, ret_type, data):
-        for sub in self.manager.subscriptions.get(session_id, []):
+    def _reply(self, message):
+        for sub in self.manager.subscriptions.get(message.session_id, []):
             try:
-                self.job_done.send(
-                    *[sub.peer, ret_type] + [x for x in stringify(*data)])
+                self.job_done.send(*message.pack(sub.peer))
             except zmq.ZMQError as e:
                 if self.manager.context.closed or zerr.errno == zmq.ETERM \
                         or zerr.errno == zmq.ENOTSOCK:
@@ -185,19 +186,15 @@ class JobSession(Thread):
                                       libs=libs), timeout=timeout)
             for _reply in section_it:
                 if _reply[0] == 'PIPE':
-                    job_id = _reply[1]
-                    run_as = str(_reply[2])
-                    args = _reply[3:]
-                    meta = [str(int(time.time())), self.task_name, self.user,
-                            self.remote_user_map.org, section.targets, tags]
-
                     # reply: 'PIPE', job_id, run_as, node_id, stdout, stderr
+
                     # reply-fwd: session_id, PIPEOUT, session_id, time,
                     #   task_name, user, targets, tags, job_id, run_as,
                     #   node_id, stdout, stderr
-
-                    self._reply(self.session_id, StatusCodes.PIPEOUT,
-                                [self.session_id] + meta + list(_reply[1:]))
+                    message = PipeMessage(self.session_id, self.task_name,
+                                          self.user, self.remote_user_map.org,
+                                          section.targets, tags, *_reply[1:])
+                    self._reply(message)
                 else:
                     job_id, msg_ret = _reply
 
@@ -243,8 +240,10 @@ class JobSession(Thread):
 
         meta = [self.session_id, str(int(time.time())),
                 self.task_name, self.user, self.remote_user_map.org, tags]
-        self._reply(self.session_id, StatusCodes.FINISHED,
-                    meta + [self.payload, json.dumps(response)])
+        message = FinishedMessage(self.session_id, self.task_name, self.user,
+                                  self.remote_user_map.org, tags,
+                                  self.payload, json.dumps(response))
+        self._reply(message)
 
         self.session_event.set()
         del self.manager.subscriptions[self.session_id]
