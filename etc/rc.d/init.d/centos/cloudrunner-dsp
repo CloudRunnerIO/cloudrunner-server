@@ -2,7 +2,10 @@
 # CloudRunner Dispatcher Service
 # chkconfig: 345 20 80
 # description: CloudRunner Dispatcher service
+
 # processname: /usr/bin/cloudrunner-dsp
+# source function library
+. /etc/rc.d/init.d/functions
 
 NAME=cloudrunner-dsp
 DESC="CloudRunner Dispatcher service"
@@ -12,44 +15,49 @@ SCRIPTNAME=/etc/init.d/cloudrunner-dsp
 DAEMON=/usr/bin/cloudrunner-dsp
 DAEMONOPTS="--pidfile=$PIDFILE"
 
-case "$1" in
-start)
-    printf "%-50s" "Starting $NAME..."
-    $DAEMON start $DAEMONOPTS 2>&1
-    PID=`cat $PIDFILE`
+start(){
+    printf "%-50s" "Starting ${NAME}"
+    $DAEMON start $DAEMONOPTS &>/dev/null
+    PID=$(cat $PIDFILE 2>/dev/null)
     if [ -z $PID ]; then
         printf "%s\n" "Fail"
     else
         printf "%s\n" "Ok"
     fi
+
+}
+
+stop(){
+    printf "%-50s" "Stopping ${NAME}"
+    $DAEMON stop $DAEMONOPTS &>/dev/null
+    [ $? == 0 ] && echo Ok
+    rm -rf "$PIDFILE"
+}
+
+rh_status(){
+    status -p $PIDFILE $NAME
+}
+
+rh_status_q() {
+    rh_status >/dev/null 2>&1
+}
+
+case "$1" in
+start)
+    rh_status_q && exit 0
+    start
 ;;
 status)
-    printf "%-50s" "Checking $NAME..."
-    if [ -f $PIDFILE ]; then
-        PID=`cat $PIDFILE`
-        if [ -z "`ps axf | grep ${PID} | grep -v grep`" ]; then
-            printf "%s\n" "Process dead but pidfile exists"
-        else
-            echo "Running"
-        fi
-    else
-        printf "%s\n" "Service not running"
-    fi
+    rh_status
 ;;
 stop)
-    printf "%-50s" "Stopping $NAME"
-    $DAEMON stop $DAEMONOPTS
+    rh_status_q || exit 0
+    stop
 ;;
 
 restart)
-    printf "%-50s" "Restarting $NAME"
-    $DAEMON restart $DAEMONOPTS
-;;
-
-stats)
-    printf "%-50s" "Tenant/Node statistics"
-    PID=`cat $PIDFILE`
-    kill -HUP $PID
+    stop
+    start
 ;;
 
 *)

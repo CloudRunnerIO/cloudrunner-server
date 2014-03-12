@@ -23,16 +23,16 @@ BuildRequires: gcc
 BuildRequires: gcc-c++
 BuildRequires: python-devel
 
-Requires: python-argparse
-Requires: python-crontab
-Requires: m2crypto
-Requires: python-zmq
-Requires: python-httplib2
-Requires: python-setuptools
-Requires: cloudrunner >= 0.3
+Requires:      python-argparse
+Requires:      python-crontab
+Requires:      m2crypto
+Requires:      python-zmq >= 13.0
+Requires:      python-httplib2
+Requires:      python-setuptools
+Requires:      cloudrunner >= 0.3
 
-Obsoletes: cloudrunner-dispatcher
-Obsoletes: cloudrunner_server
+Obsoletes:     cloudrunner-dispatcher
+Obsoletes:     cloudrunner_server
 
 %if 0%{?rhel} < 7 && 0%{?fedora} < 13
 Requires: python-importlib
