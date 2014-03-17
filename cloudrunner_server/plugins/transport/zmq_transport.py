@@ -4,6 +4,7 @@ import logging
 import M2Crypto as m
 import os
 from os import path as p
+import re
 import signal
 from threading import Event
 from threading import Thread
@@ -112,8 +113,18 @@ class ZmqTransport(ServerTransportBackend):
         }
 
         self.config = config
+        self.proxies = []
+
+        if self.config.master_proxy:
+            self.proxies.extend([x.strip() for x in
+                                 re.split(r"[\s;,]", self.config.master_proxy)
+                                 if x.strip()])
+
+        self.proxy_pub_port = self.config.proxy_pub_port or 5553
+
         self.router = Router(self.config, self.context,
-                             self.buses, self.endpoints, self.running)
+                             self.buses, self.endpoints, self.running,
+                             self.proxies)
         self.crypter = TLSServerCrypt(config.security.server_key,
                                       cert_password=config.security.cert_pass)
         self.subca_dir = p.join(
@@ -494,6 +505,14 @@ class ZmqTransport(ServerTransportBackend):
         xpub_listener = self.context.socket(zmq.XPUB)
         xpub_listener.bind(self.master_pub_uri)
 
+        self.pub_proxy = None
+        if self.proxies:
+            self.pub_proxy = self.context.socket(zmq.XPUB)
+            xsub_listener.bind('tcp://0.0.0.0:%s' % self.proxy_pub_port)
+            for proxy in self.proxies:
+                self.pub_proxy.connect('tcp://%s:%s' % (proxy,
+                                                        self.proxy_pub_port))
+
         heartbeat = self.context.socket(zmq.DEALER)
         heartbeat.setsockopt(zmq.IDENTITY, HEARTBEAT)
         heartbeat.connect(self.buses.in_messages.consume)
@@ -578,12 +597,25 @@ class ZmqTransport(ServerTransportBackend):
                                    "Restart of nodes might be needed" %
                                    org_name)
                     else:
-                        if (self.crypter):
+                        def process(msg):
+                            if self.crypter:
+                                return [self.crypter.encrypt(*msg)]
+                            else:
+                                return msg
+
+                        if len(packet) == 2:
+                            xpub_listener.send_multipart([org_uid] +
+                                                         process(packet))
+                            if self.pub_proxy:
+                                # Forward to other masters
+                                self.pub_proxy.send_multipart(
+                                    [org_uid, 'FWD'] + packet)
+                        elif len(packet) == 3 and packet[0] == 'FWD':
+                            # Received forwarded packet?
+                            packet.pop(0)
                             signed_packets = self.crypter.encrypt(*packet)
-                            xpub_listener.send_multipart([org_uid,
-                                                          signed_packets])
-                        else:
-                            xpub_listener.send_multipart([org_uid] + packet)
+                            xpub_listener.send_multipart([org_uid] +
+                                                         process(packet))
                 if heartbeat in socks:
                     hb_msg = heartbeat.recv_multipart()
                     req = HeartBeatReq.build(*hb_msg)
@@ -625,6 +657,8 @@ class ZmqTransport(ServerTransportBackend):
                 break
 
         timer.stop()
+        if self.pub_proxy:
+            self.pub_proxy.close()
         node_reply_queue.close()
         xsub_listener.close()
         xpub_listener.close()
@@ -659,6 +693,14 @@ class ZmqTransport(ServerTransportBackend):
         if ident:
             sock.setsockopt(zmq.IDENTITY, ident)
         sock.connect(endpoint)
+        if self.proxies:
+            # Connect to proxy servers
+            if endp_type == 'in_messages':
+                for proxy in self.proxies:
+                    sock.connect('tcp://%s:5556' % proxy)
+            if endp_type == 'out_messages':
+                for proxy in self.proxies:
+                    sock.connect('tcp://%s:5557' % proxy)
         _sock = SockWrapper(endpoint, sock)
         self._sockets.append(_sock)
         return _sock
@@ -694,13 +736,14 @@ class Router(Thread):
         Receives and routes data from nodes to clients and back
     """
 
-    def __init__(self, config, context, buses, endpoints, event):
+    def __init__(self, config, context, buses, endpoints, event, proxies):
         super(Router, self).__init__()
         self.config = config
         self.context = context
         self.buses = buses
         self.endpoints = endpoints
         self.running = event
+        self.proxies = proxies
         self.ssl_worker_uri = 'inproc://ssl-worker'
 
     def run(self):
@@ -732,6 +775,10 @@ class Router(Thread):
             poller.register(reply_router, zmq.POLLIN)
             poller.register(ssl_worker, zmq.POLLIN)
 
+            if self.proxies:
+                router.bind('tcp://0.0.0.0:5556')
+                reply_router.bind('tcp://0.0.0.0:5557')
+
             socks = {}
             while not self.running.is_set():
                 try:
@@ -740,48 +787,53 @@ class Router(Thread):
                     if zerr.errno == zmq.ETERM or zerr.errno == zmq.ENOTSUP \
                         or zerr.errno == zmq.ENOTSOCK:
                         break
+                    continue
                 try:
-                    if ssl_worker in socks:
-                        packets = ssl_worker.recv_multipart()
-                        req = ClientReq.build(*packets)
-                        if not req:
-                            if packets[0] == 'QUIT':
-                                # Node exited
-                                router.send_multipart(
-                                    [HEARTBEAT] + packets * 2)
+                    for sock in socks:
+                        if sock == ssl_worker:
+                            packets = ssl_worker.recv_multipart()
+                            req = ClientReq.build(*packets)
+                            if not req:
+                                if packets[0] == 'QUIT':
+                                    # Node exited
+                                    router.send_multipart(
+                                        [HEARTBEAT] + packets * 2)
+                                else:
+                                    LOGR.error(
+                                        "Invalid request from Client %s" %
+                                        packets)
+                                continue
+                            if req.dest == HEARTBEAT:
+                                LOGR.debug('IN-MSG received: %s' % req)
                             else:
+                                LOGR.info('IN-MSG received: %s' % req)
+
+                            if not req.peer and req.dest != ADMIN_TOWER:
+                                # Anonymous accessing data feed
                                 LOGR.error(
-                                    "Invalid request from Client %s" % packets)
-                            continue
-                        if req.dest == HEARTBEAT:
-                            LOGR.debug('IN-MSG received: %s' % req)
-                        else:
-                            LOGR.info('IN-MSG received: %s' % req)
+                                    'NOT AUTHORIZED: %s : %s' % (req.peer,
+                                                                 req.dest))
+                                continue
 
-                        if not req.peer and req.dest != ADMIN_TOWER:
-                            # Anonymous accessing data feed
-                            LOGR.error('NOT AUTHORIZED: %s : %s' % (req.peer,
-                                                                    req.dest))
-                            continue
+                            if not self.config.security.use_org:
+                                req.org = DEFAULT_ORG
 
-                        if not self.config.security.use_org:
-                            req.org = DEFAULT_ORG
+                            rer_packet = RerouteReq(req).pack()
+                            if rer_packet and rer_packet[0] != HEARTBEAT:
+                                LOGR.info('IN-MSG re-routed: %s' % rer_packet)
 
-                        rer_packet = RerouteReq(req).pack()
-                        if rer_packet and rer_packet[0] != HEARTBEAT:
-                            LOGR.info('IN-MSG re-routed: %s' % rer_packet)
+                            router.send_multipart(rer_packet)
 
-                        router.send_multipart(rer_packet)
-
-                    elif reply_router in socks:
-                        packets = reply_router.recv_multipart()
-                        rep = ClientRep.build(*packets)
-                        if not rep:
-                            LOGR.error("Invalid reply received: %s" % packets)
-                            continue
-                        rep_packet = rep.pack()
-                        LOGR.info("OUT-MSG reply: %s" % rep_packet[:2])
-                        ssl_worker.send_multipart(rep_packet)
+                        if sock == reply_router:
+                            packets = reply_router.recv_multipart()
+                            rep = ClientRep.build(*packets)
+                            if not rep:
+                                LOGR.error(
+                                    "Invalid reply received: %s" % packets)
+                                continue
+                            rep_packet = rep.pack()
+                            LOGR.info("OUT-MSG reply: %s" % rep_packet[:2])
+                            ssl_worker.send_multipart(rep_packet)
                 except zmq.ZMQError, zerr:
                     if zerr.errno == zmq.ETERM or zerr.errno == zmq.ENOTSUP \
                         or zerr.errno == zmq.ENOTSOCK:
@@ -789,6 +841,7 @@ class Router(Thread):
             router.close()
             reply_router.close()
             ssl_worker.close()
+
             LOGR.info("Exited router worker")
 
         t = Thread(target=router_worker)
