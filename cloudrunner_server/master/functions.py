@@ -50,7 +50,7 @@ try:
 except:
     C = 'US'
 
-VALID_NAME = re.compile('^[a-zA-Z0-9\-_]+$')
+VALID_NAME = re.compile('^[a-zA-Z0-9\-_\.]+$')
 
 
 def yield_wrap(func):

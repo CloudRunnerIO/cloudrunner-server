@@ -123,6 +123,36 @@ class TestCert(base.BaseTestCase):
         self.assertEqual(messages.pop(0), (2, 'TEST_NODE'))
         self.assertEqual(messages, [])
 
+        self._create_csr('INVALID NAME')
+        messages = [x for x in CertController(base.CONFIG).sign(
+            ['INVALID NAME'],
+            org="MyOrg")]
+
+        self.assertEqual(messages.pop(0), (3, 'Invalid node name'))
+        self.assertEqual(messages, [])
+
+        self._create_csr('INVALID_NAME#2')
+        messages = [x for x in CertController(base.CONFIG).sign(
+            ['INVALID_NAME#2'],
+            org="MyOrg")]
+
+        self.assertEqual(messages.pop(0), (3, 'Invalid node name'))
+        self.assertEqual(messages, [])
+
+        self._create_csr('VALID_NAME.DOMAIN')
+        messages = [x for x in CertController(base.CONFIG).sign(
+            ['VALID_NAME.DOMAIN'],
+            org="MyOrg")]
+
+        self.assertEqual(messages.pop(0), (1, 'Signing VALID_NAME.DOMAIN'))
+        self.assertEqual(messages.pop(0), (1, 'Setting serial to 6'))
+        self.assertEqual(messages.pop(0), (2, 'VALID_NAME.DOMAIN signed'))
+        self.assertEqual(
+            messages.pop(0), (2, 'Issuer /C=US/CN=CloudRunner Master CA'))
+        self.assertEqual(
+            messages.pop(0), (2, 'Subject /C=US/CN=VALID_NAME.DOMAIN'))
+        self.assertEqual(messages, [])
+
     def _create_csr(self, node):
         node_key = m.EVP.PKey()
 
