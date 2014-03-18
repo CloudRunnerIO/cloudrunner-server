@@ -574,7 +574,7 @@ class ZmqTransport(ServerTransportBackend):
                             # force tenant nodes to reload
                             for tenant in self.tenants.values():
                                 if tenant == target:
-                                    LOGP.info("Node dropped from %s, " %
+                                    LOGP.info("Node dropped from %s" %
                                               tenant.name)
                                     # Refresh HeartBeat
                                     self.tenants[tenant.name].refresh()
@@ -616,6 +616,12 @@ class ZmqTransport(ServerTransportBackend):
                             signed_packets = self.crypter.encrypt(*packet)
                             xpub_listener.send_multipart([org_uid] +
                                                          process(packet))
+                        elif len(packet) == 4 and packet[0] == 'FWD':
+                            # HB
+                            org, peer = packet[2:4]
+                            if org in self.tenants:
+                                self.tenants[org].push(peer)
+
                 if heartbeat in socks:
                     hb_msg = heartbeat.recv_multipart()
                     req = HeartBeatReq.build(*hb_msg)
@@ -634,10 +640,15 @@ class ZmqTransport(ServerTransportBackend):
                             LOGR.info("HB from %s@%s" % (req.peer, req.org))
                         else:
                             LOGR.info("HB from %s" % req.peer)
+                        if self.pub_proxy:
+                            # Also notify other masters
+                            self.pub_proxy.send_multipart(
+                                [req.org, 'FWD', 'HB', req.org, req.peer])
                         if self.tenants[req.org].push(req.peer):
                             # New node
                             LOGR.info("Node %s attached to %s" % (req.peer,
                                                                   req.org))
+
                         if req.control == 'IDENT':
                             node_reply_queue.send(req.ident, req.peer,
                                                   'SUB_LOC',
