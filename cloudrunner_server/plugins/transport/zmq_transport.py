@@ -124,7 +124,7 @@ class ZmqTransport(ServerTransportBackend):
 
         self.router = Router(self.config, self.context,
                              self.buses, self.endpoints, self.running,
-                             self.proxies)
+                             bool(self.proxies))
         self.crypter = TLSServerCrypt(config.security.server_key,
                                       cert_password=config.security.cert_pass)
         self.subca_dir = p.join(
@@ -736,14 +736,14 @@ class Router(Thread):
         Receives and routes data from nodes to clients and back
     """
 
-    def __init__(self, config, context, buses, endpoints, event, proxies):
+    def __init__(self, config, context, buses, endpoints, event, enable_proxy):
         super(Router, self).__init__()
         self.config = config
         self.context = context
         self.buses = buses
         self.endpoints = endpoints
         self.running = event
-        self.proxies = proxies
+        self.enable_proxy = enable_proxy
         self.ssl_worker_uri = 'inproc://ssl-worker'
 
     def run(self):
@@ -775,7 +775,7 @@ class Router(Thread):
             poller.register(reply_router, zmq.POLLIN)
             poller.register(ssl_worker, zmq.POLLIN)
 
-            if self.proxies:
+            if self.enable_proxy:
                 router.bind('tcp://0.0.0.0:5556')
                 reply_router.bind('tcp://0.0.0.0:5557')
 
