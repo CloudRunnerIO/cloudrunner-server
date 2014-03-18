@@ -117,7 +117,7 @@ class SslConfig(ConfigPluginBase):
 
     def get_meta_data(self, key):
         address = '169.254.169.254'
-        conn = httplib.HTTPConnection(address)
+        conn = httplib.HTTPConnection(address, timeout=5)
         path = '/openstack/2013-04-04/meta_data.json'
         try:
             conn.request('GET', path)

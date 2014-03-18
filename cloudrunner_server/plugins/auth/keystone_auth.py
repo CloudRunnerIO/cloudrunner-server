@@ -17,15 +17,13 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-from datetime import datetime
-from datetime import timedelta
+from datetime import (datetime, timedelta)
 import logging
 import random
 import re
 import string
 import sqlite3
-from time import mktime
-from time import gmtime
+from time import (gmtime, mktime)
 import uuid
 
 from cloudrunner_server.plugins.auth.base import AuthPluginBase

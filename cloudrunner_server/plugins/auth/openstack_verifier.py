@@ -1,9 +1,12 @@
+import logging
 import M2Crypto as m
 from keystoneclient.v2_0 import client as k
 from novaclient.v1_1 import client as n
 from novaclient import exceptions as novaexceptions
 
 from cloudrunner_server.plugins.auth.base import NodeVerifier
+
+LOG = logging.getLogger('OpenStackVerifier')
 
 
 class OpenStackVerifier(NodeVerifier):
@@ -19,19 +22,14 @@ class OpenStackVerifier(NodeVerifier):
         self.timeout = int(config.auth_timeout or 5)
 
     def _get_token(self):
-        try:
-            keystone = k.Client(tenant_name=self.admin_tenant,
-                                username=self.admin_user,
-                                password=self.admin_pass,
-                                auth_url=self.ADMIN_AUTH_URL,
-                                timeout=self.timeout)
-
-            token = keystone.tokens.authenticate(username=self.admin_user,
-                                                 password=self.admin_pass)
-            return token.id
-        except Exception, e:
-            print "ERRR", e
-        return ""
+        # Create token
+        keystone = k.Client(tenant_name=self.admin_tenant,
+                            username=self.admin_user,
+                            password=self.admin_pass,
+                            auth_url=self.ADMIN_AUTH_URL,
+                            timeout=self.timeout)
+        token = keystone.auth_token
+        return token
 
     def verify(self, node, request, **kwargs):
         try:
@@ -60,9 +58,12 @@ class OpenStackVerifier(NodeVerifier):
                     tenant = filter(
                         lambda t: t.id == server.tenant_id, tenants)
                     if tenant:
-                        return tenant[0].name
+                        name = tenant[0].name
+                        LOG.info("Tenant [%s] matched for server %s" %
+                                (name, node))
+                        return name
         except Exception, e:
-            print "Verification error", e
+            LOG.error(e)
             return None
 
         return None
