@@ -42,7 +42,7 @@ from cloudrunner.core.exceptions import ConnectionError
 from cloudrunner.plugins.transport.base import TransportBackend
 from cloudrunner import LIB_DIR
 
-from .tlszmq import \
+from cloudrunner.util.tlszmq import \
     (ConnectionException, ServerDisconnectedException,
      TLSZmqClientSocket, TLSClientDecrypt)
 
@@ -68,7 +68,7 @@ class NodeTransport(TransportBackend):
     def loop(self):
         ioloop.IOLoop.instance().start()
 
-    def ssl_socket_device(self, context):
+    def _ssl_socket_device(self, context):
         LOGC.info("Starting new SSL thread")
         args = []
         kwargs = {}
@@ -424,7 +424,7 @@ class NodeTransport(TransportBackend):
         return approved
 
     def ssl_start(self):
-        self.ssl_thread = Thread(target=self.ssl_socket_device,
+        self.ssl_thread = Thread(target=self._ssl_socket_device,
                                  args=[self.context])
         self.ssl_thread.start()
 

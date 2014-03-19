@@ -43,7 +43,7 @@ class JobSession(Thread):
     def _reply(self, message):
         for sub in self.manager.subscriptions.get(message.session_id, []):
             try:
-                self.job_done.send(*message.pack(sub.peer))
+                self.job_done.send(*message.pack(sub.proxy, sub.peer))
             except zmq.ZMQError as e:
                 if self.manager.context.closed or zerr.errno == zmq.ETERM \
                         or zerr.errno == zmq.ENOTSOCK:

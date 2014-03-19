@@ -12,8 +12,7 @@ import time
 import zmq
 from zmq.eventloop import ioloop
 
-from .tlszmq import TLSZmqServerSocket
-from .tlszmq import TLSServerCrypt
+from cloudrunner.util.tlszmq import (TLSZmqServerSocket, TLSServerCrypt)
 from cloudrunner.core.message import (ClientReq, ClientRep, RerouteReq,
                                       HEARTBEAT, ADMIN_TOWER, TOKEN_SEPARATOR,
                                       HeartBeatReq, DEFAULT_ORG,  StatusCodes,
@@ -81,8 +80,15 @@ class ZmqTransport(ServerTransportBackend):
 
         self.master_pub_uri = 'tcp://%s' % config.master_pub
 
-        self.buses.requests = Pipe(
+        ssl_proxy_uri = 'inproc://ssl-proxy-uri'
+
+        self.buses.ssl_proxy = Pipe(
             'tcp://' + (config.listen_uri or '0.0.0.0:5559'),
+            ssl_proxy_uri
+        )
+
+        self.buses.requests = Pipe(
+            ssl_proxy_uri,
             "inproc://request-queue"
         )
         self.buses.replies = Pipe(
@@ -899,11 +905,42 @@ class Router(Thread):
         t.start()
         threads.append(t)
 
+        self.disp_sock = self.context.socket(zmq.ROUTER)
+        self.disp_sock.bind(self.buses.ssl_proxy.publish)
+
+        self.dispatcher_proxy = TLSZmqServerSocket(
+            self.disp_sock,
+            self.buses.ssl_proxy.consume,
+            self.config.security.server_cert,
+            self.config.security.server_key,
+            self.config.security.ca,
+            cert_password=self.config.security.cert_pass)
+
+        def dispatcher():
+            # Runs the SSL Thread
+            while not self.running.is_set():
+                try:
+                    self.dispatcher_proxy.start()  # Start TLSZMQ server socket
+                except zmq.ZMQError, zerr:
+                    if zerr.errno == zmq.ETERM or zerr.errno == zmq.ENOTSUP \
+                        or zerr.errno == zmq.ENOTSOCK:
+                        # System interrupt
+                        break
+                except KeyboardInterrupt:
+                    break
+                except Exception, ex:
+                    LOGR.exception(ex)
+
+        t = Thread(target=dispatcher)
+        t.start()
+        threads.append(t)
+
         for thread in threads:
             thread.join()
 
         self.master_repl.terminate()
         self.repl_sock.close()
+        self.disp_sock.close()
         LOGR.info("Exited router device threads")
 
     def close(self, *args):

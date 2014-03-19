@@ -122,8 +122,6 @@ class Dispatcher(Daemon):
             CONFIG = Config(self.args.config)
 
     def init_libs(self):
-        self.dispatcher_uri = ''.join(['tcp://',
-                                      CONFIG.listen_uri or '0.0.0.0:5559'])
         self.scheduler_uri = SCHEDULER_URI
 
         # instantiate dispatcher implementation
@@ -435,8 +433,13 @@ class Dispatcher(Daemon):
                         continue
                 if job_queue in ready:
                     # User -> queue
-                    frames = job_queue.recv()
-                    sender = frames.pop(0)
+                    raw_frames = job_queue.recv()
+                    sender = raw_frames.pop(0)
+                    ident = raw_frames.pop(0)
+                    data = raw_frames.pop(0)
+                    print "RAW FRAMES", data, repr(sender), repr(ident)
+                    frames = json.loads(data)
+                    print "FRAMES", frames
                     req = message.AgentReq.build(*frames)
                     if not req:
                         LOG.error("Invalid request %s" % frames)
@@ -464,7 +467,7 @@ class Dispatcher(Daemon):
 
                     auth_check = self._login(req.auth_type)
                     if not auth_check[0]:
-                        job_queue.send(sender, 'NOT AUTHORIZED')
+                        job_queue.send(ident, 'NOT AUTHORIZED')
                         continue
 
                     remote_user_map = auth_check[1]
@@ -480,7 +483,8 @@ class Dispatcher(Daemon):
                                                           remote_user_map,
                                                           **req.kwargs)
                     if isinstance(response, Promise):
-                        response.peer = sender
+                        response.proxy = sender
+                        response.peer = ident
                         if response.main:
                             response.resolve()
                         elif response.remove:
