@@ -84,6 +84,7 @@ class NodeTransport(TransportBackend):
                                         self.buses['jobs'][0],
                                         self.endpoints['ssl-proxy'],
                                         self.ssl_thread_event,
+                                        route_packets=True,
                                         *args, **kwargs)
         ssl_socket.start()
 
@@ -146,9 +147,8 @@ class NodeTransport(TransportBackend):
         listener = Thread(target=self.listener_device)
         listener.start()
 
-        time.sleep(.5)  # wait for sockets to start
-
         self.ssl_start()
+        time.sleep(.5)  # wait for sockets to start
 
         return True
 
@@ -184,7 +184,7 @@ class NodeTransport(TransportBackend):
         return PollerWrapper(*sockets)
 
     def listener_device(self):
-        self.sub = str(uuid.uuid1())
+        self.sub = []
         dispatcher = self.context.socket(zmq.DEALER)
         dispatcher.bind(self.buses['requests'][1])
 
@@ -193,7 +193,7 @@ class NodeTransport(TransportBackend):
         ssl_proxy.connect(self.endpoints['ssl-proxy'])
 
         master_sub = self.context.socket(zmq.SUB)
-        master_sub.setsockopt(zmq.SUBSCRIBE, self.sub)
+        master_sub.setsockopt(zmq.SUBSCRIBE, str(uuid.uuid1()))
         master_sub.connect(self.buses['requests'][0])
 
         poller = zmq.Poller()
@@ -229,13 +229,14 @@ class NodeTransport(TransportBackend):
                     frames = ssl_proxy.recv_multipart()
                     if len(frames) == 1 or len(frames) == 2:
                         # ToDo: better command handler
-                        master_sub.setsockopt(zmq.UNSUBSCRIBE, self.sub)
-                        self.sub = frames[0]
-                        master_sub.setsockopt(zmq.SUBSCRIBE, self.sub)
-                        if len(frames) == 2:
-                            LOGC.info("Listening to %s" % frames[1])
-                        else:
-                            LOGC.info("Listening to %s" % self.sub)
+                        sub_loc = frames[0]
+                        if sub_loc not in self.sub:
+                            self.sub.append(sub_loc)
+                            master_sub.setsockopt(zmq.SUBSCRIBE, sub_loc)
+                            if len(frames) == 2:
+                                LOGC.info("Listening to %s" % frames[1])
+                            else:
+                                LOGC.info("Listening to %s" % sub_loc)
                     else:
                         dispatcher.send_multipart(frames)
             except KeyboardInterrupt:
@@ -251,7 +252,8 @@ class NodeTransport(TransportBackend):
 
         ssl_proxy.close()
 
-        master_sub.setsockopt(zmq.UNSUBSCRIBE, self.sub)
+        for sub_loc in self.sub:
+            master_sub.setsockopt(zmq.UNSUBSCRIBE, sub_loc)
         master_sub.close()
         dispatcher.close()
         LOGC.info('Node Listener exited')

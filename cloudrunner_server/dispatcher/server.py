@@ -437,9 +437,10 @@ class Dispatcher(Daemon):
                     sender = raw_frames.pop(0)
                     ident = raw_frames.pop(0)
                     data = raw_frames.pop(0)
-                    print "RAW FRAMES", data, repr(sender), repr(ident)
+                    if data == 'QUIT':
+                        # Node exited
+                        continue
                     frames = json.loads(data)
-                    print "FRAMES", frames
                     req = message.AgentReq.build(*frames)
                     if not req:
                         LOG.error("Invalid request %s" % frames)

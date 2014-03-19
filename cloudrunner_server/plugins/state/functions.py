@@ -35,9 +35,11 @@ else:
 
 ENV_FILE_NAME = "__ENV__FILE__"
 ENV_SEP = "__ENV__SEP__LINE__"
-DISABLED_ENV = ('_', 'PIPESTATUS', ENV_FILE_NAME,
-                '___ENV___', 'SHELLOPTS',
-                'BASH_LINENO', 'BASH_SOURCE', 'FUNCNAME', 'IFS', 'PS4')
+SPECIAL = ('HOME', 'PWD', 'LOGNAME', 'USER', 'PYTHONPATH')
+DISABLED_ENV = SPECIAL + ('_', 'PIPESTATUS', ENV_FILE_NAME,
+                          '___ENV___', 'SHELLOPTS',
+                          'BASH_LINENO', 'BASH_SOURCE',
+                          'FUNCNAME', 'IFS', 'PS4')
 KEY_RE = re.compile(r'^\S*$', re.S)
 BASH_VARS = re.compile(r'^[a-zA-Z_][a-zA-Z0-9_]*$')
 LOG = logging.getLogger("StateFunctions")
