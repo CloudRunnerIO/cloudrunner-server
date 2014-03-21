@@ -503,8 +503,8 @@ class Dispatcher(Daemon):
                             self.manager.subscriptions[
                                 response.session_id].append(response)
                     elif response:
-                        job_queue.send(sender, StatusCodes.FINISHED,
-                                       json.dumps(response))
+                        data = [StatusCodes.FINISHED, list(response)]
+                        job_queue.send(sender, ident, json.dumps(data))
 
                 elif job_done_queue in ready:
                     # Done -> user
