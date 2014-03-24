@@ -865,7 +865,8 @@ class Router(Thread):
                             rep_packet = rep.pack()
                             LOGR.info("OUT-MSG reply: %s" % rep_packet[:2])
                             ssl_worker.send_multipart(rep_packet)
-                            if fwd_proxy:
+
+                            if fwd_proxy and rep.dest not in [ADMIN_TOWER]:
                                 fwd_proxy.send_multipart(["OUT"] + rep_packet)
                 except zmq.ZMQError, zerr:
                     if zerr.errno == zmq.ETERM or zerr.errno == zmq.ENOTSUP \

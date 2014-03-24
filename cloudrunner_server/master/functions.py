@@ -101,7 +101,7 @@ class CertController(object):
         for (_dir, _, nodes) in os.walk(os.path.join(self.ca_path, 'nodes')):
             for node in nodes:
                 try:
-                    node = node.rstrip('.crt')
+                    node = node.rsplit('.crt', 1)[0]
                     o, _, node = node.partition('.')
                     if org and o != org:
                         continue
@@ -113,7 +113,7 @@ class CertController(object):
         for (_dir, _, nodes) in os.walk(os.path.join(self.ca_path, 'issued')):
             for node in nodes:
                 try:
-                    node = node.rstrip('.crt')
+                    node = node.rsplit('.crt', 1)[0]
                     o, _, node = node.partition('.')
                     o, _, node = node.partition('.')
                     if org and o != org:
@@ -154,7 +154,7 @@ class CertController(object):
                 try:
                     if not node.endswith('.crt'):
                         continue
-                    node = node.rstrip('.crt')
+                    node = node.rsplit('.crt', 1)[0]
                     org, _, node = node.partition('.')
                     if not node:
                         node = org
@@ -173,7 +173,7 @@ class CertController(object):
                 try:
                     if not node.endswith('.crt'):
                         continue
-                    node = node.rstrip('.crt')
+                    node = node.rsplit('.crt', 1)[0]
                     org, _, node = node.partition('.')
                     if not node:
                         node = org
@@ -197,7 +197,7 @@ class CertController(object):
                 try:
                     if not node.endswith('.crt'):
                         continue
-                    node = node.rstrip('.crt')
+                    node = node.rsplit('.crt', 1)[0]
                     org, _, node = node.partition('.')
                     approved_nodes.append(node)
                 except:
