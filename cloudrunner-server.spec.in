@@ -30,6 +30,7 @@ Requires:      python-zmq >= 13.0
 Requires:      python-httplib2
 Requires:      python-setuptools
 Requires:      cloudrunner >= 0.3
+Requires:      python-crontab
 
 Obsoletes:     cloudrunner-dispatcher
 Obsoletes:     cloudrunner_server
