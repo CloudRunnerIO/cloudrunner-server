@@ -1,4 +1,4 @@
 [gerrit]
-host=gerrit.bellstack.com
+host=gerrit.stg.cloudrunner.io
 port=29418
-project=CRN
+project=cloudrunner-server
