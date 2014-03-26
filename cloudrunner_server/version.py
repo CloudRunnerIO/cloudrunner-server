@@ -12,4 +12,4 @@
 #  * permission of CloudRunner.io
 #  *******************************************************/
 
-VERSION = '0.3'
+VERSION = '0.4'
