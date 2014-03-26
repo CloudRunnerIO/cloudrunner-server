@@ -2,20 +2,15 @@
 # -*- coding: utf-8 -*-
 # vim: tabstop=4 shiftwidth=4 softtabstop=4
 
-# Copyright 2013 CloudRunner.IO
-# All Rights Reserved.
-#
-#    Licensed under the Apache License, Version 2.0 (the "License"); you may
-#    not use this file except in compliance with the License. You may obtain
-#    a copy of the License at
-#
-#         http://www.apache.org/licenses/LICENSE-2.0
-#
-#    Unless required by applicable law or agreed to in writing, software
-#    distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-#    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
-#    License for the specific language governing permissions and limitations
-#    under the License.
+# /*******************************************************
+#  * Copyright (C) 2013-2014 CloudRunner.io <info@cloudrunner.io>
+#  *
+#  * Proprietary and confidential
+#  * This file is part of CloudRunner Server.
+#  *
+#  * CloudRunner Server can not be copied and/or distributed without the express
+#  * permission of CloudRunner.io
+#  *******************************************************/
 
 from contextlib import nested
 from datetime import datetime
@@ -196,10 +191,11 @@ class TestServer(base.BaseTestCase):
 
         with nested(
             patch.multiple(AuthDb,
-                __init__=Mock(return_value=None),
-                load=Mock(return_value='some_user:[root]:.*-win:admin'),
-                authenticate=Mock(return_value=[True, '123']),
-                validate=Mock(return_value=[True, '123'])),
+                           __init__=Mock(return_value=None),
+                           load=Mock(
+                               return_value='some_user:[root]:.*-win:admin'),
+                           authenticate=Mock(return_value=[True, '123']),
+                           validate=Mock(return_value=[True, '123'])),
             patch('datetime.datetime', now=Mock(return_value=333333333))):
             disp.init_libs()
             self.assertIsNotNone(disp.auth)
@@ -222,10 +218,12 @@ class TestServer(base.BaseTestCase):
         date_mock = Mock(return_value=datetime.now())
         with nested(
             patch.multiple(AuthDb,
-                __init__=Mock(return_value=None),
-                get_token=Mock(return_value=('some_user', '111111111111111111111111111111111111111111111111111111111111', 'MyOrg')),
-                authenticate=Mock(return_value=[True, '123']),
-                validate=Mock(return_value=[True, '123'])),
+                           __init__=Mock(return_value=None),
+                           get_token=Mock(
+                           return_value=(
+                           'some_user', '111111111111111111111111111111111111111111111111111111111111', 'MyOrg')),
+                           authenticate=Mock(return_value=[True, '123']),
+                           validate=Mock(return_value=[True, '123'])),
             patch('random.choice', Mock(return_value='1'))):
             disp.init_libs()
             self.assertIsNotNone(disp.auth)

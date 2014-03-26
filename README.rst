@@ -1,6 +1,7 @@
 CloudRunner.io Server
 =======================
 
+(c) Copyright CloudRunner.io
 
 USER environment configuration
 -------------------------------
