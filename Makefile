@@ -1,5 +1,5 @@
 REV := $(shell ./scripts/rpm/getrev.sh .)
-BRANCH := $(shell ./scripts/rpm/getbranch.sh)
+BRANCH := $(shell ./scripts/rpm/getbranch.sh | cut -d"/" -f2 )
 SRC=src/
 PY=`python -c 'import sys; print sys.version[:3]'`
 __python=$(shell V=$$(python -V 2>&1 | awk '{ print $$2 }' | sed 's/\(.*\)\..*/\1/g'); if [[ "$$V" < '2.6' ]]; then echo 'python2.6'; else echo 'python$$PY'; fi)
