@@ -17,6 +17,7 @@ import logging
 import M2Crypto as m
 import os
 import signal
+import socket
 import stat
 from threading import Thread
 from threading import Event
@@ -25,7 +26,9 @@ import zmq
 from zmq.eventloop import ioloop
 import uuid
 
+from cloudrunner import CONFIG_NODE_LOCATION
 from cloudrunner.core.message import *
+from cloudrunner.util.config import Config
 from cloudrunner.util.shell import colors
 
 import logging
@@ -37,6 +40,7 @@ from cloudrunner.core.exceptions import ConnectionError
 from cloudrunner.plugins.transport.base import TransportBackend
 from cloudrunner import LIB_DIR
 
+from cloudrunner.util.decorators import catch_ex
 from cloudrunner.util.tlszmq import \
     (ConnectionException, ServerDisconnectedException,
      TLSZmqClientSocket, TLSClientDecrypt)
@@ -51,14 +55,30 @@ class NodeTransport(TransportBackend):
 
     proto = 'zmq+ssl'
 
-    def __init__(self, config, **kwargs):
-        self.config = config
-        self.node_id = config.id
+    config_options = ["node_id", "master_pub", "master_repl",
+                      "worker_count", "sock_dir", "security.node_csr",
+                      "security.server", "security.node_cert",
+                      "security.node_key", "security.ca", "security.cert_pass"]
+
+    def __init__(self, node_id=None, master_pub=None, master_repl=None,
+                 worker_count=5, sock_dir=None, node_cert=None, node_key=None,
+                 ca=None, server=None, node_csr=None, cert_pass=None, **kwargs):
+        self.node_id = node_id or socket.gethostname()
+        self.worker_count = worker_count
+        self.master_pub = master_pub
+        self.master_repl = master_repl
         self.wait_for_approval = int(kwargs.get('wait_for_approval', 120))
         self._sockets = []
         self.context = zmq.Context()
         self.ssl_thread_event = Event()
         self.stopped = Event()
+        self.node_cert = node_cert
+        self.node_key = node_key
+        self.ca = ca
+        self.server = server
+        self.node_csr = node_csr
+        self.cert_pass = cert_pass
+        self.sock_dir = sock_dir
 
     def loop(self):
         ioloop.IOLoop.instance().start()
@@ -67,13 +87,13 @@ class NodeTransport(TransportBackend):
         LOGC.info("Starting new SSL thread")
         args = []
         kwargs = {}
-        if self.config.security.node_cert and \
-                os.path.exists(self.config.security.node_cert):
+        if self.node_cert and \
+                os.path.exists(self.node_cert):
             # We have issued certificate
-            args.append(self.config.security.node_cert)
-            args.append(self.config.security.node_key)
-            kwargs['ca'] = self.config.security.ca
-            kwargs['cert_password'] = self.config.security.cert_pass
+            args.append(self.node_cert)
+            args.append(self.node_key)
+            kwargs['ca'] = self.ca
+            kwargs['cert_password'] = self.cert_pass
 
         ssl_socket = TLSZmqClientSocket(self.context,
                                         self.buses['jobs'][0],
@@ -86,16 +106,17 @@ class NodeTransport(TransportBackend):
         ssl_socket.shutdown()
         LOGC.info("Exiting SSL thread")
 
+    @catch_ex("Cannot prepare backend, check configuration. Error: {1}")
     def prepare(self):
         LOGC.debug("Starting ZMQ Transport")
 
         # check in order: args, kwargs, config
-        master_sub = 'tcp://%s' % self.config.master_pub
-        master_reply_uri = 'tcp://%s' % self.config.master_repl
-        worker_count = int(self.config.worker_count or 5)
+        master_sub = 'tcp://%s' % self.master_pub
+        master_reply_uri = 'tcp://%s' % self.master_repl
+        worker_count = int(self.worker_count or 5)
 
-        sock_dir = self.config.sock_dir or os.path.join(LIB_DIR,
-                                                        'cloudrunner', 'sock')
+        sock_dir = self.sock_dir or os.path.join(LIB_DIR,
+                                                 'cloudrunner', 'sock')
         if not os.path.exists(sock_dir):
             os.makedirs(sock_dir)
 
@@ -114,15 +135,15 @@ class NodeTransport(TransportBackend):
             'jobs': [master_reply_uri, ssl_proxy_uri],
         }
 
-        if not os.path.exists(self.config.security.node_key):
+        if not self.node_key or not os.path.exists(self.node_key):
             LOGC.warn('Client key not generated, run program '
                       'with "configure" option first.')
             exit(1)
 
-        if not os.path.exists(self.config.security.node_cert):
-            csreq = self.config.security.node_csr
+        if not os.path.exists(self.node_cert):
+            csreq = self.node_csr
             if not csreq:
-                base_name = self.config.security.node_key.rpartition('.')[0]
+                base_name = self.node_key.rpartition('.')[0]
                 csreq = '.'.join(base_name, ".csr")
                 if not os.path.exists(csreq):
                     LOGC.warn('Client certificate request not found.'
@@ -138,7 +159,7 @@ class NodeTransport(TransportBackend):
 
         # Run worker threads
         LOGC.info('Running client in server mode')
-        self.decrypter = TLSClientDecrypt(self.config.security.server)
+        self.decrypter = TLSClientDecrypt(self.server)
         listener = Thread(target=self.listener_device)
         listener.start()
 
@@ -256,8 +277,8 @@ class NodeTransport(TransportBackend):
     def _register(self):
 
         LOGC.info(colors.grey('Registering on Master...'))
-        csreq = self.config.security.node_csr
-
+        csreq = self.node_csr
+        _config = Config(CONFIG_NODE_LOCATION)
         try:
             csreq_data = open(csreq).read()
         except Exception, ex:
@@ -303,8 +324,8 @@ class NodeTransport(TransportBackend):
                 # First verify if the cert matches the request
                 csr = m.X509.load_request_string(csreq_data)
                 node_key_priv = m.RSA.load_key(
-                    self.config.security.node_key,
-                    lambda x: self.config.security.cert_pass)
+                    self.node_key,
+                    lambda x: self.cert_pass)
 
                 node_key = m.EVP.PKey()
                 node_key.assign_rsa(node_key_priv)
@@ -315,31 +336,32 @@ class NodeTransport(TransportBackend):
                 assert node_cert.verify(ca_cert.get_pubkey()), \
                     "Node cert failed to verify CA cert"
 
-                crt_file_name = self.config.security.node_cert
+                crt_file_name = self.node_cert
                 node_cert.save_pem(crt_file_name)
                 os.chmod(crt_file_name, stat.S_IREAD | stat.S_IWRITE)
                 del node_key
                 del node_cert
                 del csr
 
-                if not self.config.security.ca:
+                if not self.ca:
                     base = os.path.dirname(os.path.abspath(crt_file_name))
-                    self.config.update('Security', 'ca',
-                                       os.path.join(base, 'ca.crt'))
+                    _config.update('Security', 'ca',
+                                   os.path.join(base, 'ca.crt'))
 
-                # ca_cert.save_pem(self.config.security.ca)
-                open(self.config.security.ca, 'w').write(str(ca_crt_string))
+                open(_config.security.ca, 'w').write(str(ca_crt_string))
+                self.ca = _config.security.ca
 
-                os.chmod(self.config.security.ca, stat.S_IREAD | stat.S_IWRITE)
+                os.chmod(_config.security.ca, stat.S_IREAD | stat.S_IWRITE)
                 del ca_cert
 
-                if not self.config.security.server:
+                if not _config.security.server:
                     base = os.path.dirname(os.path.abspath(crt_file_name))
-                    self.config.update('Security', 'server',
-                                       os.path.join(base, 'server.crt'))
+                    _config.update('Security', 'server',
+                                   os.path.join(base, 'server.crt'))
 
-                server_cert.save_pem(self.config.security.server)
-                os.chmod(self.config.security.server,
+                server_cert.save_pem(_config.security.server)
+                self.server = _config.security.server
+                os.chmod(_config.security.server,
                          stat.S_IREAD | stat.S_IWRITE)
                 del server_cert
 
