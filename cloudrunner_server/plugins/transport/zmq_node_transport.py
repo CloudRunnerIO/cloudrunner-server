@@ -79,6 +79,22 @@ class NodeTransport(TransportBackend):
         self.node_csr = node_csr
         self.cert_pass = cert_pass
         self.sock_dir = sock_dir
+        self.properties.append(('Backend type', self.proto))
+        if self.node_cert and \
+                os.path.exists(self.node_cert):
+            try:
+                node_crt = m.X509.load_cert(self.node_cert)
+                self.properties.append(('Node cert fingerprint',
+                                        node_crt.get_fingerprint('sha1')))
+                self.properties.append(('Node cert subject',
+                                        str(node_crt.get_subject())))
+                self.properties.append(('Node cert issuer',
+                                        str(node_crt.get_issuer().CN)))
+                org = node_crt.get_subject().O
+                if org:
+                    self.properties.append(('Organization', org))
+            except:
+                pass
 
     def loop(self):
         ioloop.IOLoop.instance().start()
