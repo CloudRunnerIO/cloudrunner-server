@@ -12,13 +12,16 @@
 #  * permission of CloudRunner.io
 #  *******************************************************/
 
+import httplib
 import json
 import logging
 import M2Crypto as m
 import os
+import random
 import signal
 import socket
 import stat
+from string import ascii_letters
 from threading import Thread
 from threading import Event
 import time
@@ -41,6 +44,7 @@ from cloudrunner.plugins.transport.base import TransportBackend
 from cloudrunner import LIB_DIR
 
 from cloudrunner.util.decorators import catch_ex
+from cloudrunner.util.config import Config
 from cloudrunner.util.tlszmq import \
     (ConnectionException, ServerDisconnectedException,
      TLSZmqClientSocket, TLSClientDecrypt)
@@ -482,3 +486,134 @@ class NodeTransport(TransportBackend):
         for sock in self._sockets:
             sock.close()
         LOGC.info('Node transport closed')
+
+    def configure(self, overwrite=False, **kwargs):
+        config = Config(CONFIG_NODE_LOCATION)
+        conf_dir = os.path.join(LIB_DIR, "cloudrunner_node")
+        key_size = int(config.security.key_size or 2048)
+
+        cert_dir = os.path.join(conf_dir, 'certs')
+        if not os.path.exists(cert_dir):
+            os.makedirs(cert_dir)
+
+        key_file = config.security.node_key
+        if os.path.exists(key_file):
+            if not overwrite:
+                print ("Node key file already exists in your config. "
+                       "If you want to create new one - run\n"
+                       "\tcloudrunner-node configure --overwrite\n"
+                       "IMPORTANT! Please note that regenerating your key "
+                       "and certificate will prevent the node from "
+                       "connecting to the Master, if it already has "
+                       "an approved certificate!")
+                return False
+
+        crt_file = config.security.node_cert
+        if os.path.exists(crt_file):
+            if not overwrite:
+                print ("Node certificate file already exists in your config. "
+                       "If you still want to create new one - run\n"
+                       "\tcloudrunner-node configure --overwrite\n"
+                       "IMPORTANT! Please note that regenerating your key "
+                       "and certificate will prevent the node from "
+                       "connecting to the Master, if it already has "
+                       "an approved certificate!")
+                return False
+
+        cert_password = ''.join([random.choice(ascii_letters)
+                                 for x in range(32)])
+
+        key_file = os.path.join(cert_dir, '%s.key' % self.node_id)
+        csr_file = os.path.join(cert_dir, '%s.csr' % self.node_id)
+        crt_file = os.path.join(cert_dir, '%s.crt' % self.node_id)
+
+        node_key = m.EVP.PKey()
+
+        rsa = m.RSA.gen_key(key_size, 65537, lambda: True)
+        node_key.assign_rsa(rsa)
+        rsa = None
+
+        print ("Saving KEY file %s" % key_file)
+        node_key.save_key(key_file, callback=lambda x: cert_password)
+        os.chmod(key_file, stat.S_IREAD | stat.S_IWRITE)
+
+        req = m.X509.Request()
+        req.set_pubkey(node_key)
+        req.set_version(2)
+
+        subj = req.get_subject()
+
+        try:
+            import locale
+            l_c = locale.getdefaultlocale()
+            subj.C = l_c[0].rpartition('_')[-1]
+        except:
+            pass
+        if not subj.C or len(subj.C) != 2:
+            subj.C = "US"
+
+        subj.CN = self.node_id
+        if config.use_meta_id:
+            subj.OU = self.get_meta_data()
+        else:
+            subj.OU = 'DEFAULT'
+
+        req.sign(node_key, 'sha1')
+        assert req.verify(node_key)
+        assert req.verify(req.get_pubkey())
+
+        print ("Subject %s" % subj)
+        print ("Saving CSR file %s" % csr_file)
+        req.save_pem(csr_file)
+        os.chmod(csr_file, stat.S_IREAD | stat.S_IWRITE)
+
+        print ('Generation of credentials is complete.'
+               'Now run cloudrunner-node to register at Master')
+
+        if os.path.exists(crt_file):
+            # if crt file exists - remove it, as it cannot be used
+            # anymore with the key file
+            os.unlink(crt_file)
+        print ("Updating config settings")
+        config.update('General', 'work_dir',
+                      os.path.join(conf_dir, 'tmp'))
+        config.update('Security', 'cert_path', cert_dir)
+        config.update('Security', 'node_key', key_file)
+        config.update('Security', 'node_csr', csr_file)
+        config.update('Security', 'node_cert', crt_file)
+        config.update('Security', 'cert_pass', cert_password)
+        config.update('Security', 'ca', '')
+        config.update('Security', 'server', '')
+        config.reload()
+
+    def get_meta_data(self):
+        address = '169.254.169.254'
+        conn = httplib.HTTPConnection(address, timeout=5)
+
+        def openstack():
+            path = '/openstack/2013-04-04/meta_data.json'
+            try:
+                conn.request('GET', path)
+                res = conn.getresponse()
+                if res.status == 200:
+                    # OpenStack cloud
+                    return json.loads(res.read()).get("uuid", 'N/A')
+            except Exception, ex:
+                return
+
+        def amazon_aws():
+            path = '/2012-01-12/meta-data/instance-id'
+            try:
+                conn.request('GET', path)
+                res = conn.getresponse()
+                if res.status == 200:
+                    # AmazonAWS cloud
+                    return res.read() or "N/A"
+            except Exception, ex:
+                return
+
+        ret = openstack()
+        if not ret:
+            ret = amazon_aws()
+
+        return ret

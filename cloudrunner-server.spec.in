@@ -7,7 +7,7 @@
 %define unmanaged_name cloudrunner_server
 
 Name:       cloudrunner-server
-Version:    0.3
+Version:    0.4
 Release:    5.cloudr%{?dist}
 Summary:    CloudRunner Server for running scripts in cloud environment
 Group:      Cloud tools
@@ -29,7 +29,7 @@ Requires:      m2crypto
 Requires:      python-zmq >= 13.0
 Requires:      python-httplib2
 Requires:      python-setuptools
-Requires:      cloudrunner >= 0.3
+Requires:      cloudrunner >= 0.4
 Requires:      python-crontab
 
 Obsoletes:     cloudrunner-dispatcher

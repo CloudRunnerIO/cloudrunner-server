@@ -430,12 +430,13 @@ class Dispatcher(Daemon):
                     raw_frames = job_queue.recv()
                     sender = raw_frames.pop(0)
                     ident = raw_frames.pop(0)
-                    data = raw_frames.pop(0)
-                    if data == 'QUIT':
+                    raw_frames.pop(0)  # peer
+                    raw_frames.pop(0)  # org
+                    data = json.loads(raw_frames[0])
+                    if data[0] == 'QUIT':
                         # Node exited
                         continue
-                    frames = json.loads(data)
-                    req = message.AgentReq.build(*frames)
+                    req = message.AgentReq.build(*data)
                     if not req:
                         LOG.error("Invalid request %s" % frames)
                         continue

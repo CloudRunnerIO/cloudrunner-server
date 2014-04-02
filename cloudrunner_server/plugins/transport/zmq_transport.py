@@ -368,6 +368,9 @@ class ZmqTransport(ServerTransportBackend):
             elif not request:
                 return False, 'SEND_CSR'
 
+    def configure(self, overwrite=False, **kwargs):
+        pass
+
     def loop(self):
         ioloop.IOLoop.instance().start()
 
@@ -916,7 +919,7 @@ class Router(Thread):
             self.config.security.server_cert,
             self.config.security.server_key,
             self.config.security.ca,
-            verify_loc=verify_loc,
+            verify_func=verify_loc,
             cert_password=self.config.security.cert_pass)
 
         def master():

@@ -26,9 +26,9 @@ def install():
     _path = p.abspath(p.join(p.dirname(__file__), '..', 'transport'))
 
     config.update('General', 'transport',
-                  'cloudrunner_plugins.transport.zmq_node_transport.NodeTransport')
-    config.update('Plugins', 'config',
-                  'cloudrunner_plugins.config.openstack_ssl_config')
+                  'cloudrunner_plugins.transport.'
+                  'zmq_node_transport.NodeTransport')
+    config.update('General', 'use_meta_id', 'true')
     config.reload()
 
     print "Cloudrunner node configuration completed"
