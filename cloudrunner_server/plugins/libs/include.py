@@ -84,7 +84,8 @@ class LibIncludePlugin(IncludeLibPluginBase, ArgsProvider, CliArgsProvider):
             return None
 
     def append_args(self):
-        return [dict(arg='--include-lib', dest='includelib', action='append'),
+        return [dict(arg='--attach-lib', dest='attachlib', action='append'),
+                dict(arg='--include-lib', dest='includelib', action='append'),
                 dict(arg='--store-lib', dest='storelib')]
 
     def add(self, user_org, name, script, **kwargs):
@@ -247,8 +248,14 @@ class LibIncludePlugin(IncludeLibPluginBase, ArgsProvider, CliArgsProvider):
             or single option with multiple values,
             separated by semi-colon(:)
         """
-        if args.includelib:
+        if args.includelib or args.attachlib:
             arr = []
+
+
+            if args.includelib:
+                args.includelib = [a.strip("\"'") for a in args.includelib]
+            if args.attachlib:
+                args.attachlib = [a.strip("\"'") for a in args.attachlib]
 
             def _append(_list, elem):
                 _list.extend(elem.split(';'))
@@ -260,9 +267,11 @@ class LibIncludePlugin(IncludeLibPluginBase, ArgsProvider, CliArgsProvider):
                 exists, source = self.show(user_org, lib)
                 lib = sanitize(lib)
                 if exists:
-                    yield dict(name=lib, source=source)
+                    yield dict(name=lib,
+                               inline=bool(args.includelib),
+                               source=source)
 
-        if args.storelib:
+        elif args.storelib:
             self.add(user_org, args.storelib, section)
 
     # CLI arguments

@@ -108,7 +108,7 @@ class CronScheduler(CliArgsProvider):
     def add(self, user, payload=None, name=None,
             period=None, auth_token=None, **kwargs):
         try:
-            job_id = str(uuid.uuid1())
+            job_id = str(uuid.uuid4())
             kwargs['job_id'] = job_id
             name = name.replace(SEPARATOR, '_')
             if self._all(name=name):

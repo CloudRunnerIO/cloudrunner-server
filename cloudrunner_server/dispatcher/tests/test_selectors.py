@@ -85,7 +85,7 @@ whoami
                                    ("$NEXT_NODE", ''), (None, ''),
                                    ("os=$next_step", ''), (None, '')]
                                    )),
-                    patch('uuid.uuid1',
+                    patch('uuid.uuid4',
                           Mock(
                           return_value='416728b2-52a4-11e3-ae16-00247e6dff02')),
                     patch('time.time', Mock(return_value=1385031137))):

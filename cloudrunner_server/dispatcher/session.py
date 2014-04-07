@@ -144,8 +144,8 @@ class JobSession(Thread):
         if 'includes' in self.kwargs:
             try:
                 # process runtime includes
-                for name, source in self.kwargs['includes'].items():
-                    user_libs.append(dict(name=name, source=source))
+                for lib in self.kwargs['includes']:
+                    user_libs.append(lib)
             except Exception, ex:
                 LOG.exception(ex)
 
@@ -281,7 +281,7 @@ class JobSession(Thread):
 
         """
 
-        job_id = str(uuid.uuid1())  # Job Session id
+        job_id = str(uuid.uuid4())  # Job Session id
         job_event = Event()
         remote_user_map = request.pop('remote_user_map')
         # Call for nodes
