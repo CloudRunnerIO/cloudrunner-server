@@ -190,7 +190,8 @@ class Dispatcher(Daemon):
         self.scheduler_class = None
         if CONFIG.scheduler:
             self.scheduler_class = local_plugin_loader(CONFIG.scheduler)
-            LOG.info('Loaded scheduler class: %s .' % self.scheduler_class)
+            LOG.info('Loaded scheduler class: %s' %
+                     self.scheduler_class.__name__)
         else:
             LOG.warn('Cannot find scheduler class. Set it in config file.')
 
@@ -213,14 +214,16 @@ class Dispatcher(Daemon):
         self.plugin_context.args_plugins = args_plugins
         if JobInOutProcessorPluginBase.__subclasses__():
             job_plugins = JobInOutProcessorPluginBase.__subclasses__()
-            LOG.info('Loading Job Processing plugins: %s' % job_plugins)
+            LOG.info('Loading Job Processing plugins: %s' %
+                     ', '.join([pl.__name__ for pl in job_plugins]))
         else:
             job_plugins = []
         self.plugin_context.job_plugins = job_plugins
 
         if IncludeLibPluginBase.__subclasses__():
             lib_plugins = IncludeLibPluginBase.__subclasses__()
-            LOG.info('Loading Lib Save plugins: %s' % lib_plugins)
+            LOG.info('Loading Lib Save plugins: %s' %
+                     ', '.join([pl.__name__ for pl in lib_plugins]))
         else:
             lib_plugins = []
         self.plugin_context.lib_plugins = lib_plugins
@@ -505,7 +508,7 @@ class Dispatcher(Daemon):
                     # Done -> user
                     frames = job_done_queue.recv()
                     job_queue.send(*frames)
-                    log_queue.send(*frames[1:])
+                    log_queue.send(*json.loads(frames[2]))
             except ConnectionError:
                 break
 

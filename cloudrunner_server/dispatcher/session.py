@@ -264,7 +264,7 @@ class JobSession(Thread):
         del self.manager.sessions[self.session_id]
 
         # Wait for all other threads to finish consuming session data
-        time.sleep(2)
+        time.sleep(1)
         self.job_done.close()
 
     def exec_section(self, targets, request, timeout=None):

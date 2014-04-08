@@ -430,6 +430,8 @@ class ZmqTransport(ServerTransportBackend):
             log_xsub.bind(self.endpoints['logger'])
             log_xpub = self.context.socket(zmq.XPUB)
             log_xpub.bind(self.endpoints['logger_fanout'])
+            LOGP.info("Logger publishing at %s" %
+                      self.endpoints['logger_fanout'])
             while not self.running.is_set():
                 try:
                     zmq.device(zmq.FORWARDER, log_xsub, log_xpub)
