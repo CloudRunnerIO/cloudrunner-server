@@ -580,6 +580,12 @@ class NodeTransport(TransportBackend):
         config.update('General', 'node_id', self.node_id)
         config.update('General', 'work_dir',
                       os.path.join(conf_dir, 'tmp'))
+
+        if kwargs.get("server_uri"):
+            ip = kwargs.get("server_uri")
+            config.update('General', 'master_pub', "%s:5551" % ip)
+            config.update('General', 'master_repl', "%s:5552" % ip)
+
         config.update('Security', 'cert_path', cert_dir)
         config.update('Security', 'node_key', key_file)
         config.update('Security', 'node_csr', csr_file)
