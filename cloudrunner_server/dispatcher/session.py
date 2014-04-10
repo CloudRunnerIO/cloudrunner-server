@@ -28,6 +28,7 @@ from cloudrunner.core.message import PipeMessage
 from cloudrunner.core.message import FinishedMessage
 from cloudrunner.core.message import StatusCodes
 from cloudrunner.util.string import stringify
+from cloudrunner.util.string import stringify1
 
 LOG = logging.getLogger('ServerSession')
 
@@ -220,14 +221,13 @@ class JobSession(Thread):
                         if not isinstance(new_env[k], list):
                             new_env[k] = [new_env[k]]
                         if isinstance(v, list):
-                            new_env[k].extend(v)
+                            new_env[k].extend(list(stringify(*v)))
                         else:
-                            new_env[k].append(v)
+                            new_env[k].append(stringify1(v))
                     else:
                         new_env[k] = v
 
             env.update(new_env)
-
             for plugin in self.plugin_context.job_plugins:
                 try:
                     # Save passed env for job

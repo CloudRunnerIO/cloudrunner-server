@@ -491,6 +491,8 @@ class NodeTransport(TransportBackend):
         config = Config(CONFIG_NODE_LOCATION)
         conf_dir = os.path.join(LIB_DIR, "cloudrunner_node")
         key_size = int(config.security.key_size or 2048)
+        if kwargs.get("node_id"):
+            self.node_id = kwargs["node_id"]
 
         cert_dir = os.path.join(conf_dir, 'certs')
         if not os.path.exists(cert_dir):
@@ -575,6 +577,7 @@ class NodeTransport(TransportBackend):
             # anymore with the key file
             os.unlink(crt_file)
         print ("Updating config settings")
+        config.update('General', 'node_id', self.node_id)
         config.update('General', 'work_dir',
                       os.path.join(conf_dir, 'tmp'))
         config.update('Security', 'cert_path', cert_dir)
