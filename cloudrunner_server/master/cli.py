@@ -387,7 +387,6 @@ def main():
         if not items:
             return
         for line in items:
-
             _type = line[0]
             printables = list(line[1:])
             for i in range(len(printables)):

@@ -656,7 +656,7 @@ class ConfigController(object):
                             'is not empty. To force creation of ' \
                             'new certificates there, use the ' \
                             '--overwrite options' % ca_path
-                        exit(1)
+                        return
                     else:
                         yield DATA, 'Overwriting existing files in %s' % \
                             ca_path
