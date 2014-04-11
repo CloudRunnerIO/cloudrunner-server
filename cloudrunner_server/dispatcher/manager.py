@@ -55,6 +55,20 @@ class SessionManager(object):
         self.sessions[session_id] = sess_thread
         return promise
 
+    def register_session(self, session_id):
+        self.backend.register_session(session_id)
+
+    def delete_session(self, session_id):
+        self.backend.unregister_session(session_id)
+        try:
+            del self.subscriptions[self.session_id]
+        except:
+            pass
+        try:
+            del self.sessions[session_id]
+        except:
+            pass
+
     def notify(self, session_id, job_id, payload, targets,
                remote_user_map, **kwargs):
         self.publisher.send(

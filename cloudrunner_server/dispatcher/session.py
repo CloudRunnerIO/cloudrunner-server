@@ -260,8 +260,6 @@ class JobSession(Thread):
         self._reply(message)
 
         self.session_event.set()
-        del self.manager.subscriptions[self.session_id]
-        del self.manager.sessions[self.session_id]
 
         # Wait for all other threads to finish consuming session data
         time.sleep(1)
@@ -282,6 +280,9 @@ class JobSession(Thread):
         """
 
         job_id = str(uuid.uuid4())  # Job Session id
+
+        self.manager.register_session(job_id)
+
         job_event = Event()
         remote_user_map = request.pop('remote_user_map')
         # Call for nodes
@@ -449,6 +450,7 @@ class JobSession(Thread):
         user_input_queue.close()
         job_queue.close()
         job_reply.close()
+        self.manager.delete_session(job_id)
 
         yield job_id, [dict(node=k,
                             remote_user=n['remote_user'],

@@ -27,7 +27,7 @@ import zmq
 from zmq.eventloop import ioloop
 
 from cloudrunner.util.tlszmq import (TLSZmqServerSocket, TLSServerCrypt)
-from cloudrunner.core.message import (ClientReq, ClientRep, RerouteReq,
+from cloudrunner.core.message import (ClientReq, ClientRep, RerouteReq, FwdReq,
                                       HEARTBEAT, ADMIN_TOWER, TOKEN_SEPARATOR,
                                       HeartBeatReq, DEFAULT_ORG,  StatusCodes,
                                       is_valid_host)
@@ -64,6 +64,7 @@ class DictWrapper(dict):
 class ZmqTransport(ServerTransportBackend):
 
     proto = "zmq+ssl"
+    managed_sessions = {}
 
     def __init__(self, config):
         self.preprocessor = []
@@ -315,6 +316,15 @@ class ZmqTransport(ServerTransportBackend):
             if p.exists(crt_file_name):
                 os.unlink(crt_file_name)
             del csr
+
+    def register_session(self, session_id):
+        self.managed_sessions[session_id] = True
+
+    def unregister_session(self, session_id):
+        try:
+            self.managed_sessions.pop(session_id)
+        except:
+            pass
 
     def verify_node_request(self, node, request):
         base_path = p.join(p.dirname(
@@ -840,12 +850,18 @@ class Router(Thread):
                 try:
                     for sock in socks:
                         if fwd_proxy and fwd_proxy == sock:
-                            fwd_rer_packet = fwd_proxy.recv_multipart()
-                            direction = fwd_rer_packet.pop(0)
+                            fwd_packet = fwd_proxy.recv_multipart()
+                            direction = fwd_packet.pop(0)
                             if direction == "IN":
-                                router.send_multipart(fwd_rer_packet)
+                                sess_id = fwd_packet[0]
+                                if sess_id in ZmqTransport.managed_sessions:
+                                    router.send_multipart(fwd_packet)
                             elif direction == "OUT":
-                                ssl_worker.send_multipart(fwd_rer_packet)
+                                fwd_msg = FwdReq.build(*fwd_packet)
+                                if fwd_msg:
+                                    sid = fwd_msg.data[0]
+                                    if sid not in ZmqTransport.managed_sessions:
+                                        ssl_worker.send_multipart(fwd_packet)
 
                         if sock == ssl_worker:
                             packets = ssl_worker.recv_multipart()
@@ -875,12 +891,14 @@ class Router(Thread):
                             if not self.config.security.use_org:
                                 req.org = DEFAULT_ORG
 
-                            rer_packet = RerouteReq(req).pack()
+                            rer = RerouteReq(req)
+                            rer_packet = rer.pack()
                             if rer_packet and rer_packet[0] != HEARTBEAT:
                                 LOGR.info('IN-MSG re-routed: %s' % rer_packet)
 
                             router.send_multipart(rer_packet)
-                            if fwd_proxy:
+                            if fwd_proxy and \
+                                rer.dest not in ZmqTransport.managed_sessions:
                                 fwd_proxy.send_multipart(["IN"] + rer_packet)
 
                         if sock == reply_router:

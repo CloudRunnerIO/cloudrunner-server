@@ -26,6 +26,14 @@ class ServerTransportBackend(TransportBackend):
         pass
 
     @abc.abstractmethod
+    def register_session(self, session_id):
+        pass
+
+    @abc.abstractmethod
+    def unregister_session(self, session_id):
+        pass
+
+    @abc.abstractmethod
     def terminate(self):
         pass
 
