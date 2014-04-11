@@ -618,38 +618,47 @@ class ZmqTransport(ServerTransportBackend):
                     else:
                         packet.pop(0)  # remove
                         org_name = DEFAULT_ORG
-                    # Translate org_name to org_uid
-                    try:
-                        org_uid = self.tenants[org_name].id
-                    except:
-                        LOGR.error("Problem dispatching to tenant %s. "
-                                   "Restart of nodes might be needed" %
-                                   org_name)
-                    else:
-                        def process(msg):
-                            if self.crypter:
-                                return [self.crypter.encrypt(*msg)]
-                            else:
-                                return msg
 
-                        if len(packet) == 2:
+                    def process(msg):
+                        if self.crypter:
+                            return [self.crypter.encrypt(*msg)]
+                        else:
+                            return msg
+
+                    def translate(org_name):
+                        # Translate org_name to org_uid
+                        try:
+                            org_uid = self.tenants[org_name].id
+                            return org_uid
+                        except:
+                            LOGR.error("Problem dispatching to tenant %s. "
+                                       "Restart of nodes might be needed" %
+                                       org_name)
+
+                    if len(packet) == 2:
+                        org_uid = translate(org_name)
+                        if org_uid:
                             xpub_listener.send_multipart([org_uid] +
                                                          process(packet))
                             if pub_proxy:
                                 # Forward to other masters
                                 pub_proxy.send_multipart(
-                                    [org_uid, 'FWD'] + packet)
-                        elif len(packet) == 3 and packet[0] == 'FWD':
-                            # Received forwarded packet?
-                            packet.pop(0)
+                                    [org_name, 'FWD'] + packet)
+
+                    elif len(packet) == 3 and packet[0] == 'FWD':
+                        # Received forwarded packet?
+                        packet.pop(0)
+                        org_uid = translate(org_name)
+                        if org_uid:
                             signed_packets = self.crypter.encrypt(*packet)
                             xpub_listener.send_multipart([org_uid] +
                                                          process(packet))
-                        elif len(packet) == 4 and packet[0] == 'FWD':
-                            # HB
-                            org, peer = packet[2:4]
-                            if org in self.tenants:
-                                self.tenants[org].push(peer)
+
+                    elif len(packet) == 4 and packet[0] == 'FWD':
+                        # HB
+                        org, peer = packet[2:4]
+                        if org in self.tenants:
+                            self.tenants[org].push(peer)
 
                 if heartbeat in socks:
                     hb_msg = heartbeat.recv_multipart()

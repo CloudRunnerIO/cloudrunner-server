@@ -354,9 +354,9 @@ class JobSession(Thread):
                     continue
 
                 # Assert we have rep from the same organization
-                if self.manager.config.security.use_org:
-                    assert job_rep.org == remote_user_map.org, \
-                        job_rep.org + " != " + remote_user_map.org
+                if self.manager.config.security.use_org and \
+                    job_rep.org != remote_user_map.org:
+                        continue
 
                 state = node_map.setdefault(
                     job_rep.peer, dict(status=StatusCodes.STARTED,
@@ -440,7 +440,7 @@ class JobSession(Thread):
                         node['status'] = StatusCodes.FINISHED
                         node['stderr'] = \
                             node['data'].setdefault('stderr', '') + \
-                            'Job execution stopped: [%s]' % self.stop_reason
+                            '\nJob execution stopped: [%s]' % self.stop_reason
                         yield ('PIPE', job_id, job_rep.run_as, name,
                                node['stdout'], node['stderr'])
 
