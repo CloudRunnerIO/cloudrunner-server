@@ -558,7 +558,7 @@ class NodeTransport(TransportBackend):
         if config.use_meta_id:
             subj.OU = self.get_meta_data()
         else:
-            subj.OU = 'DEFAULT'
+            subj.OU = kwargs.get("org") or "DEFAULT"
 
         req.sign(node_key, 'sha1')
         assert req.verify(node_key)
