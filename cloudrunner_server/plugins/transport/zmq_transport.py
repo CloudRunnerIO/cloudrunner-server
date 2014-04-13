@@ -559,8 +559,6 @@ class ZmqTransport(ServerTransportBackend):
         if self.proxies:
             pub_proxy = self.context.socket(zmq.XPUB)
             xsub_listener.bind('tcp://0.0.0.0:%s' % self.proxy_pub_port)
-            in_msg_proxy = self.context.socket(zmq.DEALER)
-            out_msg_proxy = self.context.socket(zmq.DEALER)
             for proxy in self.proxies:
                 LOGR.info("Attaching to proxy: %s" % proxy)
                 pub_proxy.connect('tcp://%s:%s' % (proxy,
@@ -828,15 +826,18 @@ class Router(Thread):
             poller.register(reply_router, zmq.POLLIN)
             poller.register(ssl_worker, zmq.POLLIN)
 
-            fwd_proxy = None
+            fwd_proxy, fwd_recv = None, None
             if self.proxies:
-                fwd_proxy = self.context.socket(zmq.DEALER)
+                fwd_proxy = self.context.socket(zmq.PUB)
                 fwd_proxy.bind('tcp://0.0.0.0:%s' % self.proxy_fwd_port)
+                fwd_recv = self.context.socket(zmq.SUB)
+                fwd_recv.setsockopt(zmq.SUBSCRIBE, 'IN')
+                fwd_recv.setsockopt(zmq.SUBSCRIBE, 'OUT')
                 for proxy in self.proxies:
-                    fwd_proxy.connect('tcp://%s:%s' % (proxy,
-                                                       self.proxy_fwd_port))
+                    fwd_recv.connect('tcp://%s:%s' % (proxy,
+                                                      self.proxy_fwd_port))
 
-                poller.register(fwd_proxy, zmq.POLLIN)
+                poller.register(fwd_recv, zmq.POLLIN)
 
             socks = {}
             while not self.running.is_set():
@@ -849,8 +850,8 @@ class Router(Thread):
                     continue
                 try:
                     for sock in socks:
-                        if fwd_proxy and fwd_proxy == sock:
-                            fwd_packet = fwd_proxy.recv_multipart()
+                        if fwd_recv and fwd_recv == sock:
+                            fwd_packet = fwd_recv.recv_multipart()
                             direction = fwd_packet.pop(0)
                             if direction == "IN":
                                 sess_id = fwd_packet[0]
@@ -923,6 +924,7 @@ class Router(Thread):
             ssl_worker.close()
             if fwd_proxy:
                 fwd_proxy.close(0)
+                fwd_recv.close(0)
 
             LOGR.info("Exited router worker")
 
