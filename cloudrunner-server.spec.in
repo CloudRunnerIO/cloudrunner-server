@@ -7,7 +7,7 @@
 %define unmanaged_name cloudrunner_server
 
 Name:       cloudrunner-server
-Version:    0.4
+Version:    0.5
 Release:    5.cloudr%{?dist}
 Summary:    CloudRunner Server for running scripts in cloud environment
 Group:      Cloud tools
@@ -29,7 +29,7 @@ Requires:      m2crypto
 Requires:      python-zmq >= 13.0
 Requires:      python-httplib2
 Requires:      python-setuptools
-Requires:      cloudrunner >= 0.4
+Requires:      cloudrunner >= 0.5
 Requires:      python-crontab
 
 Obsoletes:     cloudrunner-dispatcher
@@ -56,7 +56,7 @@ This package contains common libs and files.
 %package plugin-ssl-node
 Summary:    CloudRunner Server transport plugin
 Group:      Cloud tools
-Requires:   cloudrunner-node => 0.3
+Requires:   cloudrunner-node => 0.5
 %description plugin-ssl-node
 CloudRunner engine for running scripts in cloud environment.
 This package contains transport plugin for node-server configuration.
@@ -64,7 +64,7 @@ This package contains transport plugin for node-server configuration.
 %package plugin-openstack-node
 Summary:    CloudRunner Server transport plugin
 Group:      Cloud tools
-Requires:   cloudrunner-node => 0.3
+Requires:   cloudrunner-node => 0.5
 %description plugin-openstack-node
 CloudRunner engine for running scripts in cloud environment.
 This package contains transport plugin for node-server configuration with OpenStack.
