@@ -20,6 +20,7 @@ import argparse
 import json
 import logging
 import os
+import shlex
 import signal
 import sys
 import time
@@ -278,7 +279,7 @@ class Dispatcher(Daemon):
         user_org = (self.user_id, remote_user_map.org)
 
         try:
-            args = kwargs.get('args', '').split()
+            args = shlex.split(kwargs.get('args', ''))
             if '--jhelp' in args:
 
                 args.remove('--jhelp')
@@ -398,7 +399,6 @@ class Dispatcher(Daemon):
         """
 
         session_id = str(uuid.uuid4())
-
         promise = self.manager.prepare_session(
             self.user_id, session_id, payload, remote_user_map,
             self.plugin_context.instance(self.user_id, self.user_token,

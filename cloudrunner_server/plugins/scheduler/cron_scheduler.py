@@ -266,7 +266,7 @@ class CronScheduler(CliArgsProvider):
             bin_path = os.path.dirname(os.path.abspath(sys.argv[0]))
             kwargs = {}
             kwargs["exec"] = os.path.join(bin_path, 'cloudrunner-master')
-            ret = self.add(user_org[0], data, args.name,
+            ret = self.add(user_org[0], args.content, args.name,
                            args.period,
                            ctx.create_auth_token(expiry=-1),
                            **kwargs)
