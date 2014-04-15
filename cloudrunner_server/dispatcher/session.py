@@ -58,8 +58,6 @@ class JobSession(Thread):
     def _reply(self, message):
         for sub in self.manager.subscriptions.get(message.session_id, []):
             try:
-                if not hasattr(sub, "proxy") or not hasattr(sub, "peer"):
-                    continue
                 self.job_done.send(*message.pack(sub.proxy, sub.peer))
             except zmq.ZMQError as e:
                 if self.manager.context.closed or zerr.errno == zmq.ETERM \

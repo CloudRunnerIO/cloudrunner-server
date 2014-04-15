@@ -507,7 +507,9 @@ class Dispatcher(Daemon):
                 elif job_done_queue in ready:
                     # Done -> user
                     frames = job_done_queue.recv()
-                    job_queue.send(*frames)
+                    proxy, peer = frames[:2]
+                    if proxy and peer:
+                        job_queue.send(*frames)
                     log_queue.send(*json.loads(frames[2]))
             except ConnectionError:
                 break
@@ -569,6 +571,7 @@ class Dispatcher(Daemon):
                 response = self.dispatch(payload, remote_user_map,
                                          caller='Scheduler: %s' % job.name)
                 if isinstance(response, Promise):
+                    response.proxy = ''
                     response.peer = ''
                     response.resolve()
 
