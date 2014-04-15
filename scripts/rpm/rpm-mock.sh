@@ -3,6 +3,7 @@
 set -e
 set -b
 # set -x # DEBUG
+
 # Variables
 PROJECT_NAME=cloudrunner_server
 
