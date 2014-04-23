@@ -138,7 +138,7 @@ class TestServer(base.BaseTestCase):
                     self.assertEqual(disp.plugin("cron_content",
                                                  remote_user_map,
                                                  plugin="scheduler",
-                                                 args="add my_cron data /2 * * * *"),
+                                                 args="add my_cron cron_content /2 * * * *"),
                                      [(True, None)])
 
                 CronTab.new.assert_called_with(
