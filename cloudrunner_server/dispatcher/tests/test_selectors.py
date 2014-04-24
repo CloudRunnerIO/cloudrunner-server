@@ -87,7 +87,7 @@ whoami
                                    )),
                     patch('uuid.uuid4',
                           Mock(
-                          return_value='416728b2-52a4-11e3-ae16-00247e6dff02')),
+                          return_value=Mock(hex='416728b252a411e3ae1600247e6dff02'))),
                     patch('time.time', Mock(return_value=1385031137))):
             ret = disp.dispatch(script,
                                 access_map,

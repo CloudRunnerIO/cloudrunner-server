@@ -398,7 +398,7 @@ class Dispatcher(Daemon):
         Dispatch script to targeted nodes
         """
 
-        session_id = str(uuid.uuid4())
+        session_id = uuid.uuid4().hex
         promise = self.manager.prepare_session(
             self.user_id, session_id, payload, remote_user_map,
             self.plugin_context.instance(self.user_id, self.user_token,

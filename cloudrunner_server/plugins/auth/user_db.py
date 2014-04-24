@@ -238,7 +238,7 @@ class AuthDb(object):
             return False, "Organization already exists"
 
         try:
-            uid = str(uuid.uuid4())
+            uid = uuid.uuid4().hex
             self.dbm.organizations.insert(name=org_name, org_uid=uid)
         except Exception as exc:
             return False, "Cannot create organization, error: %r" % exc

@@ -229,7 +229,7 @@ class NodeTransport(TransportBackend):
         ssl_proxy.connect(self.endpoints['ssl-proxy'])
 
         master_sub = self.context.socket(zmq.SUB)
-        master_sub.setsockopt(zmq.SUBSCRIBE, str(uuid.uuid4()))
+        master_sub.setsockopt(zmq.SUBSCRIBE, uuid.uuid4().hex)
         master_sub.connect(self.buses['requests'][0])
 
         poller = zmq.Poller()

@@ -75,7 +75,7 @@ class TestServer(base.BaseTestCase):
                         render_time=lambda: 0,
                         name='my_cron')
 
-        with nested(patch('uuid.uuid4', Mock(return_value=123123)),
+        with nested(patch('uuid.uuid4', Mock(return_value=Mock(hex="123123"))),
                     patch.multiple('os', write=DEFAULT, close=DEFAULT,
                                    unlink=DEFAULT, stat=DEFAULT),
                     patch('tempfile.mkstemp',
@@ -91,7 +91,7 @@ class TestServer(base.BaseTestCase):
                           read=Mock(return_value='Cron content')))):
             meta = '%(user)s\t%(token)s\t%(job_id)s\t%(name)s\t%(file)s\t' % \
                 dict(user=user, token='SOME_GENERATED_TOKEN',
-                     job_id=str(uuid.uuid4()),
+                     job_id=uuid.uuid4().hex,
                      name='my_cron', file='cron_file')
 
             job1 = Mock(return_value=None, user='user',
@@ -144,7 +144,7 @@ class TestServer(base.BaseTestCase):
                 CronTab.new.assert_called_with(
                     comment=meta,
                     command='/usr/bin/cloudrunner-master schedule run %s' %
-                    str(uuid.uuid4()))
+                    uuid.uuid4().hex)
                 cron_obj.setall.assert_called_with(
                     '/2', '*', '*', '*', '*')
                 os.write.assert_called_with('file', 'cron_content')
@@ -174,7 +174,7 @@ class TestServer(base.BaseTestCase):
                 self.assertEqual(disp.plugin('', remote_user_map,
                                              plugin='scheduler',
                                              args="show my_cron"),
-                                 [(True, {'job_id': str(uuid.uuid4()),
+                                 [(True, {'job_id': uuid.uuid4().hex,
                                           'name': 'my_cron',
                                           'period': '/2 * * * *',
                                           'owner': 'userX',

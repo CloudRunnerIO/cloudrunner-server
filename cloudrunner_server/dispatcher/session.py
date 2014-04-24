@@ -279,7 +279,7 @@ class JobSession(Thread):
 
         """
 
-        job_id = str(uuid.uuid4())  # Job Session id
+        job_id = uuid.uuid4().hex  # Job Session id
 
         self.manager.register_session(job_id)
 
