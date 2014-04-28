@@ -25,6 +25,7 @@ import os
 import random
 import re
 from socket import gethostname
+import shutil
 import stat
 from string import ascii_letters
 import time
@@ -844,6 +845,11 @@ class ConfigController(object):
         yield TAG, "Saving Server KEY file %s" % key_file
         server_key.save_key(key_file, callback=lambda x: cert_password)
         os.chmod(key_file, stat.S_IREAD | stat.S_IWRITE)
+
+        sub_ca_dir = os.path.join(ca_path, 'org')
+        if os.path.exists(sub_ca_dir):
+            yield TAG, "Clearing SubCA directory %s" % sub_ca_dir
+            shutil.rmtree(sub_ca_dir)
 
         yield TAG, "Updating config settings"
 
