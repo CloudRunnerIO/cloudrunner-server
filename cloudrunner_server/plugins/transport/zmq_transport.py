@@ -26,13 +26,14 @@ import time
 import zmq
 from zmq.eventloop import ioloop
 
-from cloudrunner.util.tlszmq import (TLSZmqServerSocket, TLSServerCrypt)
+from cloudrunner.util.tlszmq import TLSZmqServerSocket
 from cloudrunner.core.message import (ClientReq, ClientRep, RerouteReq, FwdReq,
                                       HEARTBEAT, ADMIN_TOWER, TOKEN_SEPARATOR,
                                       HeartBeatReq, DEFAULT_ORG,  StatusCodes,
                                       is_valid_host)
 from cloudrunner.plugins.transport.zmq_transport import (SockWrapper,
                                                          PollerWrapper)
+from cloudrunner.util.aes_crypto import Crypter
 from cloudrunner.util.shell import Timer
 from cloudrunner_server.plugins.transport.base import (ServerTransportBackend,
                                                        Tenant)
@@ -146,8 +147,7 @@ class ZmqTransport(ServerTransportBackend):
         self.router = Router(self.config, self.context,
                              self.buses, self.endpoints, self.running,
                              self.proxies)
-        self.crypter = TLSServerCrypt(config.security.server_key,
-                                      cert_password=config.security.cert_pass)
+        self.crypter = Crypter()
         self.subca_dir = p.join(
             p.dirname(p.abspath(self.config.security.ca)), 'org')
         self._watch_dir('CD', self.subca_dir, callback=self._cert_changed)
@@ -629,7 +629,7 @@ class ZmqTransport(ServerTransportBackend):
 
                     def process(msg):
                         if self.crypter:
-                            return [self.crypter.encrypt(*msg)]
+                            return [self.crypter.encrypt(json.dumps(msg))]
                         else:
                             return msg
 
@@ -658,7 +658,7 @@ class ZmqTransport(ServerTransportBackend):
                         packet.pop(0)
                         org_uid = translate(org_name)
                         if org_uid:
-                            signed_packets = self.crypter.encrypt(*packet)
+                            signed_packets = self.crypter.encrypt(packet)
                             xpub_listener.send_multipart([org_uid] +
                                                          process(packet))
 
@@ -696,7 +696,9 @@ class ZmqTransport(ServerTransportBackend):
                             node_reply_queue.send(req.ident, req.peer,
                                                   'SUB_LOC',
                                                   self.tenants[req.org].id,
-                                                  self.tenants[req.org].name)
+                                                  self.tenants[req.org].name,
+                                                  self.crypter.key,
+                                                  self.crypter.iv)
                         if pub_proxy:
                             # Also notify other masters
                             pub_proxy.send_multipart(
@@ -877,10 +879,7 @@ class Router(Thread):
                                         "Invalid request from Client %s" %
                                         packets)
                                 continue
-                            if req.dest == HEARTBEAT:
-                                LOGR.debug('IN-MSG received: %s' % req)
-                            else:
-                                LOGR.info('IN-MSG received: %s' % req)
+                            LOGR.debug('IN-MSG received: %s' % req)
 
                             if not req.peer and req.dest != ADMIN_TOWER:
                                 # Anonymous accessing data feed
@@ -895,7 +894,7 @@ class Router(Thread):
                             rer = RerouteReq(req)
                             rer_packet = rer.pack()
                             if rer_packet and rer_packet[0] != HEARTBEAT:
-                                LOGR.info('IN-MSG re-routed: %s' % rer_packet)
+                                LOGR.debug('IN-MSG re-routed: %s' % rer_packet)
 
                             router.send_multipart(rer_packet)
                             if fwd_proxy and \
@@ -910,7 +909,7 @@ class Router(Thread):
                                     "Invalid reply received: %s" % packets)
                                 continue
                             rep_packet = rep.pack()
-                            LOGR.info("OUT-MSG reply: %s" % rep_packet[:2])
+                            LOGR.debug("OUT-MSG reply: %s" % rep_packet[:2])
                             ssl_worker.send_multipart(rep_packet)
 
                             if fwd_proxy and rep.dest not in [ADMIN_TOWER]:

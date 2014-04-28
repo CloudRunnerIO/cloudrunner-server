@@ -31,6 +31,7 @@ import uuid
 
 from cloudrunner import CONFIG_NODE_LOCATION
 from cloudrunner.core.message import *
+from cloudrunner.util.aes_crypto import Crypter
 from cloudrunner.util.config import Config
 from cloudrunner.util.shell import colors
 
@@ -46,8 +47,7 @@ from cloudrunner import LIB_DIR
 from cloudrunner.util.decorators import catch_ex
 from cloudrunner.util.config import Config
 from cloudrunner.util.tlszmq import \
-    (ConnectionException, ServerDisconnectedException,
-     TLSZmqClientSocket, TLSClientDecrypt)
+    (ConnectionException, ServerDisconnectedException, TLSZmqClientSocket)
 
 from cloudrunner.plugins.transport.zmq_transport import (SockWrapper,
                                                          PollerWrapper)
@@ -179,7 +179,6 @@ class NodeTransport(TransportBackend):
 
         # Run worker threads
         LOGC.info('Running client in server mode')
-        self.decrypter = TLSClientDecrypt(self.server)
         listener = Thread(target=self.listener_device)
         listener.start()
 
@@ -219,6 +218,9 @@ class NodeTransport(TransportBackend):
     def create_poller(self, *sockets):
         return PollerWrapper(*sockets)
 
+    def decrypt(self, message):
+        return self.decrypter.decrypt(message)
+
     def listener_device(self):
         self.sub = []
         dispatcher = self.context.socket(zmq.DEALER)
@@ -254,7 +256,7 @@ class NodeTransport(TransportBackend):
                         else:
                             # decrypt
                             try:
-                                msg = self.decrypter.decrypt(message)
+                                msg = json.loads(self.decrypt(message))
                                 dispatcher.send_multipart(
                                     [str(m) for m in msg])
                             except Exception, ex:
@@ -263,16 +265,14 @@ class NodeTransport(TransportBackend):
                                     (_, ex))
                 if ssl_proxy in ready:
                     frames = ssl_proxy.recv_multipart()
-                    if len(frames) == 1 or len(frames) == 2:
+                    if len(frames) == 3:
                         # ToDo: better command handler
                         sub_loc = frames[0]
                         if sub_loc not in self.sub:
                             self.sub.append(sub_loc)
                             master_sub.setsockopt(zmq.SUBSCRIBE, sub_loc)
-                            if len(frames) == 2:
-                                LOGC.info("Listening to %s" % frames[1])
-                            else:
-                                LOGC.info("Listening to %s" % sub_loc)
+                            LOGC.info("Listening to %s" % frames[1])
+                        self.decrypter = Crypter(*json.loads(frames[2]))
                     else:
                         dispatcher.send_multipart(frames)
             except KeyboardInterrupt:
@@ -501,25 +501,25 @@ class NodeTransport(TransportBackend):
         key_file = config.security.node_key
         if os.path.exists(key_file):
             if not overwrite:
-                print ("Node key file already exists in your config. "
-                       "If you want to create new one - run\n"
-                       "\tcloudrunner-node configure --overwrite\n"
-                       "IMPORTANT! Please note that regenerating your key "
-                       "and certificate will prevent the node from "
-                       "connecting to the Master, if it already has "
-                       "an approved certificate!")
+                print("Node key file already exists in your config. "
+                      "If you want to create new one - run\n"
+                      "\tcloudrunner-node configure --overwrite\n"
+                      "IMPORTANT! Please note that regenerating your key "
+                      "and certificate will prevent the node from "
+                      "connecting to the Master, if it already has "
+                      "an approved certificate!")
                 return False
 
         crt_file = config.security.node_cert
         if os.path.exists(crt_file):
             if not overwrite:
-                print ("Node certificate file already exists in your config. "
-                       "If you still want to create new one - run\n"
-                       "\tcloudrunner-node configure --overwrite\n"
-                       "IMPORTANT! Please note that regenerating your key "
-                       "and certificate will prevent the node from "
-                       "connecting to the Master, if it already has "
-                       "an approved certificate!")
+                print("Node certificate file already exists in your config. "
+                      "If you still want to create new one - run\n"
+                      "\tcloudrunner-node configure --overwrite\n"
+                      "IMPORTANT! Please note that regenerating your key "
+                      "and certificate will prevent the node from "
+                      "connecting to the Master, if it already has "
+                      "an approved certificate!")
                 return False
 
         cert_password = ''.join([random.choice(ascii_letters)
@@ -535,7 +535,7 @@ class NodeTransport(TransportBackend):
         node_key.assign_rsa(rsa)
         rsa = None
 
-        print ("Saving KEY file %s" % key_file)
+        print("Saving KEY file %s" % key_file)
         node_key.save_key(key_file, callback=lambda x: cert_password)
         os.chmod(key_file, stat.S_IREAD | stat.S_IWRITE)
 
@@ -564,19 +564,19 @@ class NodeTransport(TransportBackend):
         assert req.verify(node_key)
         assert req.verify(req.get_pubkey())
 
-        print ("Subject %s" % subj)
-        print ("Saving CSR file %s" % csr_file)
+        print("Subject %s" % subj)
+        print("Saving CSR file %s" % csr_file)
         req.save_pem(csr_file)
         os.chmod(csr_file, stat.S_IREAD | stat.S_IWRITE)
 
-        print ('Generation of credentials is complete.'
-               'Now run cloudrunner-node to register at Master')
+        print('Generation of credentials is complete.'
+              'Now run cloudrunner-node to register at Master')
 
         if os.path.exists(crt_file):
             # if crt file exists - remove it, as it cannot be used
             # anymore with the key file
             os.unlink(crt_file)
-        print ("Updating config settings")
+        print("Updating config settings")
         config.update('General', 'node_id', self.node_id)
         config.update('General', 'work_dir',
                       os.path.join(conf_dir, 'tmp'))
