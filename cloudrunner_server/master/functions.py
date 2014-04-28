@@ -850,6 +850,8 @@ class ConfigController(object):
         if os.path.exists(sub_ca_dir):
             yield TAG, "Clearing SubCA directory %s" % sub_ca_dir
             shutil.rmtree(sub_ca_dir)
+            # recreate
+            os.makedirs(sub_ca_dir)
 
         yield TAG, "Updating config settings"
 
