@@ -251,7 +251,6 @@ class LibIncludePlugin(IncludeLibPluginBase, ArgsProvider, CliArgsProvider):
         if args.includelib or args.attachlib:
             arr = []
 
-
             if args.includelib:
                 args.includelib = [a.strip("\"'") for a in args.includelib]
             if args.attachlib:
@@ -261,8 +260,7 @@ class LibIncludePlugin(IncludeLibPluginBase, ArgsProvider, CliArgsProvider):
                 _list.extend(elem.split(';'))
                 return _list
 
-            reduce(_append, args.includelib, arr)
-
+            reduce(_append, args.includelib or args.attachlib, arr)
             for lib in arr:
                 exists, source = self.show(user_org, lib)
                 lib = sanitize(lib)
