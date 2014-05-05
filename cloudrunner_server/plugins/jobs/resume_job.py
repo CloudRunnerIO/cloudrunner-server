@@ -15,14 +15,22 @@
 import json
 import os
 
+from cloudrunner import LIB_DIR
 from cloudrunner_server.plugins.args_provider import ArgsProvider
 from cloudrunner_server.plugins.jobs.base import JobInOutProcessorPluginBase
+
+
+def _default_dir():
+    _def_dir = os.path.join(LIB_DIR, "cloudrunner", "plugins", "resume_job")
+    if not os.path.exists(_def_dir):
+        os.makedirs(_def_dir)
+    return _def_dir
 
 
 class JobSavePluginEnv(JobInOutProcessorPluginBase, ArgsProvider):
 
     def __init__(self):
-        self.log_dir = getattr(JobSavePluginEnv, 'log_dir', '/tmp/log_dir')
+        self.log_dir = getattr(JobSavePluginEnv, 'log_dir', _default_dir())
 
     def before(self, user_org, session_id, script, env, args, ctx, **kwargs):
         if args.resume_id:
