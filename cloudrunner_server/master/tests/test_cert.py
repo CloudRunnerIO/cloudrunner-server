@@ -143,10 +143,22 @@ class TestCert(base.BaseTestCase):
         self.assertEqual(messages.pop(0), (1, 'Setting serial to 6'))
         self.assertEqual(messages.pop(0), (2, 'VALID_NAME.DOMAIN signed'))
         self.assertEqual(
-            messages.pop(0), (2, 'Issuer /C=US/CN=CloudRunner Master CA'))
+            messages.pop(0), (2, 'Issuer /C=%s/CN=CloudRunner Master CA' %
+                              self.country))
         self.assertEqual(
-            messages.pop(0), (2, 'Subject /C=US/CN=VALID_NAME.DOMAIN'))
+            messages.pop(0), (2, 'Subject /C=%s/CN=VALID_NAME.DOMAIN' %
+                              self.country))
         self.assertEqual(messages, [])
+
+    @property
+    def country(self):
+        try:
+            import locale
+            l_c = locale.getdefaultlocale()
+            country = l_c[0].rpartition('_')[-1]
+        except:
+            country = "US"
+        return country
 
     def _create_csr(self, node):
         node_key = m.EVP.PKey()
@@ -160,7 +172,7 @@ class TestCert(base.BaseTestCase):
         req.set_version(2)
 
         subj = req.get_subject()
-        subj.C = "US"
+        subj.C = self.country
         subj.CN = node
         subj.OU = 'DEFAULT'
 

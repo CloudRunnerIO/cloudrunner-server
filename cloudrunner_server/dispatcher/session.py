@@ -21,7 +21,9 @@ import zmq
 import uuid
 
 from cloudrunner.core import parser
-from cloudrunner.core.exceptions import ConnectionError
+from cloudrunner.core.exceptions import (ConnectionError,
+                                         InterruptStep,
+                                         InterruptExecution)
 from cloudrunner.core.message import JobInput
 from cloudrunner.core.message import JobRep
 from cloudrunner.core.message import PipeMessage
@@ -155,92 +157,121 @@ class JobSession(Thread):
         for section in self.sections:
             libs = user_libs
 
-            for plugin in self.plugin_context.job_plugins:
-                try:
-                    # Save passed env for job
-                    (data, env) = plugin().before(user_org,
-                                                  self.session_id,
-                                                  section.data,
-                                                  env,
-                                                  section.args,
-                                                  self.plugin_context,
-                                                  **self.kwargs)
-                    if data:
-                        # updated
-                        section.data = data
+            try:
+                for plugin in self.plugin_context.job_plugins:
+                    try:
+                        # Save passed env for job
+                        (data, env) = plugin().before(user_org,
+                                                      self.session_id,
+                                                      section.data,
+                                                      env,
+                                                      section.args,
+                                                      self.plugin_context,
+                                                      **self.kwargs)
+                        if data:
+                            # updated
+                            section.data = data
 
-                except Exception, ex:
-                    LOG.error('Plugin error(%s):  %r' % (plugin, ex))
+                    except InterruptStep:
+                        LOG.warn("BEFORE: Step execution interrupted by %s" %
+                                 plugin.__name__)
+                        raise
+                    except InterruptExecution:
+                        LOG.warn(
+                            "BEFORE: Session execution interrupted by %s" %
+                            plugin.__name__)
+                        raise
+                    except Exception, ex:
+                        LOG.error('Plugin error(%s):  %r' % (plugin, ex))
 
-            for plugin in self.plugin_context.lib_plugins:
-                try:
-                    _libs = plugin().process(user_org,
-                                             section.data,
-                                             env,
-                                             section.args)
-                    for lib in _libs:
-                        libs.append(lib)
-                except Exception, ex:
-                    LOG.error('Plugin error(%s):  %r' % (plugin, ex))
+                for plugin in self.plugin_context.lib_plugins:
+                    try:
+                        _libs = plugin().process(user_org,
+                                                 section.data,
+                                                 env,
+                                                 section.args)
+                        for lib in _libs:
+                            libs.append(lib)
+                    except Exception, ex:
+                        LOG.error('Plugin error(%s):  %r' % (plugin, ex))
 
-            if section.args and section.args.timeout:
-                try:
-                    timeout = int(section.args.timeout)
-                except ValueError:
-                    pass
+                if section.args and section.args.timeout:
+                    try:
+                        timeout = int(section.args.timeout)
+                    except ValueError:
+                        pass
 
-            section.update_targets(env)
-            msg_ret = []
-            #
-            # Exec section
-            #
+                section.update_targets(env)
+                msg_ret = []
+                #
+                # Exec section
+                #
 
-            section_it = self.exec_section(
-                section.targets, dict(env=env, script=section.data,
-                                      remote_user_map=self.remote_user_map,
-                                      libs=libs), timeout=timeout)
-            for _reply in section_it:
-                if _reply[0] == 'PIPE':
-                    # reply: 'PIPE', job_id, run_as, node_id, stdout, stderr
+                section_it = self.exec_section(
+                    section.targets, dict(env=env, script=section.data,
+                                          remote_user_map=self.remote_user_map,
+                                          libs=libs), timeout=timeout)
+                for _reply in section_it:
+                    if _reply[0] == 'PIPE':
+                        # reply: 'PIPE', job_id, run_as, node_id, stdout,
+                        # stderr
 
-                    # reply-fwd: session_id, PIPEOUT, session_id, time,
-                    #   task_name, user, targets, tags, job_id, run_as,
-                    #   node_id, stdout, stderr
-                    message = PipeMessage(self.session_id, self.task_name,
-                                          self.user, self.remote_user_map.org,
-                                          section.targets, tags, *_reply[1:])
-                    self._reply(message)
-                else:
-                    job_id, msg_ret = _reply
-
-            new_env = {}
-            for _ret in msg_ret:
-                _env = _ret['env']
-                for k, v in _env.items():
-                    if k in new_env:
-                        if not isinstance(new_env[k], list):
-                            new_env[k] = [new_env[k]]
-                        if isinstance(v, list):
-                            new_env[k].extend(list(stringify(*v)))
-                        else:
-                            new_env[k].append(stringify1(v))
+                        # reply-fwd: session_id, PIPEOUT, session_id, time,
+                        #   task_name, user, targets, tags, job_id, run_as,
+                        #   node_id, stdout, stderr
+                        message = PipeMessage(self.session_id, self.task_name,
+                                              self.user,
+                                              self.remote_user_map.org,
+                                              section.targets, tags,
+                                              *_reply[1:])
+                        self._reply(message)
                     else:
-                        new_env[k] = v
+                        job_id, msg_ret = _reply
 
-            env.update(new_env)
-            for plugin in self.plugin_context.job_plugins:
-                try:
-                    # Save passed env for job
-                    plugin().after(
-                        user_org, self.session_id, job_id, env, msg_ret,
-                        section.args, self.plugin_context, **self.kwargs)
-                except Exception, ex:
-                    LOG.error('Plugin error(%s):  %r' % (plugin, ex))
+                new_env = {}
+                for _ret in msg_ret:
+                    _env = _ret['env']
+                    for k, v in _env.items():
+                        if k in new_env:
+                            if not isinstance(new_env[k], list):
+                                new_env[k] = [new_env[k]]
+                            if isinstance(v, list):
+                                new_env[k].extend(list(stringify(*v)))
+                            else:
+                                new_env[k].append(stringify1(v))
+                        else:
+                            new_env[k] = v
 
-            ret.append(dict(targets=section.targets,
-                            jobid=job_id,
-                            args=section.args_string,
-                            response=msg_ret))
+                env.update(new_env)
+                for plugin in self.plugin_context.job_plugins:
+                    try:
+                        # Save passed env for job
+                        plugin().after(
+                            user_org, self.session_id, job_id, env, msg_ret,
+                            section.args, self.plugin_context, **self.kwargs)
+                    except InterruptStep:
+                        LOG.warn("AFTER: Step execution interrupted by %s" %
+                                 plugin.__name__)
+                        raise
+                    except InterruptExecution:
+                        LOG.warn("AFTER: Session execution interrupted by %s" %
+                                 plugin.__name__)
+                        raise
+                    except Exception, ex:
+                        LOG.error('Plugin error(%s):  %r' % (plugin, ex))
+
+                ret.append(dict(targets=section.targets,
+                                jobid=job_id,
+                                args=section.args_string,
+                                response=msg_ret))
+
+            except InterruptStep:
+                continue
+            except InterruptExecution:
+                break
+            except Exception, ex:
+                LOG.exception(ex)
+                continue
 
         response = []
         for run in ret:
@@ -282,7 +313,6 @@ class JobSession(Thread):
         job_id = uuid.uuid4().hex  # Job Session id
 
         self.manager.register_session(job_id)
-
         job_event = Event()
         remote_user_map = request.pop('remote_user_map')
         # Call for nodes
