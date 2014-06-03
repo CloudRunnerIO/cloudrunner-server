@@ -279,7 +279,7 @@ class Dispatcher(Daemon):
         user_org = (self.user_id, remote_user_map.org)
 
         try:
-            args = shlex.split(kwargs.get('args', ''))
+            args = shlex.split(kwargs.get('args', '').encode('utf8'))
             if '--jhelp' in args:
 
                 args.remove('--jhelp')
