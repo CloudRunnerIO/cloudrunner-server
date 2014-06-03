@@ -108,6 +108,7 @@ class CronScheduler(CliArgsProvider):
     def add(self, user, payload=None, name=None,
             period=None, auth_token=None, **kwargs):
         try:
+
             job_id = uuid.uuid4().hex
             kwargs['job_id'] = job_id
             name = name.replace(SEPARATOR, '_')
@@ -174,6 +175,8 @@ class CronScheduler(CliArgsProvider):
     def view(self, user, name, **kwargs):
         crons = self._own(user)
         for job in crons:
+            if job.name != name:
+                continue
             try:
                 content = open(job.file).read()
             except:
@@ -266,7 +269,7 @@ class CronScheduler(CliArgsProvider):
             bin_path = os.path.dirname(os.path.abspath(sys.argv[0]))
             kwargs = {}
             kwargs["exec"] = os.path.join(bin_path, 'cloudrunner-master')
-            ret = self.add(user_org[0], args.content, args.name,
+            ret = self.add(user_org[0], data, args.name,
                            args.period,
                            ctx.create_auth_token(expiry=-1),
                            **kwargs)
