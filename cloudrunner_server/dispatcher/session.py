@@ -144,6 +144,7 @@ class JobSession(Thread):
         self.kwargs.pop('tgt_args', None)
 
         user_libs = []
+
         if 'includes' in self.kwargs:
             try:
                 # process runtime includes
@@ -155,7 +156,9 @@ class JobSession(Thread):
         start_time = time.time()
 
         for section in self.sections:
-            libs = user_libs
+            libs = []
+            if user_libs:
+                libs.extend(user_libs)
 
             try:
                 for plugin in self.plugin_context.job_plugins:
