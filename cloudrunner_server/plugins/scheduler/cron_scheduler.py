@@ -208,7 +208,6 @@ class CronScheduler(CliArgsProvider):
     def delete(self, user, name=None, **kwargs):
         crons = self._own(user)
         for job in crons:
-            print job.user, user, job.name, name
             if job.user == user and job.name == name:
                 self.crontab.remove(job.cron_job)
                 self.crontab.write()
