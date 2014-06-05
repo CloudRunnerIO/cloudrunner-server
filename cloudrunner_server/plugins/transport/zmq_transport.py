@@ -142,6 +142,7 @@ class ZmqTransport(ServerTransportBackend):
                                  re.split(r"[\s;,]", self.config.master_proxy)
                                  if x.strip()])
 
+        self.proxy_listen_port = self.config.proxy_listen_port or 5553
         self.proxy_pub_port = self.config.proxy_pub_port or 5553
 
         self.router = Router(self.config, self.context,
@@ -558,11 +559,10 @@ class ZmqTransport(ServerTransportBackend):
 
         if self.proxies:
             pub_proxy = self.context.socket(zmq.XPUB)
-            xsub_listener.bind('tcp://0.0.0.0:%s' % self.proxy_pub_port)
+            xsub_listener.bind('tcp://0.0.0.0:%s' % self.proxy_listen_port)
             for proxy in self.proxies:
                 LOGR.info("Attaching to proxy: %s" % proxy)
-                pub_proxy.connect('tcp://%s:%s' % (proxy,
-                                                   self.proxy_pub_port))
+                pub_proxy.connect('tcp://%s:%s' % (proxy, self.proxy_pub_port))
 
         def _ping_nodes(*args):
             try:
