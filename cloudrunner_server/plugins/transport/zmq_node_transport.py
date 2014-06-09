@@ -272,6 +272,7 @@ class NodeTransport(TransportBackend):
                             self.sub.append(sub_loc)
                             master_sub.setsockopt(zmq.SUBSCRIBE, sub_loc)
                             LOGC.info("Listening to %s" % frames[1])
+                        LOGC.info("Resetting crypter keys")
                         self.decrypter = Crypter(*json.loads(frames[2]))
                     else:
                         dispatcher.send_multipart(frames)

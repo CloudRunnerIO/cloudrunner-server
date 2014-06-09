@@ -20,10 +20,12 @@ import os
 from os import path as p
 import re
 import signal
+from socket import gethostname
 from threading import Event
 from threading import Thread
 import time
 import zmq
+from zmq import ssh
 from zmq.eventloop import ioloop
 
 from cloudrunner.util.tlszmq import TLSZmqServerSocket
@@ -74,6 +76,7 @@ class ZmqTransport(ServerTransportBackend):
         self.running = Event()
         self._sockets = []
         self.ccont = CertController(config)
+        self.host = gethostname().lower()
 
         self.buses = DictWrapper()
 
@@ -122,28 +125,28 @@ class ZmqTransport(ServerTransportBackend):
             "inproc://scheduler-pull"
         )
 
+        proxy_pub_port = config.proxy_pub_port or 5553
+
         self.endpoints = {
             'logger':
             "inproc://logger-queue",
             'logger_fanout':
             config.logger_uri or (
                 "ipc://%(sock_dir)s/logger.sock" % config),
-            'node_reply':
-            'tcp://%s' % config.master_repl,
-            'publisher':
-            "inproc://pub-proxy.sock",
+            'node_reply': 'tcp://%s' % config.master_repl,
+            'publisher': "inproc://pub-proxy.sock",
+            "replicator": "tcp://0.0.0.0:%s" % proxy_pub_port,
+            "router_fwd": "ipc://%(sock_dir)s/router-fwd.sock" % config,
+            "pub_fwd": "ipc://%(sock_dir)s/pub-fwd.sock" % config
         }
 
         self.config = config
-        self.proxies = []
+        self.proxies = {}
 
-        if self.config.master_proxy:
-            self.proxies.extend([x.strip() for x in
-                                 re.split(r"[\s;,]", self.config.master_proxy)
-                                 if x.strip()])
-
-        self.proxy_listen_port = self.config.proxy_listen_port or 5553
-        self.proxy_pub_port = self.config.proxy_pub_port or 5553
+        if self.config._config.has_section('Proxy'):
+            self.config.add_section('proxy', 'Proxy')
+            for (host, proxy) in self.config.proxy.items():
+                self.proxies[host] = proxy.strip()
 
         self.router = Router(self.config, self.context,
                              self.buses, self.endpoints, self.running,
@@ -527,10 +530,33 @@ class ZmqTransport(ServerTransportBackend):
         self.bindings['scheduler'] = True
 
         Thread(target=user_input_queue).start()
+        self.bindings["user_input"] = True
 
         Thread(target=self.pubsub_queue).start()
 
-        self.bindings["user_input"] = True
+        if self.proxies:
+            Thread(target=self.proxy_replicator).start()
+            self.bindings["replicator"] = True
+
+    def heartbeat(self, req):
+        if req.control == 'QUIT':
+            LOGR.info("QUIT: Node %s dropped from %s" %
+                     (req.peer, req.org))
+            if req.org in self.tenants:
+                self.tenants[req.org].pop(req.peer)
+        elif req.org not in self.tenants:
+            LOGR.warn("Unrecognized node: %s" % hb_msg[1:3])
+        else:
+            if self.config.security.use_org:
+                LOGR.info("HB from %s@%s" % (req.peer, req.org))
+            else:
+                LOGR.info("HB from %s" % req.peer)
+
+            if self.tenants[req.org].push(req.peer):
+                # New node
+                LOGR.info("Node %s attached to %s" % (req.peer,
+                                                      req.org))
+                return True
 
     def pubsub_queue(self):
         # Intercepts PUB-SUB messages from Publisher
@@ -552,17 +578,15 @@ class ZmqTransport(ServerTransportBackend):
         poller.register(xsub_listener, zmq.POLLIN)
         poller.register(heartbeat, zmq.POLLIN)
 
-        # Subscribe upstream for all feeds
-        xsub_listener.send('\x01')
-
         pub_proxy = None
 
         if self.proxies:
-            pub_proxy = self.context.socket(zmq.XPUB)
-            xsub_listener.bind('tcp://0.0.0.0:%s' % self.proxy_listen_port)
-            for proxy in self.proxies:
-                LOGR.info("Attaching to proxy: %s" % proxy)
-                pub_proxy.connect('tcp://%s:%s' % (proxy, self.proxy_pub_port))
+            pub_proxy = self.context.socket(zmq.DEALER)
+            pub_proxy.bind(self.endpoints['pub_fwd'])
+            poller.register(pub_proxy, zmq.POLLIN)
+
+        # Subscribe upstream for all feeds
+        xsub_listener.send('\x01')
 
         def _ping_nodes(*args):
             try:
@@ -573,6 +597,22 @@ class ZmqTransport(ServerTransportBackend):
                         [tenant.id, StatusCodes.HB])
             except:
                 pass
+
+        def translate(org_name):
+            # Translate org_name to org_uid
+            try:
+                org_uid = self.tenants[org_name].id
+                return org_uid
+            except:
+                LOGR.error("Problem dispatching to tenant %s. "
+                           "Restart of nodes might be needed" %
+                           org_name)
+
+        def process(msg):
+            if self.crypter:
+                return [self.crypter.encrypt(json.dumps(msg))]
+            else:
+                return msg
 
         timer = Timer(self.heartbeat_timeout, _ping_nodes)
         timer.start()
@@ -599,7 +639,8 @@ class ZmqTransport(ServerTransportBackend):
                             tenant = [(t_key, t_val) for t_key, t_val in
                                       self.tenants.items()
                                       if t_val == target][0][0]
-                            LOGP.info('Started publishing on %s' % tenant)
+                            LOGP.info(
+                                'Started publishing on %s' % self.tenants)
                             xpub_listener.send_multipart(
                                 [target, StatusCodes.HB])
                     elif action == b'\x00':
@@ -620,30 +661,24 @@ class ZmqTransport(ServerTransportBackend):
                                     break
                 if xsub_listener in socks:
                     packet = xsub_listener.recv_multipart()
-
+                    LOGP.debug("XSUB packet %s" % packet)
                     if self.config.security.use_org:
                         org_name = packet.pop(0)
                     else:
                         packet.pop(0)  # remove
                         org_name = DEFAULT_ORG
 
-                    def process(msg):
-                        if self.crypter:
-                            return [self.crypter.encrypt(json.dumps(msg))]
-                        else:
-                            return msg
+                    if packet[0] == 'FWD':
+                        # Received forwarded packet?
+                        packet.pop(0)
+                        org_uid = translate(org_name)
+                        if org_uid:
+                            signed_packets = self.crypter.encrypt(
+                                json.dumps(packet))
+                            xpub_listener.send_multipart([org_uid] +
+                                                         process(packet))
 
-                    def translate(org_name):
-                        # Translate org_name to org_uid
-                        try:
-                            org_uid = self.tenants[org_name].id
-                            return org_uid
-                        except:
-                            LOGR.error("Problem dispatching to tenant %s. "
-                                       "Restart of nodes might be needed" %
-                                       org_name)
-
-                    if len(packet) == 2:
+                    else:
                         org_uid = translate(org_name)
                         if org_uid:
                             xpub_listener.send_multipart([org_uid] +
@@ -651,22 +686,9 @@ class ZmqTransport(ServerTransportBackend):
                             if pub_proxy:
                                 # Forward to other masters
                                 pub_proxy.send_multipart(
-                                    [org_name, 'FWD'] + packet)
-
-                    elif len(packet) == 3 and packet[0] == 'FWD':
-                        # Received forwarded packet?
-                        packet.pop(0)
-                        org_uid = translate(org_name)
-                        if org_uid:
-                            signed_packets = self.crypter.encrypt(packet)
-                            xpub_listener.send_multipart([org_uid] +
-                                                         process(packet))
-
-                    elif len(packet) == 4 and packet[0] == 'FWD':
-                        # HB
-                        org, peer = packet[2:4]
-                        if org in self.tenants:
-                            self.tenants[org].push(peer)
+                                    ['PUB', org_name] + packet)
+                                LOGR.info(
+                                    "PUB FWD %s" % ([org_name] + packet))
 
                 if heartbeat in socks:
                     hb_msg = heartbeat.recv_multipart()
@@ -674,35 +696,33 @@ class ZmqTransport(ServerTransportBackend):
                     if not req:
                         LOGR.info("Invalid HB request: %s" % hb_msg)
                         continue
-                    if req.control == 'QUIT':
-                        LOGR.info("QUIT: Node %s dropped from %s" %
-                                 (req.peer, req.org))
-                        if req.org in self.tenants:
-                            self.tenants[req.org].pop(req.peer)
-                    elif req.org not in self.tenants:
-                        LOGR.warn("Unrecognized node: %s" % hb_msg[1:3])
+                    if self.heartbeat(req) or req.control == "IDENT":
+                        node_reply_queue.send(req.ident, req.peer,
+                                              'SUB_LOC',
+                                              self.tenants[req.org].id,
+                                              self.tenants[req.org].name,
+                                              self.crypter.key,
+                                              self.crypter.iv)
+                    elif pub_proxy:
+                        # Also notify other masters
+                        pub_proxy.send_multipart(
+                            ['HB', '', req.peer, req.org, ''])
+                if pub_proxy in socks:
+                    packet = pub_proxy.recv_multipart()
+                    # Received forwarded packet?
+                    if self.config.security.use_org:
+                        org_name = packet.pop(0)
                     else:
-                        if self.config.security.use_org:
-                            LOGR.info("HB from %s@%s" % (req.peer, req.org))
-                        else:
-                            LOGR.info("HB from %s" % req.peer)
-
-                        if self.tenants[req.org].push(req.peer):
-                            # New node
-                            LOGR.info("Node %s attached to %s" % (req.peer,
-                                                                  req.org))
-
-                        if req.control == 'IDENT':
-                            node_reply_queue.send(req.ident, req.peer,
-                                                  'SUB_LOC',
-                                                  self.tenants[req.org].id,
-                                                  self.tenants[req.org].name,
-                                                  self.crypter.key,
-                                                  self.crypter.iv)
-                        if pub_proxy:
-                            # Also notify other masters
-                            pub_proxy.send_multipart(
-                                [req.org, 'FWD', 'HB', req.org, req.peer])
+                        packet.pop(0)  # remove
+                        org_name = DEFAULT_ORG
+                    if packet[0] == 'FWD':
+                        packet.pop(0)
+                        org_uid = translate(org_name)
+                        if org_uid:
+                            signed_packets = self.crypter.encrypt(
+                                json.dumps(packet))
+                            xpub_listener.send_multipart([org_uid] +
+                                                         process(packet))
 
             except zmq.ZMQError, err:
                 if self.context.closed or \
@@ -724,6 +744,119 @@ class ZmqTransport(ServerTransportBackend):
         xpub_listener.close()
         heartbeat.close()
         LOGR.info("Exited PUBSUB thread")
+
+    def proxy_replicator(self):
+        # self -> other masters
+        poller = zmq.Poller()
+
+        # proxy publisher
+        pub_proxy = self.context.socket(zmq.XPUB)
+        pub_proxy.bind(self.endpoints['replicator'])
+        poller.register(pub_proxy, zmq.POLLIN)
+
+        # proxy receiver
+        pub_proxy_sub = self.context.socket(zmq.SUB)
+        verbs = ['SYNC', 'HB', 'PUB', 'IN', 'OUT']
+        for verb in verbs:
+            pub_proxy_sub.setsockopt(zmq.SUBSCRIBE, verb)
+        pub_proxy_sub.setsockopt(zmq.SUBSCRIBE, self.host)
+
+        # proxy <-> router <-> proxy
+        router_proxy = self.context.socket(zmq.DEALER)
+        router_proxy.connect(self.endpoints['router_fwd'])
+        poller.register(router_proxy, zmq.POLLIN)
+
+        # proxy <-> pubsub <-> proxy
+        pubsub_proxy = self.context.socket(zmq.DEALER)
+        pubsub_proxy.connect(self.endpoints['pub_fwd'])
+        poller.register(pubsub_proxy, zmq.POLLIN)
+
+        for host, proxy in self.proxies.items():
+            try:
+                pub_proxy_sub.connect('tcp://%s' % proxy)
+                LOGR.info("Connected to proxy: %s" % proxy)
+            except Exception, ex:
+                LOGR.error(ex)
+        poller.register(pub_proxy_sub, zmq.POLLIN)
+
+        # Send nodes
+        def sync():
+            for tenant in self.tenants.values():
+                for node in tenant.nodes:
+                    pub_proxy.send_multipart(
+                        ['HB', '', node.name, tenant.name, ''])
+        sync()
+        pub_proxy.send('SYNC')
+
+        while not self.running.is_set():
+            try:
+                socks = dict(poller.poll(1000))
+                if not socks:
+                    continue
+                if pub_proxy in socks:
+                    flag = pub_proxy.recv()
+                    _type = flag[0]
+                    tag = flag[1:]
+                    if tag not in verbs:
+                        if _type == b'\x00':
+                            # Disconnect
+                            LOGR.info("Proxy %s disconnected" % tag)
+                        if _type == b'\x01' and tag not in self.proxies:
+                            LOGR.info("Reconnecting to proxy: %s" % tag)
+                            try:
+                                pub_proxy_sub.connect('tcp://%s' % proxy)
+                                LOGR.info(
+                                    "Connected to proxy: %s" % proxy)
+                            except Exception, ex:
+                                LOGR.error(ex)
+
+                if pub_proxy_sub in socks:
+                    packets = pub_proxy_sub.recv_multipart()
+                    LOGR.debug("recvd fwd packets: %s" % packets)
+                    target = packets.pop(0)
+                    if target == 'SYNC':
+                        sync()
+                    elif target == 'HB':
+                        # Heartbeat
+                        req = HeartBeatReq.build(*packets)
+                        if not req:
+                            LOGR.info("Invalid HB request: %s" % packets)
+                        else:
+                            self.heartbeat(req)
+                    elif target == 'PUB':
+                        # Publish job
+                        packets.insert(1, 'FWD')
+                        pubsub_proxy.send_multipart(packets)
+                    elif target in ['IN', 'OUT']:
+                        router_proxy.send_multipart([target] + packets)
+
+                if router_proxy in socks:
+                    fwd_packets = router_proxy.recv_multipart()
+                    LOGR.debug("fwd packets: %s" % fwd_packets)
+                    pub_proxy.send_multipart(fwd_packets)
+
+                if pubsub_proxy in socks:
+                    pubsub_packets = pubsub_proxy.recv_multipart()
+                    LOGR.debug("pubsub fwd packets: %s" % pubsub_packets)
+                    pub_proxy.send_multipart(pubsub_packets)
+
+            except zmq.ZMQError, err:
+                if self.context.closed or \
+                        getattr(err, 'errno', 0) == zmq.ETERM or \
+                        getattr(err, 'errno', 0) == zmq.ENOTSOCK or \
+                        getattr(err, 'errno', 0) == zmq.ENOTSUP:
+                    # System interrupt
+                    break
+                LOGR.exception(err)
+                continue
+            except Exception, ex:
+                LOGR.error(ex)
+
+        pub_proxy.close()
+        pub_proxy_sub.close()
+        router_proxy.close()
+        pubsub_proxy.close()
+        LOGR.info("Exited replicator thread")
 
     def _validate(self, endp_type, ident):
         if not endp_type in self.buses:
@@ -797,7 +930,6 @@ class Router(Thread):
         self.running = event
         self.proxies = proxies
         self.ssl_worker_uri = 'inproc://ssl-worker'
-        self.proxy_fwd_port = self.config.proxy_fwd_port or '5556'
 
     def run(self):
         """ Run response processing thread """
@@ -828,18 +960,11 @@ class Router(Thread):
             poller.register(reply_router, zmq.POLLIN)
             poller.register(ssl_worker, zmq.POLLIN)
 
-            fwd_proxy, fwd_recv = None, None
+            router_proxy = None, None
             if self.proxies:
-                fwd_proxy = self.context.socket(zmq.PUB)
-                fwd_proxy.bind('tcp://0.0.0.0:%s' % self.proxy_fwd_port)
-                fwd_recv = self.context.socket(zmq.SUB)
-                fwd_recv.setsockopt(zmq.SUBSCRIBE, 'IN')
-                fwd_recv.setsockopt(zmq.SUBSCRIBE, 'OUT')
-                for proxy in self.proxies:
-                    fwd_recv.connect('tcp://%s:%s' % (proxy,
-                                                      self.proxy_fwd_port))
-
-                poller.register(fwd_recv, zmq.POLLIN)
+                router_proxy = self.context.socket(zmq.DEALER)
+                router_proxy.bind(self.endpoints['router_fwd'])
+                poller.register(router_proxy, zmq.POLLIN)
 
             socks = {}
             while not self.running.is_set():
@@ -852,12 +977,15 @@ class Router(Thread):
                     continue
                 try:
                     for sock in socks:
-                        if fwd_recv and fwd_recv == sock:
-                            fwd_packet = fwd_recv.recv_multipart()
+                        if router_proxy and router_proxy == sock:
+                            fwd_packet = router_proxy.recv_multipart()
+                            LOGR.info("FWD %s" % fwd_packet)
                             direction = fwd_packet.pop(0)
                             if direction == "IN":
                                 sess_id = fwd_packet[0]
-                                if sess_id in ZmqTransport.managed_sessions:
+                                if (sess_id == HEARTBEAT and
+                                    fwd_packet[4] != 'IDENT') or \
+                                    sess_id in ZmqTransport.managed_sessions:
                                     router.send_multipart(fwd_packet)
                             elif direction == "OUT":
                                 fwd_msg = FwdReq.build(*fwd_packet)
@@ -897,9 +1025,10 @@ class Router(Thread):
                                 LOGR.debug('IN-MSG re-routed: %s' % rer_packet)
 
                             router.send_multipart(rer_packet)
-                            if fwd_proxy and \
+                            if router_proxy and \
                                 rer.dest not in ZmqTransport.managed_sessions:
-                                fwd_proxy.send_multipart(["IN"] + rer_packet)
+                                router_proxy.send_multipart(
+                                    ["IN"] + rer_packet)
 
                         if sock == reply_router:
                             packets = reply_router.recv_multipart()
@@ -909,11 +1038,12 @@ class Router(Thread):
                                     "Invalid reply received: %s" % packets)
                                 continue
                             rep_packet = rep.pack()
-                            LOGR.debug("OUT-MSG reply: %s" % rep_packet[:2])
+                            LOGR.debug("OUT-MSG reply: %s" % rep_packet)
                             ssl_worker.send_multipart(rep_packet)
 
-                            if fwd_proxy and rep.dest not in [ADMIN_TOWER]:
-                                fwd_proxy.send_multipart(["OUT"] + rep_packet)
+                            if router_proxy and rep.dest not in [ADMIN_TOWER]:
+                                router_proxy.send_multipart(
+                                    ["OUT"] + rep_packet)
                 except zmq.ZMQError, zerr:
                     if zerr.errno == zmq.ETERM or zerr.errno == zmq.ENOTSUP \
                         or zerr.errno == zmq.ENOTSOCK:
@@ -921,9 +1051,8 @@ class Router(Thread):
             router.close()
             reply_router.close()
             ssl_worker.close()
-            if fwd_proxy:
-                fwd_proxy.close(0)
-                fwd_recv.close(0)
+            if router_proxy:
+                router_proxy.close(0)
 
             LOGR.info("Exited router worker")
 
