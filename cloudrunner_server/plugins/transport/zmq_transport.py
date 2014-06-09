@@ -25,7 +25,6 @@ from threading import Event
 from threading import Thread
 import time
 import zmq
-from zmq import ssh
 from zmq.eventloop import ioloop
 
 from cloudrunner.util.tlszmq import TLSZmqServerSocket
