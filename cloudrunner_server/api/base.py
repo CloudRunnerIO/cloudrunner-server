@@ -1,9 +1,13 @@
-from pecan import response
+import logging
+from pecan import request, response
+from mako.template import Template
+from sqlalchemy import or_
+from sqlalchemy.orm import exc
 
+from cloudrunner_server.api.model import Inline, User, Org
 from cloudrunner_server.api.hooks.zmq_hook import ZmqHook
 
-# class BaseController(HookController):
-#    __hooks__ = [ErrorHook()]
+LOG = logging.getLogger()
 
 
 class ZmqMixin(object):
@@ -30,3 +34,27 @@ class SseRenderer(object):
             _res.extend(res.data)
 
         return response  # "\n".join(_res)
+
+
+class LibraryRenderer(object):
+
+    def __init__(self, path, extra_vars):
+        self.path = path
+
+    def render(self, template_path, res):
+        try:
+            inl = request.db.query(Inline).join(User, Org).filter(
+                Org.name == request.user.org,
+                Inline.name == template_path,
+                or_(Inline.private == None,  # noqa
+                    Inline.private == False,  # noqa
+                    User.id == request.user.id)).one()
+        except exc.NoResultFound, ex:
+            LOG.error(ex)
+            request.db.rollback()
+            return ("Template %s not found in the inline library" %
+                    template_path)
+
+        template = Template(inl.content)
+
+        return template.render(**res)

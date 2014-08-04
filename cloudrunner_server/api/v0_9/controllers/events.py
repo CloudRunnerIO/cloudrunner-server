@@ -1,3 +1,4 @@
+import re
 from pecan import expose, request
 from webob import Response
 from pecan.hooks import HookController
@@ -60,11 +61,19 @@ class Events(HookController):
         ev = Event.from_request(request)
 
         for target in targets:
-            etag = cache.check(org, target)
             if target == "activities":
+                etag = cache.check(org, target)
                 ev.add_line(target, target, etag)
             else:
-                ev.add_line(target, target, etag, retry=1000)
+                tokens = target.split('_', 1)
+                if len(tokens) == 1:
+                    etag = cache.check(org, target)
+                    ev.add_line(target, target, etag, retry=1000)
+                elif tokens[0] == 'tags':
+                    data = tokens[1]
+                    tags = sorted(re.split('[\s;,]', data))
+                    etag = cache.check_group(org, *tags)
+                    ev.add_line(target, ','.join(tags), etag)
 
         response = Response()
         response.text = unicode(ev.data)

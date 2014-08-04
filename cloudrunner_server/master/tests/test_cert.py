@@ -114,8 +114,9 @@ class TestCert(base.BaseTestCase):
         self.assertEqual(messages.pop(0), (1, 'Pending node requests:'))
         self.assertEqual(messages.pop(0), (2, '--None--'))
         self.assertEqual(messages.pop(0), (1, 'Approved nodes:'))
-        self.assertEqual(messages.pop(0), (2, 'TEST_NODE_PEND'))
-        self.assertEqual(messages.pop(0), (2, 'TEST_NODE'))
+        nodes = [messages.pop(0), messages.pop(0)]
+        self.assertEqual(sorted(nodes),
+                         sorted([(2, 'TEST_NODE_PEND'), (2, 'TEST_NODE')]))
         self.assertEqual(messages, [])
 
         self._create_csr('INVALID NAME')

@@ -48,10 +48,10 @@ class TestAuthentication(base.BaseRESTTestCase):
         self.assertEqual(resp_json, dict(error="Cannot login"))
 
     def test_unauthorized_call(self):
-        with self.assertRaises(webtest.app.AppError):
-            self.app.get('/rest/library/workflows',
-                         headers={'Cr-Token': 'NON_EXISTING_TOKEN',
-                                  'Cr-User': 'testuser'})
+        self.assertRaises(webtest.app.AppError,
+                          self.app.get, '/rest/library/workflows',
+                          headers={'Cr-Token': 'NON_EXISTING_TOKEN',
+                                   'Cr-User': 'testuser'})
 
     def test_logout(self):
         resp = self.app.get('/rest/auth/logout',

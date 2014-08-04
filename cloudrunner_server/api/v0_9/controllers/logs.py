@@ -1,6 +1,7 @@
 import json
 import logging
 from pecan import expose, request
+from pecan.core import override_template
 from pecan.hooks import HookController
 import re
 from sqlalchemy.orm import exc
@@ -8,7 +9,8 @@ from sqlalchemy import func
 from cloudrunner_server.api.hooks.error_hook import ErrorHook
 from cloudrunner_server.api.hooks.db_hook import DbHook
 from cloudrunner_server.api.hooks.redis_hook import RedisHook
-from cloudrunner_server.api.model import Log, Step, User, Tag, Org, LOG_STATUS
+from cloudrunner_server.api.model import (Log, Step, User,
+                                          Tag, Org, LOG_STATUS)
 from cloudrunner_server.api.util import JsonOutput as O
 from cloudrunner_server.util.cache import CacheRegistry
 
@@ -77,11 +79,15 @@ class Logs(HookController):
     @expose('json', content_type="application/json")
     @expose('include/raw.html', content_type="text/plain")
     def output(self, uuid=None, tags=None, tail=100, steps=None, nodes=None,
-               show=None, **kwargs):
+               show=None, template=None, content_type="text/html", **kwargs):
 
         log_uuid = uuid
         pattern = kwargs.get('filter')
         order_by = kwargs.get('order', 'desc')
+
+        if template:
+            override_template("library:%s" % template,
+                              content_type=content_type)
 
         # TODO: check for e-tag
         min_score = int(kwargs.get('from') or request.headers.get('Etag', 0))
@@ -124,8 +130,9 @@ class Logs(HookController):
             LOG.exception(ex)
             request.db.rollback()
             return O.error(msg="Error loading logs")
-        uuids = [l.uuid for l in logs]
+        uuids = [l.uuid for l in logs if l.uuid]
 
+        outputs = []
         with cache.reader(request.user.org, *uuids) as c:
             try:
                 if nodes:
@@ -142,7 +149,6 @@ class Logs(HookController):
 
             score, frames_data = c.load(min_score, max_score)
 
-            outputs = []
             for uuid in uuids:
                 frame_data = frames_data.get(uuid, [])
                 if not frame_data:
@@ -183,7 +189,7 @@ class Logs(HookController):
                         etag=int(score),
                         uuid=uuid))
 
-            return O.outputs(_list=outputs)
+        return O.outputs(_list=outputs)
 
     @expose('json')
     def active(self):

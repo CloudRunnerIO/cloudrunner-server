@@ -163,7 +163,7 @@ class TestUsersWithOrg(base.BaseTestCase):
 
         res = self.auth.db.all('MyOrg')
         self.maxDiff = None
-        self.assertItemsEqual(users, res)
+        self.assertEqual(sorted(users), sorted(res))
 
     def test_rm_org(self):
         status, msg = self.auth.db.remove_org('MyOrg')

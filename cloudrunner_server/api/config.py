@@ -6,7 +6,7 @@ import cloudrunner_server.api
 from cloudrunner_server.api import VERSION
 from cloudrunner_server.api import model
 from pecan.hooks import RequestViewerHook, TransactionHook
-from cloudrunner_server.api.base import SseRenderer
+from cloudrunner_server.api.base import SseRenderer, LibraryRenderer
 from cloudrunner_server.plugins import PLUGIN_BASES
 from cloudrunner_server.plugins.signals import signal_handler
 
@@ -30,6 +30,7 @@ app = {
     'template_path': '%s/templates/rest/' % APP_DIR,
     'custom_renderers': {
         'sse': SseRenderer,
+        'library': LibraryRenderer
     },
     'debug': DEBUG,
     'errors': {

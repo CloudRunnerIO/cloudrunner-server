@@ -10,6 +10,7 @@ from cloudrunner_server.api.hooks.signal_hook import SignalHook, signal
 from cloudrunner_server.api.hooks.zmq_hook import ZmqHook
 from cloudrunner_server.api.model import Log, Step, Tag, LOG_STATUS
 from cloudrunner_server.api.util import JsonOutput as O
+from cloudrunner_server.util.cache import CacheRegistry
 
 
 class Dispatch(HookController):
@@ -57,7 +58,7 @@ class Dispatch(HookController):
                 kw = request.json_body
             script = kw['data']
             timeout = kw.get('timeout', 0)
-            tags = re.split('[\s,;]', kw.get('tags', ''))
+            tags = sorted(re.split('[\s,;]', kw.get('tags', '')))
             log = Log(exit_code=-99,
                       status=LOG_STATUS.Running,
                       timeout=timeout,
@@ -78,6 +79,9 @@ class Dispatch(HookController):
 
             uuid = request.zmq('dispatch', **kw)
             if uuid:
+                cache = CacheRegistry(redis=request.redis)
+                for tag in tags:
+                    cache.associate(request.user.org, tag, uuid)
                 # Update
                 log.uuid = uuid
             request.db.add(log)

@@ -29,6 +29,22 @@ class CacheRegistry(object):
         last_id = self.redis.get(RegBase._get_rel_id(org, target))
         return last_id
 
+    def check_group(self, org, *tags):
+        pipe = self.redis.pipeline()
+        for tag in tags:
+            pipe.lrange(RegBase._get_rel_id(org, tag), -20, -1)
+        arrays = pipe.execute()
+        for tag_arr in arrays:
+            for arr in tag_arr:
+                if not arr:
+                    continue
+                pipe.get(RegBase._get_rel_id(org, arr))
+        ids = pipe.execute()
+        return max(ids, key=int)
+
+    def associate(self, org, tag, *ids):
+        self.redis.rpush(RegBase._get_rel_id(org, tag), *ids)
+
     @contextmanager
     def writer(self, org, *args):
         try:
@@ -86,7 +102,7 @@ class RegWriter(RegBase):
                             int(frame.seq_no))
 
         self.redis.publish(self.id, 'update')
-        self.redis.set(self.id, frame.seq_no)
+        self.redis.set(self.id, self.redis.incr("___INCR___"))
 
 
 class RegReader(RegBase):
@@ -119,7 +135,7 @@ class RegReader(RegBase):
             if not rel_keys:
                 self.redis.zcard(key)
                 new_score = self.redis.execute()[0]
-                return new_score, []
+                return new_score, {}
 
             for rel in rel_keys:
                 if not rel:
