@@ -89,7 +89,7 @@ class Logs(HookController):
         cache = CacheRegistry(redis=request.redis)
         score = 1
         if not log_uuid and not tags:
-            return O.error(msg="Selector(uuid or tags not provided")
+            return O.error(msg="Selector(uuid or tags) not provided")
 
         try:
             tail = int(tail)

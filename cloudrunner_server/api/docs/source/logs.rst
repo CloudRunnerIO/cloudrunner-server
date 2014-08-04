@@ -111,9 +111,15 @@ Load log data
 Load log output
 ^^^^^^^^^^^^^^^
 
-**[GET] /rest/logs/output/<log_uuid>?tail=100&step=1,2&nodes=node1,node2&show=stdout&filter=^ERROR**
+**[GET] /rest/logs/output?<uuid>=1234567890&<tags>=sometag?tail=100&step=1,2&nodes=node1,node2&show=stdout&filter=^ERROR**
 
 	**Params**::
+
+		<uuid>
+			UUID of a log to get output.
+
+		<tags>
+			Tags to select log uuids. Mutually exclusive with uuid.
 
 		<tail>
 			Show last N lines from stdout/stderr.
@@ -133,40 +139,42 @@ Load log output
 	Request::
 
 		curl -H "Cr-User=user" -H "Cr-Token=token" \
-			https://rest-api-server/logs/output/d127f47490474c4a990c534f8b377d65
+			https://rest-api-server/logs/output?uuid=d127f47490474c4a990c534f8b377d65
 
 	Response::
 
 		{
-			"output": [
-				{
-					"step": 1,
-					"stderr": [],
-					"stdout": ["rest-api"]
-				},
-				{
-					"step": 2,
-					"stderr": [],
-					"stdout": []
-				},
-				{
-					"step": 3,
-					"stderr": [],
-					"stdout": [
-						"CentOS release 6.5 (Final)",
-						"LSB_VERSION=base-4.0-amd64:base-4.0-noarch:core-4.0-amd64:core-4.0-noarch",
-						"CentOS release 6.5 (Final)",
-						"CentOS release 6.5 (Final)"
-					]
-				}
-			]
+		    "outputs": [
+		        {
+		            "created_at": "2014-08-03 19:07:52",
+		            "etag": 3,
+		            "status": "finished",
+		            "steps": [
+		                {
+		                    "lines": [
+		                        "ERROR"
+		                    ],
+		                    "node": "yoga",
+		                    "result": [
+		                        {
+		                            "node": "yoga",
+		                            "ret_code": 0,
+		                            "run_as": "@"
+		                        }
+		                    ],
+		                    "step": 1
+		                }
+		            ],
+		            "uuid": "8bbc8d45a3b4436bba9b54963d1fe30f"
+		        }
+		    ]
 		}
 
-The log output can be rendered in plain text, if specified in headers: Accept: text/plain 
+The log output can be rendered in plain text, if specified in headers: Accept: text/plain
 	Request::
 
 		curl -H "Cr-User=user" -H "Cr-Token=token" -H "Accept: text/plain" \
-			https://rest-api-server/logs/output/d127f47490474c4a990c534f8b377d65
+			https://rest-api-server/logs/output?uuid=d127f47490474c4a990c534f8b377d65
 
 	Response::
 

@@ -105,7 +105,6 @@ class RegReader(RegBase):
 
         self.filters = {}
         self.body_filter = None
-        print "ids", self.ids, "keys", self.keys
 
     def load(self, min_score, max_score):
 

@@ -162,7 +162,7 @@
 </div>
 <div class="section" id="load-log-output">
 <h3>Load log output<a class="headerlink" href="#load-log-output" title="Permalink to this headline">&#182;</a></h3>
-<p><strong>[GET] /rest/logs/output/&lt;log_uuid&gt;?tail=100&amp;step=1,2&amp;nodes=node1,node2&amp;show=both&amp;filter=^ERROR</strong></p>
+<p><strong>[GET] /rest/logs/output/&lt;log_uuid&gt;?tail=100&amp;step=1,2&amp;nodes=node1,node2&amp;show=stdout&amp;filter=^ERROR</strong></p>
 <blockquote>
 <div><p><strong>Params</strong>:</p>
 <div class="highlight-python"><div class="highlight"><pre>&lt;tail&gt;
@@ -175,7 +175,7 @@
         Show only logs from specified nodes. Valid values - any node id, e.g. nodes=nodex,nodey.
 
 &lt;show&gt;
-        Show only chosen logs. Valid values: both|stdout|stderr.
+        Show only chosen logs. Valid values: --empty--|stdout|stderr.
 
 &lt;filter&gt;
         A regex-style filter to apply on output logs to return.

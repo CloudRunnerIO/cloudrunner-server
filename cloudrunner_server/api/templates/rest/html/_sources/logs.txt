@@ -111,7 +111,7 @@ Load log data
 Load log output
 ^^^^^^^^^^^^^^^
 
-**[GET] /rest/logs/output/<log_uuid>?tail=100&step=1,2&nodes=node1,node2&show=both&filter=^ERROR**
+**[GET] /rest/logs/output/<log_uuid>?tail=100&step=1,2&nodes=node1,node2&show=stdout&filter=^ERROR**
 
 	**Params**::
 
@@ -125,7 +125,7 @@ Load log output
 			Show only logs from specified nodes. Valid values - any node id, e.g. nodes=nodex,nodey.
 
 		<show>
-			Show only chosen logs. Valid values: both|stdout|stderr.
+			Show only chosen logs. Valid values: --empty--|stdout|stderr.
 
 		<filter>
 			A regex-style filter to apply on output logs to return.

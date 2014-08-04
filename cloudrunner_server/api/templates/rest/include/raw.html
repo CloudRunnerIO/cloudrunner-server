@@ -1,16 +1,14 @@
-${print_(context.get("output"))}
+${print_(context.get("outputs"))}
 <%def name="print_(coll)" filter="trim">
 % for item in coll:
-% if item.get('node'):
-${item.get('node')}
+${item.get('uuid')}
+% for step in item.get('steps'):
+% if step.get('node'):
+${step.get('node')}
 % endif
-% if item.get('stdout'):
-	${"\n\t".join(item.get('stdout'))}
-
+% if step.get('lines'):
+	${"\n\t".join(step.get('lines'))}
 % endif
-% if item.get('stderr'):
-	${"\n\t".join(item.get('stderr'))}
-
-% endif
+% endfor
 % endfor
 </%def>
