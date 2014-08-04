@@ -33,6 +33,7 @@ class BaseRESTTestCase(BaseTestCase):
 
         self.redis.zrangebyscore.return_value = ['PREDEFINED_TOKEN']
         self.redis.hgetall.return_value = dict(uid=1, org='MyOrg')
+        self.redis.get.return_value = "10"
         self.populate()
         global engine
         conf.sqlalchemy.engine = engine

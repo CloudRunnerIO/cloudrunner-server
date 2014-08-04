@@ -1,6 +1,5 @@
 import re
-from pecan import expose, request
-from webob import Response
+from pecan import expose, request, response
 from pecan.hooks import HookController
 
 from cloudrunner_server.api.hooks.error_hook import ErrorHook
@@ -75,10 +74,12 @@ class Events(HookController):
                     etag = cache.check_group(org, *tags)
                     ev.add_line(target, ','.join(tags), etag)
 
-        response = Response()
-        response.text = unicode(ev.data)
-        # response.content_length = 10
+        resp = unicode(ev.data)
+        if resp:
+            response.text = unicode(ev.data)
+        else:
+            response.text = unicode("data: \n\n")
         response.content_type = "text/event-stream"
         response.cache_control = "no-cache"
         response.connection = "keep-alive"
-        return response  # res
+        return response

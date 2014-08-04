@@ -21,13 +21,13 @@ class TestEvents(base.BaseRESTTestCase):
 
     # @patch('cloudrunner_server.api.v0_9.controllers.events.Event.next')
     def test_get(self):
-        cr_data = """id: 100
-event: Event123
-data: 123
-data: 456
-data: 789"""
+        sse_data = """id: 10
+retry: 1000
+event: 1234567
+data: 1234567
 
-        resp = self.app.get('/rest/events/get', headers={
+"""
+        resp = self.app.get('/rest/events/get?1234567', headers={
             'Cr-Token': 'PREDEFINED_TOKEN',
             'Cr-User': 'testuser',
             'Last-Event-Id': '100'})
@@ -35,5 +35,4 @@ data: 789"""
         self.assertEqual(resp.status_int, 200, resp.status_int)
         self.assertEqual(resp.content_type, 'text/event-stream',
                          resp.content_type)
-        print cr_data
-        # self.assertEqual(resp.body, cr_data, resp.body)
+        self.assertEqual(resp.body, sse_data, resp.body)
