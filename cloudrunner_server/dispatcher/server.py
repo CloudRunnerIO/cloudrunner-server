@@ -8,8 +8,8 @@
 #  * Proprietary and confidential
 #  * This file is part of CloudRunner Server.
 #  *
-#  * CloudRunner Server can not be copied and/or distributed without the express
-#  * permission of CloudRunner.io
+#  * CloudRunner Server can not be copied and/or distributed
+#  * without the express permission of CloudRunner.io
 #  *******************************************************/
 
 try:
@@ -20,10 +20,7 @@ import argparse
 import json
 import logging
 import os
-import shlex
 import signal
-import sys
-import time
 import threading
 import uuid
 
@@ -58,9 +55,9 @@ from cloudrunner_server.dispatcher.manager import SessionManager
 from cloudrunner_server.master.functions import CertController
 from cloudrunner_server.plugins import PLUGIN_BASES
 from cloudrunner_server.plugins.args_provider import ArgsProvider
-from cloudrunner_server.plugins.args_provider import CliArgsProvider
 from cloudrunner_server.plugins.args_provider import ManagedPlugin
 from cloudrunner_server.plugins.auth.base import AuthPluginBase
+from cloudrunner_server.plugins.logs.base import LoggerPluginBase
 from cloudrunner_server.plugins.jobs.base import JobInOutProcessorPluginBase
 from cloudrunner_server.plugins.libs.base import IncludeLibPluginBase
 
@@ -79,14 +76,14 @@ class Dispatcher(Daemon):
     def __init__(self, *_args, **kwargs):
         arg_parser = argparse.ArgumentParser()
 
-        pidfile = arg_parser.add_argument('-p', '--pidfile',
-                                          dest='pidfile',
-                                          help='Daemonize process with the '
-                                               'given pid file')
-        config = arg_parser.add_argument('-c', '--config',
-                                         help='Config file')
-        run_action = arg_parser.add_argument(
-            'action', choices=['start', 'stop', 'restart', 'run'],
+        arg_parser.add_argument('-p', '--pidfile', dest='pidfile',
+                                help='Daemonize process with the '
+                                'given pid file')
+        arg_parser.add_argument('-c', '--config', help='Config file')
+        arg_parser.add_argument(
+            'action',
+            choices=[
+                'start', 'stop', 'restart', 'run'],
             help='Apply action on the daemonized process\n'
             'For the actions [start, stop, restart] - pass a pid file\n'
             'Run - start process in debug mode\n')
@@ -131,7 +128,6 @@ class Dispatcher(Daemon):
         args_plugins.add_argument('-t', '--timeout', help="Timeout")
 
         self.plugin_register = {}
-        self.plugin_cli_register = {}
         for plugin_base in PLUGIN_BASES:
             for plugin in plugin_base.__subclasses__():
 
@@ -152,41 +148,9 @@ class Dispatcher(Daemon):
 
                 if issubclass(plugin, ManagedPlugin):
                     try:
-                        plugin().start()
+                        plugin.start(CONFIG)
                     except Exception, ex:
                         LOG.error('Plugin error(%s):  %r' % (plugin, ex))
-
-        for plugin in CliArgsProvider.__subclasses__():
-            try:
-                # overwrite error method
-                def _toString(parser):
-                    from StringIO import StringIO
-                    buf = StringIO()
-                    parser.print_help(file=buf)
-                    return buf.getvalue()
-
-                def _error(cls, *arg, **kw):
-                    raise ValueError(cls._toString())
-                argparse.ArgumentParser._toString = _toString
-                argparse.ArgumentParser.error = _error
-                plugin_plugins = argparse.ArgumentParser(
-                    add_help=False,
-                    prog='')
-                plugin.parser = plugin_plugins
-                arg = plugin().append_cli_args(plugin_plugins)
-                if not arg:
-                    LOG.warn("Plugin %s doesn't return correct id" %
-                             plugin.__name__)
-                    continue
-                if arg in self.plugin_cli_register:
-                    LOG.warn(
-                        "Duplicate plugin name %s from plugin [%s]" %
-                        (arg, plugin.__name__))
-                    continue
-                self.plugin_cli_register[arg] = plugin
-            except Exception, ex:
-                LOG.exception(ex)
-                continue
 
         self.scheduler_class = None
         if CONFIG.scheduler:
@@ -204,11 +168,29 @@ class Dispatcher(Daemon):
             else:
                 self.auth_klass = local_plugin_loader(CONFIG.auth)
 
+        self.logger_klass = None
+        if LoggerPluginBase.__subclasses__():
+            self.logger_klass = LoggerPluginBase.__subclasses__()[0]
+        else:
+            if not CONFIG.logger:
+                LOG.warn('No Logger plugin found')
+            else:
+                self.logger_klass = local_plugin_loader(CONFIG.logger)
+
         self.config = CONFIG
         self.auth = self.auth_klass(self.config)
+        self.auth.set_context_from_config()
         LOG.info("Using %s.%s for Auth backend" % (
             self.auth_klass.__module__,
             self.auth_klass.__name__))
+
+        self.logger = None
+        if self.logger_klass:
+            self.logger = self.logger_klass(self.config)
+            self.logger.set_context_from_config()
+            LOG.info("Using %s.%s for Logger backend" % (
+                self.logger_klass.__module__,
+                self.logger_klass.__name__))
 
         self.plugin_context = PluginContext(self.auth)
 
@@ -258,70 +240,51 @@ class Dispatcher(Daemon):
         else:
             return ["FAILURE"]
 
+    def unset_api_token(self, *args, **kwargs):
+        if self.auth_type != 2:
+            return [False, "NO TOKEN PASSED"]
+
+        return self.auth.delete_token(self.user_id, self.user_token)
+
     def plugins(self, payload, remote_user_map, **kwargs):
         plug = [(args, [c.__module__ for c in p])
                 for (args, p) in sorted(self.plugin_register.items(),
                                         key=lambda x: (x[1], x[0]))]
 
-        cli_plug = [(plugin, p.__module__) for (plugin, p) in
-                    self.plugin_cli_register.items()]
+        return [plug]
 
-        return [plug, cli_plug]
-
-    def plugin(self, payload, remote_user_map, **kwargs):
+    def __plugin(self, payload, remote_user_map, **kwargs):
         resp = []
         plugin_name = kwargs.pop('plugin')
-        data = kwargs.pop('data', None)
+        plugin_action = kwargs.pop('action')
+        plugin_return_type = kwargs.get('return_type')
         plugin = self.plugin_cli_register.get(plugin_name)
         if not plugin:
             return [(False, 'Plugin %s not found' % plugin_name)]
 
         user_org = (self.user_id, remote_user_map.org)
-
         try:
-            args = shlex.split(kwargs.get('args', '').encode('utf8'))
-            if '--jhelp' in args:
-
-                args.remove('--jhelp')
-
-                p = plugin.parser
-                while args and p._subparsers:
-                    posit = args.pop(0)
-                    # is subparser?
-                    for act in p._subparsers._actions:
-                        if isinstance(act, argparse._SubParsersAction):
-                            if posit in act.choices:
-                                p = act.choices[posit]
-                    if not args:
-                        break
-                    posit = args.pop(0)
-                # Print formated help
-
-                arguments = []
-                for action in p._actions:
-                    if isinstance(action, argparse._SubParsersAction):
-                        arguments.append({action.dest: action.choices.keys()})
-                    elif isinstance(action, argparse._StoreAction):
-                        arguments.extend(action.option_strings)
-                    elif isinstance(action, argparse._StoreTrueAction):
-                        arguments.append('@' + action.dest)
-                    else:
-                        arguments.append(action.dest)
-                return [(True, arguments)]
-            else:
-                ns, _ = plugin.parser.parse_known_args(args)
-                ret = plugin().call(user_org, payload,
-                                    self.plugin_context.instance(
-                                    self.user_id, self.user_token,
-                                    auth_type=self.auth_type),
-                                    ns)
+            args = None
+            try:
+                args = plugin.parse(plugin_action, plugin_return_type,
+                                    **kwargs.get('args', {}))
+            except Exception, ex:
+                LOG.error('%r' % ex)
+                resp.append((False, str(ex)))
+            if args:
+                ret = plugin.plugin.call(
+                    user_org,
+                    self.plugin_context.instance(
+                        self.user_id, self.user_token,
+                        auth_type=self.auth_type),
+                    args)
                 if ret:
                     resp.append(ret)
         except ValueError, verr:
             resp.append((False, str(verr)))
         except Exception, ex:
             LOG.exception(ex)
-            resp.append((False, plugin.parser._toString()))
+            resp.append((False, plugin.help()))
 
         return resp
 
@@ -409,18 +372,13 @@ class Dispatcher(Daemon):
 
     def worker(self, *args):
         job_queue = self.backend.consume_queue('requests')
-        job_done_queue = self.backend.consume_queue('finished_jobs')
-        log_queue = self.backend.create_fanout('logger')
-
-        poller = self.backend.create_poller(job_queue, job_done_queue)
 
         while not self.stopping.is_set():
-            ready = {}
             try:
                 frames = None
                 try:
-                    ready = poller.poll(300)
-                    if not ready:
+                    raw_frames = job_queue.recv(timeout=500)
+                    if not raw_frames:
                         continue
                 except ConnectionError:
                     break
@@ -428,95 +386,80 @@ class Dispatcher(Daemon):
                     LOG.exception(ex)
                     if not self.stopping.is_set():
                         continue
-                if job_queue in ready:
-                    # User -> queue
-                    raw_frames = job_queue.recv()
-                    sender = raw_frames.pop(0)
-                    ident = raw_frames.pop(0)
-                    raw_frames.pop(0)  # peer
-                    raw_frames.pop(0)  # org
-                    data = json.loads(raw_frames[0])
-                    if data[0] == 'QUIT':
-                        # Node exited
-                        continue
-                    req = message.AgentReq.build(*data)
-                    if not req:
-                        LOG.error("Invalid request %s" % frames)
-                        continue
-                    if req.control.startswith('_'):
-                        LOG.error("Invalid request %s" % frames)
-                        continue
+                # User -> queue
+                sender = ''
+                ident = raw_frames.pop(0)
+                data = json.loads(raw_frames[0])
+                if data[0] == 'QUIT':
+                    # Node exited
+                    continue
+                req = message.AgentReq.build(*data)
+                if not req:
+                    LOG.error("Invalid request %s" % frames)
+                    continue
+                if req.control.startswith('_'):
+                    LOG.error("Invalid request %s" % frames)
+                    continue
 
-                    if not hasattr(self, req.control):
-                        # TODO: Check if a plugin supports command
-                        job_queue.send(
-                            sender, StatusCodes.FINISHED,
-                            json.dumps(
-                                ["ERROR: [%s] command not available on Master" %
-                                 req.control]))
-                        continue
+                if not hasattr(self, req.control):
+                    # TODO: Check if a plugin supports command
+                    job_queue.send(
+                        sender, StatusCodes.FINISHED,
+                        json.dumps(
+                            ["ERROR: [%s] command not available on Master"
+                             % req.control]))
+                    continue
 
-                    self.user_id = req.login
-                    if req.auth_type == 1:
-                        # Password auth
-                        self.user_token = req.password
-                    else:
-                        # Token auth
-                        self.user_token = req.password
+                self.user_id = req.login
+                if req.auth_type == 1:
+                    # Password auth
+                    self.user_token = req.password
+                else:
+                    # Token auth
+                    self.user_token = req.password
 
-                    auth_check = self._login(req.auth_type)
-                    if not auth_check[0]:
-                        job_queue.send(ident, 'NOT AUTHORIZED')
-                        continue
+                auth_check = self._login(req.auth_type)
+                if not auth_check[0]:
+                    job_queue.send(ident, 'NOT AUTHORIZED')
+                    continue
 
-                    remote_user_map = auth_check[1]
-                    LOG.info('action: %s, user: %s/%s' % (req.control,
-                                                          req.login,
-                                                          remote_user_map.org))
-                    # def pipe_callback(*args):
-                    #    self.job_queue.send_multipart(
-                    #        sender, StatusCodes.PIPEOUT,
-                    #         json.dumps(args))
-
-                    response = getattr(self, req.control)(req.data,
-                                                          remote_user_map,
-                                                          **req.kwargs)
-                    if isinstance(response, Promise):
-                        response.proxy = sender
-                        response.peer = ident
-                        if response.main:
-                            response.resolve()
-                        elif response.remove:
-                            # Detach
-                            try:
-                                for sub in self.manager.subscriptions[
+                remote_user_map = auth_check[1]
+                LOG.info('action: %s, user: %s/%s' % (req.control,
+                                                      req.login,
+                                                      remote_user_map.org))
+                response = getattr(self, req.control)(req.data,
+                                                      remote_user_map,
+                                                      **req.kwargs)
+                if isinstance(response, Promise):
+                    # Return job id
+                    job_queue.send(
+                        ident,
+                        json.dumps([True, response.session_id]))
+                    response.proxy = sender
+                    response.peer = ident
+                    if response.main:
+                        response.resolve()
+                    elif response.remove:
+                        # Detach
+                        try:
+                            for sub in self.manager.subscriptions[
                                     response.session_id]:
-                                    if sub.session_id == response.session_id:
-                                        self.manager.subscriptions[
-                                            response.session_id].remove(sub)
-                                        break
-                            except:
-                                pass
-                        else:
-                            self.manager.subscriptions[
-                                response.session_id].append(response)
-                    elif response:
-                        data = [StatusCodes.FINISHED, list(response)]
-                        job_queue.send(sender, ident, json.dumps(data))
-
-                elif job_done_queue in ready:
-                    # Done -> user
-                    frames = job_done_queue.recv()
-                    proxy, peer = frames[:2]
-                    if proxy and peer:
-                        job_queue.send(*frames)
-                    log_queue.send(*json.loads(frames[2]))
+                                if sub.session_id == response.session_id:
+                                    self.manager.subscriptions[
+                                        response.session_id].remove(sub)
+                                    break
+                        except:
+                            pass
+                    else:
+                        self.manager.subscriptions[
+                            response.session_id].append(response)
+                elif response:
+                    data = [StatusCodes.FINISHED, list(response)]
+                    job_queue.send(ident, json.dumps(data))
             except ConnectionError:
                 break
 
         job_queue.close()
-        job_done_queue.close()
-        log_queue.close()
 
         LOG.info('Server worker exited')
 
@@ -584,6 +527,27 @@ class Dispatcher(Daemon):
         task_queue.close()
         LOG.info('Scheduler worker exited')
 
+    def logger_worker(self, *args):
+        log_queue = self.backend.consume_queue('logger')
+
+        while not self.stopping.is_set():
+            try:
+                frames = log_queue.recv(timeout=500)
+                if not frames:
+                    continue
+                try:
+                    self.logger.log(**json.loads(frames[0]))
+                except Exception, err:
+                    LOG.exception(err)
+            except ConnectionError:
+                break
+            except Exception, err:
+                LOG.exception(err)
+                continue
+
+        log_queue.close()
+        LOG.info('Logger worker exited')
+
     def choose(self):
         getattr(self, self.args.action)()
 
@@ -602,6 +566,7 @@ class Dispatcher(Daemon):
 
         WORKER_COUNT = int(CONFIG.workers_count or 10)
         SCHED_WORKER_COUNT = int(CONFIG.sched_worker_count or 3)
+        LOG_WORKER_COUNT = int(CONFIG.log_worker_count or 3)
 
         self.stopping = threading.Event()
 
@@ -624,6 +589,13 @@ class Dispatcher(Daemon):
             thread.start()
             self.sched_threads.append(thread)
 
+        self.logger_threads = []
+        if self.logger:
+            for i in range(LOG_WORKER_COUNT):
+                thread = threading.Thread(target=self.logger_worker, args=[])
+                thread.start()
+                self.logger_threads.append(thread)
+
         signal.signal(signal.SIGINT, self._handle_terminate)
         signal.signal(signal.SIGTERM, self._handle_terminate)
 
@@ -641,6 +613,9 @@ class Dispatcher(Daemon):
             thread.join()
         for sched_thread in self.sched_threads:
             sched_thread.join()
+        for logger_thread in self.logger_threads:
+            logger_thread.join()
+
         LOG.info('Threads exited')
 
         # Destroy managed plugins
@@ -648,7 +623,7 @@ class Dispatcher(Daemon):
             for plugin in plugin_base.__subclasses__():
                 if issubclass(plugin, ManagedPlugin):
                     try:
-                        plugin().stop()
+                        plugin.stop()
                     except:
                         pass
 

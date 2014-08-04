@@ -1,0 +1,178 @@
+.. _logs:
+
+Logs Controller
+=====================
+
+Provides support for loading execution logs
+
+.. note::
+
+	* This controller requires authentication headers. See how to add headers in request::
+		:ref:`secure-headers`
+
+Log viewer
+----------
+
+Load all logs
+^^^^^^^^^^^^^
+
+**[GET] /rest/logs/all?start=0&end=50**
+
+	Return logs in the descending order by execution date. Page size cannot be > 100.
+
+	**Params**
+
+		<start>
+
+			Start pagination at the specified item. Defaults to 0.
+
+		<end>
+
+			End pagination at the specified item. Defaults to 50.
+
+	Request::
+
+		curl -H "Cr-User=user" -H "Cr-Token=token" \
+			https://rest-api-server/logs/all
+
+	Response::
+
+		{
+			"logs": [
+				{
+					"created_at": "2014-07-08 16:13:28",
+					"exit_code": -99,
+					"tags": null,
+					"timeout": 0,
+					"uuid": null
+				},
+				{
+					"created_at": "2014-07-08 16:13:34",
+					"exit_code": 0,
+					"tags": null,
+					"timeout": 0,
+					"uuid": "cd966ec4068341bdaa8a5d5a7eb4b4a3"
+				},
+				{
+					"created_at": "2014-07-08 16:21:49",
+					"exit_code": 0,
+					"tags": null,
+					"timeout": 0,
+					"uuid": "945f18d8637f44f3a71d0a05013dd9aa"
+				},
+			]
+		}
+
+Load log data
+^^^^^^^^^^^^^
+
+**[GET] /rest/logs/get/<log_uuid>**
+
+	**Params**
+
+		<log_uuid>
+
+			UUID of the log to display
+
+	Request::
+
+		curl -H "Cr-User=user" -H "Cr-Token=token" \
+			https://rest-api-server/logs/get/d127f47490474c4a990c534f8b377d65
+
+	Response::
+
+		{
+			"log":
+				{
+					"status": "Finished",
+					"uuid": "d127f47490474c4a990c534f8b377d65",
+					"created_at": "2014-07-09 22:00:40",
+					"exit_code": 0,
+					"steps": [
+						{
+							"index": 1,
+							"env_in": null,
+							"target": "*",
+							"timeout": 0,
+							"script": "#! switch [*] --arg1=arg1 \n\n hostname\n\n"
+						},
+						{
+							"index": 2,
+							"env_in": null,
+							"target": "*",
+							"timeout": 0,
+							"script": "#! switch [*]\ncat /etc/*-release"
+						}
+					],
+					"timeout": 0
+				}
+		}
+
+Load log output
+^^^^^^^^^^^^^^^
+
+**[GET] /rest/logs/output/<log_uuid>?tail=100&step=1,2&nodes=node1,node2&show=stdout&filter=^ERROR**
+
+	**Params**::
+
+		<tail>
+			Show last N lines from stdout/stderr.
+
+		<step>
+			Show only specified steps. Valid values - any step number, e.g. step=1,2,3.
+
+		<nodes>
+			Show only logs from specified nodes. Valid values - any node id, e.g. nodes=nodex,nodey.
+
+		<show>
+			Show only chosen logs. Valid values: --empty--|stdout|stderr.
+
+		<filter>
+			A regex-style filter to apply on output logs to return.
+
+	Request::
+
+		curl -H "Cr-User=user" -H "Cr-Token=token" \
+			https://rest-api-server/logs/output/d127f47490474c4a990c534f8b377d65
+
+	Response::
+
+		{
+			"output": [
+				{
+					"step": 1,
+					"stderr": [],
+					"stdout": ["rest-api"]
+				},
+				{
+					"step": 2,
+					"stderr": [],
+					"stdout": []
+				},
+				{
+					"step": 3,
+					"stderr": [],
+					"stdout": [
+						"CentOS release 6.5 (Final)",
+						"LSB_VERSION=base-4.0-amd64:base-4.0-noarch:core-4.0-amd64:core-4.0-noarch",
+						"CentOS release 6.5 (Final)",
+						"CentOS release 6.5 (Final)"
+					]
+				}
+			]
+		}
+
+The log output can be rendered in plain text, if specified in headers: Accept: text/plain 
+	Request::
+
+		curl -H "Cr-User=user" -H "Cr-Token=token" -H "Accept: text/plain" \
+			https://rest-api-server/logs/output/d127f47490474c4a990c534f8b377d65
+
+	Response::
+
+		rest-api
+
+		CentOS release 6.5 (Final)
+		LSB_VERSION=base-4.0-amd64:base-4.0-noarch:core-4.0-amd64:core-4.0-noarch
+		CentOS release 6.5 (Final)
+		CentOS release 6.5 (Final)

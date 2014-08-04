@@ -8,14 +8,10 @@
 #  * Proprietary and confidential
 #  * This file is part of CloudRunner Server.
 #  *
-#  * CloudRunner Server can not be copied and/or distributed without the express
-#  * permission of CloudRunner.io
+#  * CloudRunner Server can not be copied and/or distributed
+#  * without the express permission of CloudRunner.io
 #  *******************************************************/
 
-import os
-import tempfile
-
-from cloudrunner.util.crypto import hash_token
 from cloudrunner.util.loader import local_plugin_loader
 from cloudrunner_server.tests import base
 from cloudrunner_server.plugins.auth.base import AuthPluginBase
@@ -23,23 +19,21 @@ from cloudrunner_server.plugins.auth.base import AuthPluginBase
 
 class TestUsersWithoutOrg(base.BaseTestCase):
 
-    def fixture(self):
-        _, file_name = tempfile.mkstemp(suffix='.sql3')
-        self.db = file_name
-        db_url = "sqlite://%s" % self.db
-        base.CONFIG.users.db = db_url
+    def setUp(self):
         base.CONFIG.security.use_org = False
         local_plugin_loader(base.CONFIG.auth)
         self.auth = AuthPluginBase.__subclasses__()[0](base.CONFIG)
-        self.auth.create_user("user1", "token1")
+        self.auth.set_context_from_config(recreate=True, autocommit=False)
+        self.populate_defaults()
 
-    def release(self):
-        pass  # os.unlink(self.db)
+    def populate_defaults(self):
+        self.auth.create_org("DEFAULT")
+        self.auth.activate_org("DEFAULT")
+        self.auth.create_user("user1", "token1", "email1@site.com")
 
     def test_login(self):
         self.assertEqual(len(AuthPluginBase.__subclasses__()), 1)
         success, access_map = self.auth.authenticate("user1", "token1")
-        print success, access_map
         self.assertTrue(success, access_map)
         self.assertEquals(access_map.org, 'DEFAULT')
 
@@ -74,16 +68,16 @@ class TestUsersWithoutOrg(base.BaseTestCase):
 
     def test_rm_user(self):
         self.assertTrue(
-            *self.auth.create_user('user2', 'token2'))
-        success, access_map = self.auth.authenticate("user2",  "token2")
+            *self.auth.create_user('user2', 'token2', "email2@site.com"))
+        success, access_map = self.auth.authenticate("user2", "token2")
         self.assertTrue(success, access_map)
         self.assertEquals(access_map.org, 'DEFAULT')
         self.assertTrue(*self.auth.remove_user('user2'))
         self.assertFalse(*self.auth.authenticate("user2", "token2"))
 
     def test_create_token(self):
-        user, token, org = self.auth.create_token("user1", "token2",
-                                                  expiry=1400)
+        token, expires_at = self.auth.create_token("user1", "token2",
+                                                   expiry=1400)
         self.assertIsNotNone(token)
         success, access_map = self.auth.validate("user1", token)
         self.assertTrue(success, access_map)
@@ -93,18 +87,17 @@ class TestUsersWithoutOrg(base.BaseTestCase):
 class TestUsersWithOrg(base.BaseTestCase):
 
     def fixture(self):
-        _, file_name = tempfile.mkstemp()
-        self.db = file_name
-        db_url = "sqlite:///%s" % (self.db)
-        base.CONFIG.users.db = db_url
         base.CONFIG.security.use_org = True
         local_plugin_loader(base.CONFIG.auth)
         self.auth = AuthPluginBase.__subclasses__()[0](base.CONFIG)
-        success, self.org_uid = self.auth.create_org('MyOrg')
-        self.auth.create_user("user1", "token1", 'MyOrg')
+        self.auth.set_context_from_config(recreate=True, autocommit=False)
+        self.populate_defaults()
 
-    def release(self):
-        os.unlink(self.db)
+    def populate_defaults(self):
+        success, self.org_uid = self.auth.create_org('MyOrg')
+        self.auth.activate_org('MyOrg')
+        self.auth.create_user("user1", "token1", "email1@site.com",
+                              org_name='MyOrg')
 
     def test_login(self):
         self.assertEqual(len(AuthPluginBase.__subclasses__()), 1)
@@ -144,7 +137,8 @@ class TestUsersWithOrg(base.BaseTestCase):
 
     def test_rm_user(self):
         self.assertTrue(
-            *self.auth.create_user('user2', 'token2', 'MyOrg'))
+            *self.auth.create_user('user2', 'token2', 'email2@site.com',
+                                   org_name='MyOrg'))
         success, access_map = self.auth.authenticate("user2", "token2")
         self.assertTrue(success, access_map)
         self.assertEquals(access_map.org, 'MyOrg')
@@ -152,21 +146,23 @@ class TestUsersWithOrg(base.BaseTestCase):
         self.assertFalse(*self.auth.authenticate("user2", "token2"))
 
     def test_create_token(self):
-        user, token, org = self.auth.create_token("user1", "token2",
-                                                  expiry=1400)
+        token, expires_at = self.auth.create_token("user1", "token2",
+                                                   expiry=1400)
         self.assertIsNotNone(token)
         success, access_map = self.auth.validate("user1", token)
         self.assertTrue(success, access_map)
         self.assertEquals(access_map.org, 'MyOrg')
 
     def test_list_all(self):
-        users = []
-        for idx in range(10):
+        users = [("user1", "email1@site.com", "MyOrg")]
+        for idx in range(10, 20):
             username = 'user%s' % (idx)
-            self.auth.create_user(username, 'token', 'MyOrg')
-            users.append((username, 'MyOrg'))
+            self.auth.create_user(
+                username, 'token', 'email3@site.com', org_name='MyOrg')
+            users.append((username, 'email3@site.com', 'MyOrg'))
 
-        res = self.auth.db.all()
+        res = self.auth.db.all('MyOrg')
+        self.maxDiff = None
         self.assertItemsEqual(users, res)
 
     def test_rm_org(self):

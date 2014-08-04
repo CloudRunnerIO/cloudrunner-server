@@ -8,23 +8,17 @@
 #  * Proprietary and confidential
 #  * This file is part of CloudRunner Server.
 #  *
-#  * CloudRunner Server can not be copied and/or distributed without the express
-#  * permission of CloudRunner.io
+#  * CloudRunner Server can not be copied and/or distributed
+#  * without the express permission of CloudRunner.io
 #  *******************************************************/
 
 from contextlib import nested
 from mock import call
 from mock import Mock
-from mock import DEFAULT
 from mock import patch
-import os
 import threading
 
-from cloudrunner.core import parser
-from cloudrunner_server.plugins.auth.user_db import AuthDb
-from cloudrunner_server.dispatcher import server
 from cloudrunner_server.dispatcher.session import JobSession
-from cloudrunner_server.dispatcher.server import CONFIG
 from cloudrunner_server.tests import base
 
 SESSION = "1234-5678-9012"
@@ -83,7 +77,8 @@ whoami
                 self.job_plugins = []
 
         session = JobSession(Ctx(),
-                             'user', SESSION, payload, remote_user_map, stop_event,
+                             'user', SESSION, payload,
+                             remote_user_map, stop_event,
                              PluginCtx())
 
         ret_data1 = [
@@ -126,10 +121,6 @@ whoami
             ]
         ]
 
-        ret = [dict(env={'key1': 'value1'},
-                    ret_code=0,
-                    node="NODE1",
-                    remote_user="remote_user")]
         with nested(
             patch.multiple(session,
                            exec_section=Mock(side_effect=[iter(ret_data1),
@@ -138,21 +129,30 @@ whoami
                                                           ]))):
             session.run()
 
-            expected = [call(
-                '*', {'libs': [], 'remote_user_map': remote_user_map,
-                'env': {'next_step': ['linux', 'windows'],
-                'NEXT_NODE': ['host2', 'host9']},
-                'script': "\ntest_1\nexport NEXT_NODE='host2'\n\n"}, timeout=None),
+            expected = [
                 call(
-                    'host2 host9', {'libs': [], 'remote_user_map': remote_user_map,
-                    'env': {'next_step': ['linux', 'windows'],
-                    'NEXT_NODE': ['host2', 'host9']},
-                    'script': "\nhostname\n\nexport next_step='linux'\n\n"}, timeout=None),
-                call('os=linux os=windows', {'libs': [],
-                                             'remote_user_map': remote_user_map,
-                                             'env': {'next_step': ['linux', 'windows'],
-                                                     'NEXT_NODE': ['host2', 'host9']},
-                                             'script': '\nwhoami\n'}, timeout=None)]
+                    '*',
+                    {'libs': [], 'remote_user_map': remote_user_map,
+                     'env': {'next_step': ['linux', 'windows'],
+                             'NEXT_NODE': ['host2', 'host9']},
+                     'script': "\ntest_1\nexport NEXT_NODE='host2'\n\n"},
+                    timeout=None),
+                call(
+                    'host2 host9',
+                    {'libs': [],
+                        'remote_user_map': remote_user_map,
+                        'env': {'next_step': ['linux', 'windows'],
+                                'NEXT_NODE': ['host2', 'host9']},
+                     'script':
+                     "\nhostname\n\nexport next_step='linux'\n\n"},
+                    timeout=None),
+                call(
+                    'os=linux os=windows', {
+                        'libs': [], 'remote_user_map': remote_user_map,
+                        'env': {'next_step': ['linux', 'windows'],
+                                'NEXT_NODE': ['host2', 'host9']},
+                        'script': '\nwhoami\n'},
+                    timeout=None)]
 
             self.assertEqual(
                 session.exec_section.call_args_list, expected,

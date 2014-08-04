@@ -24,7 +24,10 @@ from setuptools import find_packages
 
 from cloudrunner_server.version import VERSION
 
-test_requirements = ['nose>=1.0', 'mock', 'coverage']
+common = ['cloudrunner>=0.6', 'pecan', 'pytz',
+          'sqlalchemy', 'httplib2', 'M2Crypto']
+requirements = common + ['pyzmq', 'python-crontab', 'pymysql', 'redis']
+test_requirements = common + ['nose>=1.0', 'mock', 'coverage', 'flake8']
 
 setup(
     name='cloudrunner_server',
@@ -35,10 +38,10 @@ setup(
     description=('Script execution engine for cloud environments.'),
     license='Proprietary',
     packages=find_packages(),
-    package_data={'': ['*.txt', '*.rst'], 'conf': ['.*.conf'], 'db': ['*.py']},
+    package_data={'': ['*.txt', '*.rst'], 'conf': ['.*.conf'], 'db': ['*.py'],
+                  'api': ["*.html"]},
     include_package_data = True,
-    install_requires=['cloudrunner', 'pyzmq', 'python-crontab',
-                      'M2Crypto', 'httplib2'],
+    install_requires=requirements,
     tests_require = test_requirements,
     test_suite = 'nose.collector',
     scripts=['bin/cloudrunner-server-autocomplete'],

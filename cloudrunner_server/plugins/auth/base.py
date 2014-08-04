@@ -8,8 +8,8 @@
 #  * Proprietary and confidential
 #  * This file is part of CloudRunner Server.
 #  *
-#  * CloudRunner Server can not be copied and/or distributed without the express
-#  * permission of CloudRunner.io
+#  * CloudRunner Server can not be copied and/or distributed
+#  * without the express permission of CloudRunner.io
 #  *******************************************************/
 
 import abc
@@ -24,6 +24,10 @@ class AuthPluginBase(object):
         pass
 
     @abc.abstractmethod
+    def set_context(self, context):
+        pass
+
+    @abc.abstractmethod
     def validate(self, user, token):
         pass
 
@@ -32,7 +36,11 @@ class AuthPluginBase(object):
         pass
 
     @abc.abstractmethod
-    def list_users(self, **kwargs):
+    def delete_token(self, user, token, **kwargs):
+        pass
+
+    @abc.abstractmethod
+    def list_users(self, org, **kwargs):
         pass
 
     @abc.abstractmethod
@@ -44,7 +52,11 @@ class AuthPluginBase(object):
         pass
 
     @abc.abstractmethod
-    def create_user(self, username, password, org_name):
+    def create_user(self, username, password, email, org_name=None):
+        pass
+
+    @abc.abstractmethod
+    def update_user(self, username, password=None, email=None):
         pass
 
     @abc.abstractmethod

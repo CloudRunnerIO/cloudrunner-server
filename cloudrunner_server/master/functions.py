@@ -8,14 +8,13 @@
 #  * Proprietary and confidential
 #  * This file is part of CloudRunner Server.
 #  *
-#  * CloudRunner Server can not be copied and/or distributed without the express
-#  * permission of CloudRunner.io
+#  * CloudRunner Server can not be copied and/or distributed
+#  * without the express permission of CloudRunner.io
 #  *******************************************************/
 
 from cloudrunner.core.message import ScheduleReq
 from cloudrunner.util.shell import colors
 from cloudrunner.util.loader import local_plugin_loader
-from cloudrunner_server.dispatcher import SCHEDULER_URI_TEMPLATE
 from cloudrunner_server.plugins.auth.base import NodeVerifier
 
 import fcntl
@@ -24,12 +23,10 @@ import json
 import os
 import random
 import re
-from socket import gethostname
 import shutil
 import stat
 from string import ascii_letters
 import time
-import zmq
 
 YEARS = 10  # Default expire for signed certificates
 TAG = 1
@@ -246,8 +243,9 @@ class CertController(object):
                                 # Load from CSR
                                 ca = csr.get_subject().OU
                                 if not ca:
-                                    messages.append(
-                                        (ERR, "OU is not found in CSR subject"))
+                                    messages.append((
+                                        ERR,
+                                        "OU is not found in CSR subject"))
                                     return messages, None
                             else:
                                 for verifier in NodeVerifier.__subclasses__():
@@ -270,7 +268,7 @@ class CertController(object):
                             messages.append((ERR, "Invalid node name"))
                             return messages, None
                         if self.config.security.use_org and \
-                            not VALID_NAME.match(ca):
+                                not VALID_NAME.match(ca):
                             messages.append((ERR, "Invalid org name"))
                             return messages, None
 
@@ -294,7 +292,8 @@ class CertController(object):
                                     self.pass_cb)
                             except Exception, ca_ex:
                                 messages.append((
-                                    ERR, "Cannot load Sub-CA cert: %s" % ca_ex))
+                                    ERR,
+                                    "Cannot load Sub-CA cert: %s" % ca_ex))
                                 return messages, None
 
                         else:
@@ -352,8 +351,8 @@ class CertController(object):
                             messages.append((DATA, "%s signed" % node))
                             messages.append((DATA,
                                              "Issuer %s" % cert.get_issuer()))
-                            messages.append((DATA,
-                                             "Subject %s" % cert.get_subject()))
+                            messages.append((
+                                DATA, "Subject %s" % cert.get_subject()))
                             return messages, cert_file_name
                 except Exception, ex:
                     print "Error: %r" % ex
@@ -533,8 +532,6 @@ basicConstraints = CA:true
             open(conf_file, 'w').write(conf)
 
         ca_priv_key_file = os.path.join(self.ca_path, 'ca.key')
-        ca_priv_key = m.RSA.load_key(os.path.join(self.ca_path, 'ca.key'),
-                                     self.pass_cb)
         subca_priv_key_file = os.path.join(self.ca_path, 'org', ca + '.key')
         ca_cert_file = os.path.join(self.ca_path, 'ca.crt')
         subca_csr_file = os.path.join(ca_dir, ca + ".csr")
@@ -551,7 +548,6 @@ basicConstraints = CA:true
             subca_csr.set_pubkey(subca_key)
         except Exception, ex:
             print ex
-        #subca_rsa = None
         subca_key.save_key(subca_priv_key_file,
                            callback=lambda x: self.config.security.cert_pass)
         os.chmod(subca_priv_key_file, stat.S_IREAD | stat.S_IWRITE)
@@ -578,14 +574,14 @@ basicConstraints = CA:true
                             '-out "%s" '
                             '-subj "%s" '
                             '-passin pass:%s '
-                            '-notext -md sha1 -batch' %
-                           (conf_file,
-                            ca_priv_key_file,
-                            ca_cert_file,
-                            subca_csr_file,
-                            subca_crt_file,
-                            str(s_subj),
-                            self.config.security.cert_pass))
+                            '-notext -md sha1 -batch' % (
+                                conf_file,
+                                ca_priv_key_file,
+                                ca_cert_file,
+                                subca_csr_file,
+                                subca_crt_file,
+                                str(s_subj),
+                                self.config.security.cert_pass))
         ret = os.system(create_interm_ca)
         os.unlink(subca_csr_file)
         if ret:
@@ -618,8 +614,8 @@ basicConstraints = CA:true
             return
         conf_file = os.path.join(org_path, "openssl.cnf")
 
-        ret = os.system("openssl ca -revoke %s -config %s -passin pass:%s" %
-                       (ca_crt, conf_file, self.config.security.cert_pass))
+        ret = os.system("openssl ca -revoke %s -config %s -passin pass:%s" % (
+            ca_crt, conf_file, self.config.security.cert_pass))
         if ret:
             yield ERR, 'Error revoking Org CA: %s' % ret
             exit(1)
@@ -639,7 +635,6 @@ class ConfigController(object):
 
     @yield_wrap
     def create(self, **kwargs):
-        cert = CertController(self.config)
         yield TAG, "Creating new configuration"
         ca_path = kwargs.get('path', None)
         if not ca_path:
@@ -696,12 +691,9 @@ class ConfigController(object):
         os.chmod(reqs_dir, stat.S_IRWXU)
         os.chmod(nodes_dir, stat.S_IRWXU)
 
-        CN = self.config.id or gethostname()
-
         ca_key_file = os.path.join(ca_path, 'ca.key')
         ca_crt_file = os.path.join(ca_path, 'ca.crt')
         key_file = os.path.join(ca_path, 'server.key')
-        csr_file = os.path.join(ca_path, 'server.csr')
         crt_file = os.path.join(ca_path, 'server.crt')
 
         # Certificates/Keys generation
@@ -774,9 +766,9 @@ class ConfigController(object):
         os.chmod(ca_key_file, stat.S_IREAD | stat.S_IWRITE)
 
         ret = os.system('openssl req -new -x509 -days %s -key "%s" '
-                        '-out "%s" -subj "/C=%s/CN=%s" -passin pass:%s' %
-                       (365 * YEARS, ca_key_file, ca_crt_file,
-                        ca_subj.C, ca_subj.CN, cert_password))
+                        '-out "%s" -subj "/C=%s/CN=%s" -passin pass:%s' % (
+                            365 * YEARS, ca_key_file, ca_crt_file, ca_subj.C,
+                            ca_subj.CN, cert_password))
 
         if ret:
             yield ERR, 'Error running openssl for CA crt: %s' % ret
@@ -1021,6 +1013,7 @@ class UserController(object):
             raise Exception("Error loading Auth module")
 
         self.auth = auth_class(self.config)
+        self.auth.set_context_from_config()
 
     @yield_wrap
     def list(self, **kwargs):

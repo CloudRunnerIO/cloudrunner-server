@@ -81,13 +81,17 @@ rpm-el6_32: sdist
 rpm-f19_32: sdist
 	./scripts/rpm/rpm-mock.sh fedora-19-i386
 
-.PHONY: docs
-docs: sdist
-	$(__python) setup.py build_sphinx 
-
 .PHONY: userinstall
 userinstall: gen_stubs
 	$(__python) setup.py install --user
+
+.PHONY: test
+test:
+	nosetests cloudrunner_server && flake8 cloudrunner_server
+
+.PHONY: docs
+docs:
+	cd cloudrunner_server/api/docs/ && make html
 
 .PHONY: clean
 clean:

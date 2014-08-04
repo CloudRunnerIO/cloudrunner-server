@@ -8,8 +8,8 @@
 #  * Proprietary and confidential
 #  * This file is part of CloudRunner Server.
 #  *
-#  * CloudRunner Server can not be copied and/or distributed without the express
-#  * permission of CloudRunner.io
+#  * CloudRunner Server can not be copied and/or distributed
+#  * without the express permission of CloudRunner.io
 #  *******************************************************/
 
 from crontab import CronTab
@@ -20,13 +20,11 @@ if __version__ < '1.7':
 
 import logging
 import os
-import sys
 import tempfile
 import uuid
 import pwd
 
 from cloudrunner import LIB_DIR
-from cloudrunner_server.plugins.args_provider import CliArgsProvider
 
 SEPARATOR = '\t'
 LOG = logging.getLogger("CronScheduler")
@@ -57,8 +55,6 @@ class Job(object):
 
     @staticmethod
     def _prepare_job_meta(user, token, job_id, name, task_file):
-        params = dict(user=user, token=token, job_id=job_id,
-                      name=name, file=task_file)
         comment = SEPARATOR.join([user, token, job_id, name, task_file, ''])
         return comment
 
@@ -70,7 +66,7 @@ def _default_dir():
     return _def_dir
 
 
-class CronScheduler(CliArgsProvider):
+class CronScheduler(object):
 
     def __init__(self):
         if os.geteuid() == 0:
@@ -133,7 +129,8 @@ class CronScheduler(CliArgsProvider):
                                             name, task_file)
             cron = self.crontab.new(command=command, comment=comment)
             try:
-                period = [str(term) for term in period]
+                if not isinstance(period, list):
+                    period = period.split(' ')
                 cron.setall(*period)
             except:
                 return (False, 'Period is not valid: %s' % period)
@@ -156,7 +153,6 @@ class CronScheduler(CliArgsProvider):
 
     def edit(self, user, payload=None, name=None,
              period=None, **kwargs):
-        crons = self._all()
         if not name:
             return (False, 'Not found')
         name = name.replace(SEPARATOR, '_')
@@ -164,7 +160,10 @@ class CronScheduler(CliArgsProvider):
         if job:
             job = job[0]
             if payload:
-                open(job.file, 'w').write(payload)
+                with open(job.file, 'w') as f:
+                    f.write(payload)
+            if not isinstance(period, list):
+                period = period.split(' ')
             if period and job.period != period:
                 job.cron_job.setall(*period)
                 self.crontab.write()
@@ -184,20 +183,19 @@ class CronScheduler(CliArgsProvider):
             return (True, dict(job_id=job.id, name=name,
                                content=content,
                                owner=job.user,
+                               enabled=job.enabled,
                                period=job.period))
 
         return (False, 'Not found')
 
     show = view  # Alias
 
-    def list(self, where=None, *args, **kwargs):
+    def list(self, user, *args, **kwargs):
         jobs = []
         search = {}
         if 'search_pattern' in kwargs:
             search['meta'] = kwargs['search_pattern']
-        if not where:
-            where = self._all
-        for job in where(**search):
+        for job in self._own(user, **search):
             jobs.append(dict(name=job.name,
                              user=job.user,
                              enabled=job.enabled,
@@ -215,72 +213,3 @@ class CronScheduler(CliArgsProvider):
                 return (True, 'Cron job %s removed' % name)
 
         return (False, 'Cron not found')
-
-    def append_cli_args(self, arg_parser):
-        sched_actions = arg_parser.add_subparsers(dest='action')
-
-        _list = sched_actions.add_parser('list', add_help=False,
-                                         help='List all scheduled tasks')
-        _list.add_argument('--json', action="store_true", help='JSON output')
-
-        add = sched_actions.add_parser('add', add_help=False,
-                                       help='Create scheduled task')
-        add.add_argument('name', help='Job name')
-        add.add_argument('content', help='Content')
-        add.add_argument('period', nargs="+",
-                         help='Execution period, in cron format e.g. '
-                         '*/5 * * * *')
-
-        edit = sched_actions.add_parser('edit', add_help=False,
-                                        help='Edit scheduled task')
-        edit.add_argument('name', help='Job name')
-        edit.add_argument('content', help='Content')
-        edit.add_argument('period', nargs="+",
-                          help='Execution period, in cron format e.g. '
-                          '*/5 * * * *')
-
-        show = sched_actions.add_parser('show', add_help=False,
-                                        help='Get scheduled task contents')
-        show.add_argument('name', help='Job name')
-        delete = sched_actions.add_parser('delete', add_help=False,
-                                          help='Delete scheduled task')
-        delete.add_argument('name', help='Job name')
-        return "scheduler"
-
-    def call(self, user_org, data, ctx, args):
-        if args.action == "list":
-            success, jobs = self.list(where=lambda *args:
-                                      self._own(user_org[0]))
-            if args.json:
-                return success, jobs
-            rows = []
-            if success:
-                rows.append('%-20s %-20s %-20s' %
-                           ('Name', 'Period', 'Enabled'))
-                for job in jobs:
-                    rows.append('%(name)-20s %(period)-20s %(enabled)-20s' %
-                                job)
-            else:
-                return False, jobs
-
-            return True, '\n'.join(rows)
-        elif args.action == "add":
-            bin_path = os.path.dirname(os.path.abspath(sys.argv[0]))
-            kwargs = {}
-            kwargs["exec"] = os.path.join(bin_path, 'cloudrunner-master')
-            ret = self.add(user_org[0], data, args.name,
-                           args.period,
-                           ctx.create_auth_token(expiry=-1),
-                           **kwargs)
-            return ret
-        elif args.action == "edit":
-            bin_path = os.path.dirname(os.path.abspath(sys.argv[0]))
-            kwargs = {}
-            ret = self.edit(user_org[0], data, args.name,
-                            args.period,
-                            **kwargs)
-            return ret
-        elif args.action == "show":
-            return self.show(user_org[0], args.name)
-        elif args.action == "delete":
-            return self.delete(user_org[0], args.name)

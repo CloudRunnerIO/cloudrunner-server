@@ -8,15 +8,14 @@
 #  * Proprietary and confidential
 #  * This file is part of CloudRunner Server.
 #  *
-#  * CloudRunner Server can not be copied and/or distributed without the express
-#  * permission of CloudRunner.io
+#  * CloudRunner Server can not be copied and/or distributed
+#  * without the express permission of CloudRunner.io
 #  *******************************************************/
 
-from os import path as p
 import sys
 
 try:
-    from keystoneclient.v2_0 import client
+    from keystoneclient.v2_0 import client  # noqa
     from keystoneclient.apiclient.exceptions import Unauthorized
 except ImportError:
     print "Keystone client is not installed, it is required by the plugin. " \
@@ -31,7 +30,6 @@ def install():
     print "Found master config in %s" % CONFIG_LOCATION
 
     config = Config(CONFIG_LOCATION)
-    _path = p.abspath(p.join(p.dirname(__file__), '..', 'transport'))
 
     DEFAULT_URL = config.auth_url or "http://127.0.0.1:5000/v2.0"
     print "Enter Keystone AUTH URL (Hit ENTER for default: %s)" % DEFAULT_URL

@@ -8,8 +8,8 @@
 #  * Proprietary and confidential
 #  * This file is part of CloudRunner Server.
 #  *
-#  * CloudRunner Server can not be copied and/or distributed without the express
-#  * permission of CloudRunner.io
+#  * CloudRunner Server can not be copied and/or distributed
+#  * without the express permission of CloudRunner.io
 #  *******************************************************/
 
 import abc
@@ -42,7 +42,7 @@ class ServerTransportBackend(TransportBackend):
         pass
 
     @abc.abstractmethod
-    def subscribe_fanout(self, endpoint, *args, **kwargs):
+    def subscribe_fanout(self, endpoint, sub_pattern=None, *args, **kwargs):
         pass
 
     @abc.abstractmethod

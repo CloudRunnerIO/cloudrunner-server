@@ -8,8 +8,8 @@
 #  * Proprietary and confidential
 #  * This file is part of CloudRunner Server.
 #  *
-#  * CloudRunner Server can not be copied and/or distributed without the express
-#  * permission of CloudRunner.io
+#  * CloudRunner Server can not be copied and/or distributed
+#  * without the express permission of CloudRunner.io
 #  *******************************************************/
 
 import httplib
@@ -18,7 +18,6 @@ import logging
 import M2Crypto as m
 import os
 import random
-import signal
 import socket
 import stat
 from string import ascii_letters
@@ -29,25 +28,15 @@ import zmq
 from zmq.eventloop import ioloop
 import uuid
 
-from cloudrunner import CONFIG_NODE_LOCATION
-from cloudrunner.core.message import *
+from cloudrunner import LIB_DIR, CONFIG_NODE_LOCATION
+from cloudrunner.core.message import *  # noqa
 from cloudrunner.util.aes_crypto import Crypter
 from cloudrunner.util.config import Config
-from cloudrunner.util.shell import colors
-
-import logging
-import zmq
-from zmq.eventloop import ioloop
-
-from cloudrunner.core.message import (ADMIN_TOWER, HEARTBEAT)
-from cloudrunner.core.exceptions import ConnectionError
-from cloudrunner.plugins.transport.base import TransportBackend
-from cloudrunner import LIB_DIR
-
 from cloudrunner.util.decorators import catch_ex
-from cloudrunner.util.config import Config
-from cloudrunner.util.tlszmq import \
-    (ConnectionException, ServerDisconnectedException, TLSZmqClientSocket)
+from cloudrunner.util.shell import colors
+from cloudrunner.util.tlszmq import TLSZmqClientSocket
+from cloudrunner.plugins.transport.base import TransportBackend
+
 
 from cloudrunner.plugins.transport.zmq_transport import (SockWrapper,
                                                          PollerWrapper)
@@ -66,7 +55,8 @@ class NodeTransport(TransportBackend):
 
     def __init__(self, node_id=None, master_pub=None, master_repl=None,
                  worker_count=5, sock_dir=None, node_cert=None, node_key=None,
-                 ca=None, server=None, node_csr=None, cert_pass=None, **kwargs):
+                 ca=None, server=None, node_csr=None,
+                 cert_pass=None, **kwargs):
         self.node_id = node_id or socket.gethostname()
         self.worker_count = worker_count
         self.master_pub = master_pub
@@ -133,7 +123,7 @@ class NodeTransport(TransportBackend):
         # check in order: args, kwargs, config
         master_sub = 'tcp://%s' % self.master_pub
         master_reply_uri = 'tcp://%s' % self.master_repl
-        worker_count = int(self.worker_count or 5)
+        # worker_count = int(self.worker_count or 5)
 
         sock_dir = self.sock_dir or os.path.join(LIB_DIR,
                                                  'cloudrunner', 'sock')
@@ -145,7 +135,6 @@ class NodeTransport(TransportBackend):
             ssl_proxy_uri = 'tcp://127.0.0.1:54112'
         else:
             control_uri = 'inproc://control-queue.sock'
-            #control_uri = 'ipc://%s/control-queue.sock' % sock_dir
             ssl_proxy_uri = 'inproc://ssl-proxy-queue.sock'
             ssl_proxy_uri = 'ipc://%s/ssl-proxy-queue.sock' % sock_dir
 
@@ -166,11 +155,12 @@ class NodeTransport(TransportBackend):
                 base_name = self.node_key.rpartition('.')[0]
                 csreq = '.'.join(base_name, ".csr")
                 if not os.path.exists(csreq):
-                    LOGC.warn('Client certificate request not found.'
-                              'Run program with "configure" option first or set'
-                              ' the path to the .csr file in the config as:\n'
-                              '[Security]\n'
-                              'node_csr=path_to_file\n')
+                    LOGC.warn(
+                        'Client certificate request not found.'
+                        'Run program with "configure" option first or set'
+                        ' the path to the .csr file in the config as:\n'
+                        '[Security]\n'
+                        'node_csr=path_to_file\n')
                     exit(1)
 
             if not self._register():
@@ -244,9 +234,8 @@ class NodeTransport(TransportBackend):
                 if master_sub in ready:
                     _, message = master_sub.recv_multipart()
                     if message:
-                        #message = frames[0]
                         if message == StatusCodes.WELCOME or \
-                            message == StatusCodes.RELOAD:
+                                message == StatusCodes.RELOAD:
                             ssl_proxy.send_multipart([HEARTBEAT,
                                                       'IDENT'])
                         elif message == StatusCodes.HB:
@@ -281,7 +270,7 @@ class NodeTransport(TransportBackend):
                 break
             except zmq.ZMQError, zerr:
                 if zerr.errno == zmq.ETERM or zerr.errno == zmq.ENOTSUP \
-                    or zerr.errno == zmq.ENOTSOCK:
+                        or zerr.errno == zmq.ENOTSOCK:
                     break
                 LOGC.exception(zerr)
             except Exception, ex:
@@ -306,18 +295,18 @@ class NodeTransport(TransportBackend):
             LOGC.error(colors.red('Cannot read %s file' % csreq))
             return False
 
+        csr = None
         try:
-            csr = None
             csr = m.X509.load_request(csreq)
             node_id = csr.get_subject().CN
-            del csr
         except Exception, ex:
             LOGC.error(
                 "%s doesn't seem to be a valid certificate file" % csreq)
             LOGC.exception(ex)
+            return False
+        finally:
             if csr:
                 del csr
-            return False
 
         start_reg = time.time()
 
@@ -399,9 +388,10 @@ class NodeTransport(TransportBackend):
                     else:
                         return -1
                 elif rp.data == 'ERR_CRT_EXISTS':
-                    LOGC.info('Master says: "There is already an issued certificate'
-                              ' for this node. Remove the certificate'
-                              ' from master first"')
+                    LOGC.info(
+                        'Master says: "There is already an issued certificate'
+                        ' for this node. Remove the certificate'
+                        ' from master first"')
                     return -1
                 elif rp.data == 'ERR_CN_FAIL':
                     LOGC.info(
@@ -412,9 +402,10 @@ class NodeTransport(TransportBackend):
                     return -1
                 elif rp.data == 'ERR_NAME_FORBD':
                     csr = m.X509.load_request_string(csreq_data)
-                    LOGC.info('Master says: "The chosen node name(CN) - [%s] is '
-                              'forbidden. Choose another one."' %
-                              csr.get_subject().CN)
+                    LOGC.info(
+                        'Master says: "The chosen node name(CN) - [%s] is '
+                        'forbidden. Choose another one."' %
+                        csr.get_subject().CN)
                     del csr
                     return -1
                 elif rp.data == 'APPR_FAIL':
@@ -470,7 +461,8 @@ class NodeTransport(TransportBackend):
 
     def ssl_stop(self):
         self.ssl_thread_event.set()
-        self.ssl_thread.join(1)
+        if hasattr(self, 'ssl_thread'):
+            self.ssl_thread.join(1)
         self.ssl_thread_event.clear()
 
     def restart(self):
@@ -609,6 +601,7 @@ class NodeTransport(TransportBackend):
                     # OpenStack cloud
                     return json.loads(res.read()).get("uuid", 'N/A')
             except Exception, ex:
+                LOGC.error(ex)
                 return
 
         def amazon_aws():
@@ -620,6 +613,7 @@ class NodeTransport(TransportBackend):
                     # AmazonAWS cloud
                     return res.read() or "N/A"
             except Exception, ex:
+                LOGC.error(ex)
                 return
 
         ret = openstack()

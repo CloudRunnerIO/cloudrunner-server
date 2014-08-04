@@ -8,8 +8,8 @@
 #  * Proprietary and confidential
 #  * This file is part of CloudRunner Server.
 #  *
-#  * CloudRunner Server can not be copied and/or distributed without the express
-#  * permission of CloudRunner.io
+#  * CloudRunner Server can not be copied and/or distributed
+#  * without the express permission of CloudRunner.io
 #  *******************************************************/
 
 ADMIN_TOWER = 'cloudrunner-control'
@@ -18,8 +18,8 @@ ADMIN_TOWER = 'cloudrunner-control'
 def is_valid_host(host):
     if not host:
         return False
-    return not filter(lambda x: x.lower() == host.lower(),
-                     (ADMIN_TOWER.lower(),))
+    return not filter(lambda x:
+                      x.lower() == host.lower(), (ADMIN_TOWER.lower(),))
 
 SCHEDULER_URI_TEMPLATE = "ipc://%(sock_dir)s/scheduler.sock"
 

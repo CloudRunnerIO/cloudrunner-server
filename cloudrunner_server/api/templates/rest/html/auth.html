@@ -1,0 +1,184 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=ascii" />
+    
+    <title>Authentication Controller &mdash; CloudRunner REST API 1 documentation</title>
+    
+    <link rel="stylesheet" href="_static/nature.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    './',
+        VERSION:     '1',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <link rel="top" title="CloudRunner REST API 1 documentation" href="index.html" />
+    <link rel="next" title="Events Controller" href="events.html" />
+    <link rel="prev" title="Welcome to CloudRunner REST API&#8217;s documentation!" href="index.html" /> 
+  </head>
+  <body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="events.html" title="Events Controller"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="index.html" title="Welcome to CloudRunner REST API&#8217;s documentation!"
+             accesskey="P">previous</a> |</li>
+        <li><a href="index.html">CloudRunner REST API 1 documentation</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="authentication-controller">
+<span id="auth"></span><h1>Authentication Controller<a class="headerlink" href="#authentication-controller" title="Permalink to this headline">&#182;</a></h1>
+<p>Performs basic authentication functions:</p>
+<div class="section" id="login">
+<span id="id1"></span><h2>Login<a class="headerlink" href="#login" title="Permalink to this headline">&#182;</a></h2>
+<div class="section" id="initial-login-get-authentication-token">
+<h3>Initial login, get authentication token<a class="headerlink" href="#initial-login-get-authentication-token" title="Permalink to this headline">&#182;</a></h3>
+<p><strong>[GET] /rest/auth/login/&lt;user&gt;/&lt;password&gt;&lt;?expire_after&gt;</strong></p>
+<blockquote>
+<div><p><strong>Params</strong></p>
+<blockquote>
+<div><p>&lt;user&gt;</p>
+<blockquote>
+<div>User name</div></blockquote>
+<p>&lt;password&gt;</p>
+<blockquote>
+<div>User&#8217;s password</div></blockquote>
+<p>&lt;?expire_after&gt;</p>
+<blockquote>
+<div><em>Optional</em>. Expiration time in minutes</div></blockquote>
+</div></blockquote>
+<p>Request:</p>
+<div class="highlight-python"><div class="highlight"><pre>curl https://rest-api-server/auth/login/user/password/2000
+</pre></div>
+</div>
+<p>Response:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="p">{</span><span class="s">&quot;login&quot;</span><span class="p">:</span>
+        <span class="p">{</span>
+                <span class="s">&quot;warn&quot;</span><span class="p">:</span> <span class="n">null</span><span class="p">,</span>
+                <span class="s">&quot;token&quot;</span><span class="p">:</span> <span class="s">&quot;some_very_long_token&quot;</span><span class="p">,</span>
+                <span class="s">&quot;expire&quot;</span><span class="p">:</span> <span class="s">&quot;2014-06-25 08:17:53.549138+00:00&quot;</span><span class="p">,</span>
+                <span class="s">&quot;user&quot;</span><span class="p">:</span> <span class="s">&quot;user&quot;</span>
+        <span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</div></blockquote>
+</div>
+<div class="section" id="logout-invalidate-authentication-token">
+<h3>Logout, invalidate authentication token<a class="headerlink" href="#logout-invalidate-authentication-token" title="Permalink to this headline">&#182;</a></h3>
+<p><strong>[GET] /rest/auth/logout</strong></p>
+<blockquote>
+<div><p>Request:</p>
+<div class="highlight-python"><div class="highlight"><pre>curl -H &quot;Cr-User=user&quot; -H &quot;Cr-Token=token&quot; \
+        https://rest-api-server/auth/logout
+</pre></div>
+</div>
+<p>Response:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="p">{</span>
+        <span class="s">&quot;status&quot;</span><span class="p">:</span> <span class="s">&quot;ok&quot;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</div></blockquote>
+</div>
+<div class="section" id="error-handling">
+<h3>Error handling<a class="headerlink" href="#error-handling" title="Permalink to this headline">&#182;</a></h3>
+<div class="admonition seealso">
+<p class="first admonition-title">See also</p>
+<p class="last"><a class="reference internal" href="errors.html#error-handling"><em>Error handling</em></a></p>
+</div>
+</div>
+</div>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">Authentication Controller</a><ul>
+<li><a class="reference internal" href="#login">Login</a><ul>
+<li><a class="reference internal" href="#initial-login-get-authentication-token">Initial login, get authentication token</a></li>
+<li><a class="reference internal" href="#logout-invalidate-authentication-token">Logout, invalidate authentication token</a></li>
+<li><a class="reference internal" href="#error-handling">Error handling</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="index.html"
+                        title="previous chapter">Welcome to CloudRunner REST API&#8217;s documentation!</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="events.html"
+                        title="next chapter">Events Controller</a></p>
+  <h3>This Page</h3>
+  <ul class="this-page-menu">
+    <li><a href="_sources/auth.txt"
+           rel="nofollow">Show Source</a></li>
+  </ul>
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="events.html" title="Events Controller"
+             >next</a> |</li>
+        <li class="right" >
+          <a href="index.html" title="Welcome to CloudRunner REST API&#8217;s documentation!"
+             >previous</a> |</li>
+        <li><a href="index.html">CloudRunner REST API 1 documentation</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2014, CloudRunner.IO.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.2.2.
+    </div>
+  </body>
+</html>

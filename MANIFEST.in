@@ -4,10 +4,9 @@ include requirements.txt
 include version.py
 
 recursive-include conf *.conf
-recursive-include cloudrunner/db *
 recursive-include etc *
 recursive-include scripts/common *
 
 graft conf
-graft cloudrunner/db
+graft cloudrunner_server/api
 graft etc

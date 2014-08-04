@@ -8,8 +8,8 @@
 #  * Proprietary and confidential
 #  * This file is part of CloudRunner Server.
 #  *
-#  * CloudRunner Server can not be copied and/or distributed without the express
-#  * permission of CloudRunner.io
+#  * CloudRunner Server can not be copied and/or distributed
+#  * without the express permission of CloudRunner.io
 #  *******************************************************/
 
 import abc
@@ -21,20 +21,4 @@ class IncludeLibPluginBase(object):
 
     @abc.abstractmethod
     def process(self, user, section, env, args):
-        pass
-
-    @abc.abstractmethod
-    def add(self, user, name, script, **kwargs):
-        pass
-
-    @abc.abstractmethod
-    def show(self, user, name, **kwargs):
-        pass
-
-    @abc.abstractmethod
-    def list(self, user, **kwargs):
-        pass
-
-    @abc.abstractmethod
-    def delete(self, user, name, **kwargs):
         pass

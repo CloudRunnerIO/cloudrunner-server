@@ -8,19 +8,16 @@
 #  * Proprietary and confidential
 #  * This file is part of CloudRunner Server.
 #  *
-#  * CloudRunner Server can not be copied and/or distributed without the express
-#  * permission of CloudRunner.io
+#  * CloudRunner Server can not be copied and/or distributed
+#  * without the express permission of CloudRunner.io
 #  *******************************************************/
 
-import json
 import logging
 import os
 import zmq
 
 from cloudrunner import LIB_DIR
-from cloudrunner.core.message import AgentReq
 from cloudrunner_server.plugins.args_provider import ArgsProvider
-from cloudrunner_server.plugins.args_provider import CliArgsProvider
 from cloudrunner_server.plugins.args_provider import ManagedPlugin
 from cloudrunner_server.plugins.jobs.base import JobInOutProcessorPluginBase
 
@@ -37,7 +34,8 @@ except:
 
 
 class SignalHandlerPlugin(JobInOutProcessorPluginBase,
-                          ArgsProvider, CliArgsProvider, ManagedPlugin):
+                          ArgsProvider,
+                          ManagedPlugin):
 
     def __init__(self):
         self.db_dir = getattr(SignalHandlerPlugin, 'log_dir',
@@ -52,7 +50,7 @@ class SignalHandlerPlugin(JobInOutProcessorPluginBase,
         return _def_dir
 
     @classmethod
-    def start(cls):
+    def start(cls, config):
         LOG.info("Starting Signal Handler")
         cls.context = zmq.Context()
         cls.push_sock = cls.context.socket(zmq.DEALER)
@@ -73,7 +71,7 @@ class SignalHandlerPlugin(JobInOutProcessorPluginBase,
         return (script, env)
         if args.attach_to:
             # Attach script source to signal
-            self._attach(user_org, args.attach_to, script, False)
+            self.attach(user_org, args.attach_to, script, False)
         return (script, env)
 
     def after(self, user_org, session_id, job_id, env, response, args, ctx,
@@ -153,48 +151,31 @@ class SignalHandlerPlugin(JobInOutProcessorPluginBase,
                         script_name += ' '
 
                     if trigger_stack == 1:
-                        req.append(caller="%s[%s] Triggered from %s" %
-                                  (script_name, sig, call_name))
+                        req.append(caller="%s[%s] Triggered from %s" % (
+                            script_name, sig, call_name))
                     else:
-                        req.append(caller="%s[%s] Re-triggered from %s" %
-                                  (script_name, sig, call_name))
+                        req.append(caller="%s[%s] Re-triggered from %s" % (
+                            script_name, sig, call_name))
                     SignalHandlerPlugin.push_sock.send_multipart(req.pack())
         return True
 
-    def _request(self, login, password):
-        _req = AgentReq(login=login,
-                        password=password,
-                        auth_type=2)
-        return _req
+    def list(self, user_org):
+        triggers = red.smembers('signals')
 
-    def append_cli_args(self, arg_parser):
-        sig_actions = arg_parser.add_subparsers(dest='action')
+        coll = []
+        for trig in triggers:
+            if not trig.startswith('%s__' % user_org[1]):
+                continue
+            meta = red.hgetall(trig + '__meta')
+            sig = trig.split('__')[2]
+            meta['signal'] = sig
+            coll.append(meta)
 
-        attach = sig_actions.add_parser('attach', add_help=False,
-                                        help='Attach target to signal')
-        attach.add_argument('signal', help='Signal name')
-        attach.add_argument('target', help='Target name')
-        attach.add_argument('-a', '--auth', action='store_true',
-                            help='Pass auth headers')
+        return True, coll
 
-        detach = sig_actions.add_parser('detach',
-                                        help='Detach target from signal')
-        detach.add_argument('signal', help='Signal name')
-        detach.add_argument('target', help='Target name')
-
-        return "signal"
-
-    def call(self, user_org, data, ctx, args):
-
-        if args.action == 'attach':
-            return self._attach(user_org, args.signal, args.target, args.auth)
-        elif args.action == 'detach':
-            return self._detach(user_org, args.signal, args.target)
-        return False, "Unknown"
-
-    def _attach(self, user, signal, target, use_auth):
-        LOG.info("[%s] Attaching to %s, auth: %s" %
-                (user[0], signal, use_auth))
+    def attach(self, user, signal, target, use_auth):
+        LOG.info("[%s] Attaching to %s, auth: %s" % (
+            user[0], signal, use_auth))
 
         org = user[1]
         key = '__'.join([org, user[0], signal, target])
@@ -213,11 +194,14 @@ class SignalHandlerPlugin(JobInOutProcessorPluginBase,
         else:
             return True, "Signal handler exists, but will be updated"
 
-    def _detach(self, user, signal, target):
+    def detach(self, user, signal, target):
         LOG.info("[%s] Detaching %s from %s" % (user[0], target, signal))
         org = user[1]
         key = '__'.join([org, user[0], signal, target])
         is_rem = red.srem('signals', key)
         red.srem('%s__%s' % (org, signal), key)
         red.hdel(key + '__meta', 'user', 'target', 'auth', 'is_link')
-        return is_rem, 'Detached'
+        if is_rem:
+            return True, 'Detached'
+        else:
+            return False, 'Signal not detached'

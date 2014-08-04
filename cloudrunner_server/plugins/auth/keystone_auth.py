@@ -8,18 +8,14 @@
 #  * Proprietary and confidential
 #  * This file is part of CloudRunner Server.
 #  *
-#  * CloudRunner Server can not be copied and/or distributed without the express
-#  * permission of CloudRunner.io
+#  * CloudRunner Server can not be copied and/or distributed
+#  * without the express permission of CloudRunner.io
 #  *******************************************************/
 
 from datetime import (datetime, timedelta)
 import logging
-import random
 import re
-import string
-import sqlite3
 from time import (gmtime, mktime)
-import uuid
 
 from cloudrunner_server.plugins.auth.base import AuthPluginBase
 
@@ -46,6 +42,9 @@ class KeystoneAuth(AuthPluginBase):
         self.token_expiration = int(config.token_expiration or 1440)
         self._token_cache = {}
         LOG.info("Keystone Auth with %s" % self.AUTH_URL)
+
+    def set_context(self, context):
+        pass
 
     def authenticate(self, user, password):
         """
@@ -121,12 +120,12 @@ class KeystoneAuth(AuthPluginBase):
             LOG.error(user)
             return (None, None, None)
 
-    def list_users(self):
+    def list_users(self, org):
         return []
 
     def _admin_token(self):
         if 'admin_token' not in self._token_cache or \
-            self._token_cache.get('admin_token', [0])[0] > gmtime():
+                self._token_cache.get('admin_token', [0])[0] > gmtime():
             # Create token
             keystone = client.Client(tenant_name=self.admin_tenant,
                                      username=self.admin_user,
@@ -163,7 +162,10 @@ class KeystoneAuth(AuthPluginBase):
     def deactivate_org(self, orgname):
         raise NotImplemented()
 
-    def create_user(self, username, password, org_name=None):
+    def create_user(self, username, email, password, org_name=None):
+        raise NotImplemented()
+
+    def update_user(self, username, email=None, password=None):
         raise NotImplemented()
 
     def remove_org(self, name):
@@ -199,8 +201,8 @@ class UserRules(object):
             try:
                 self.rules.append((re.compile(node, re.I), role))
             except re.error:
-                LOG.error("Rule %s for user %s is invalid regex" % (node,
-                                                                    self.owner))
+                LOG.error("Rule %s for user %s is invalid regex" % (
+                    node, self.owner))
 
     def select(self, node):
         for rule, role in self.rules:

@@ -8,8 +8,8 @@
 #  * Proprietary and confidential
 #  * This file is part of CloudRunner Server.
 #  *
-#  * CloudRunner Server can not be copied and/or distributed without the express
-#  * permission of CloudRunner.io
+#  * CloudRunner Server can not be copied and/or distributed
+#  * without the express permission of CloudRunner.io
 #  *******************************************************/
 
 import sys
@@ -24,6 +24,13 @@ from cloudrunner.util.config import Config
 from cloudrunner.util.shell import colors
 from cloudrunner_server.master import functions
 
+__CONFIG__ = None
+__ACT_NODES__ = None
+__PEND_NODES__ = None
+__CA__ = None
+__USERS__ = None
+__ORG__ = None
+
 
 def main():
     parser = argparse.ArgumentParser(description='CloudRunner CLI tool')
@@ -34,11 +41,8 @@ def main():
     commands = parser.add_subparsers(dest='controller', help='Commands')
 
     def _eval_config():
-        try:
-            global __CONFIG__
-            if __CONFIG__:
-                pass
-        except:
+        global __CONFIG__
+        if not __CONFIG__:
             try:
                 if sys.argv.index('-c') >= 0:
                     __CONFIG__ = Config(sys.argv[sys.argv.index('-c') + 1])
@@ -51,32 +55,23 @@ def main():
         return __CONFIG__
 
     def _list_active_nodes(prefix, parsed_args, **kwargs):
-        try:
-            global __ACT_NODES__
-            if __ACT_NODES__:
-                pass
-        except:
+        global __ACT_NODES__
+        if not __ACT_NODES__:
             _config = _eval_config()
             __ACT_NODES__ = functions.CertController(_config).\
                 list_all_approved()
         return (c for c in __ACT_NODES__ if c.startswith(prefix))
 
     def _list_pending_nodes(prefix, parsed_args, **kwargs):
-        try:
-            global __PEND_NODES__
-            if __PEND_NODES__:
-                pass
-        except:
+        global __PEND_NODES__
+        if not __PEND_NODES__:
             _config = _eval_config()
             __PEND_NODES__ = functions.CertController(_config).list_pending()
         return (c for c in __PEND_NODES__ if c.startswith(prefix))
 
     def _list_sub_ca(prefix, parsed_args, **kwargs):
-        try:
-            global __CA__
-            if __CA__:
-                pass
-        except:
+        global __CA__
+        if not __CA__:
             _config = _eval_config()
             __CA__ = functions.CertController(_config).list_ca()
         return (c[1] for c in __CA__ if c[1].startswith(prefix))
@@ -87,8 +82,8 @@ def main():
 
     c_subcmd = cert.add_subparsers(dest='action', help='Cert actions help')
 
-    cert_list = c_subcmd.add_parser('list',
-                                    help='List all node certificates')
+    c_subcmd.add_parser('list',
+                        help='List all node certificates')
 
     cert_sign = c_subcmd.add_parser('sign',
                                     help='Sign a pending node certificate')
@@ -108,17 +103,17 @@ def main():
     cert_ca.add_argument('ca',
                          help='Org/Sub-CA name')
 
-    cert_ca_list = c_subcmd.add_parser('list_ca', help='List organizations/'
-                                       'Sub-CA certificates')
+    c_subcmd.add_parser('list_ca', help='List organizations/'
+                        'Sub-CA certificates')
 
     cert_auto_sign = c_subcmd.add_parser('autosign',
                                          help='Automatically sign a node '
-                                         'certificate with the specified name, '
-                                         'when it arrives')
-    cert_auto_sign_node = cert_auto_sign.add_argument('node',
-                                                      help='Node common name')
+                                         'certificate with the specified name,'
+                                         ' when it arrives')
+    cert_auto_sign.add_argument('node',
+                                help='Node common name')
 
-    cert_auto_sign_expire = cert_auto_sign.add_argument(
+    cert_auto_sign.add_argument(
         '--expires', default=20,
         help='Set expiration of the auto-sign notice in minutes. '
         'Default is %d(default) min')
@@ -129,7 +124,7 @@ def main():
         completer = _list_active_nodes
 
     if _eval_config().security.use_org:
-        cert_revoke.add_argument('--ca',  required=True,
+        cert_revoke.add_argument('--ca', required=True,
                                  help='Node organization/Sub-CA name').\
             completer = _list_sub_ca
 
@@ -141,14 +136,14 @@ def main():
     cert_auto = c_subcmd.add_parser('autosign',
                                     help='Automatically sign new cert request '
                                          'in a limited time frame.')
-    cert_auto_node = cert_auto.add_argument('node',
-                                            help='Node common name')
+    cert_auto.add_argument('node',
+                           help='Node common name')
 
-    cert_auto_time = cert_auto.add_argument('-t', '--timeout', default=120,
-                                            help='Allowed time frame in seconds'
-                                            ' to wait for node to make request.'
-                                            ' Default is %(default)s sec.',
-                                            required=False)
+    cert_auto.add_argument('-t', '--timeout', default=120,
+                           help='Allowed time frame in seconds'
+                           ' to wait for node to make request.'
+                           ' Default is %(default)s sec.',
+                           required=False)
 
     clear_req = c_subcmd.add_parser('clear_req',
                                     help='Clear pending node request')
@@ -165,50 +160,50 @@ def main():
                                  help='Initial certificate configuration')
 
     config_actions = config.add_subparsers(dest='action',
-                                           help='Manage CloudRunner dispatcher '
-                                           'configuration')
+                                           help='Manage CloudRunner dispatcher'
+                                           ' configuration')
 
-    config_check = config_actions.add_parser('check',
-                                             help='Check if config is missing '
-                                             'and initiate fresh configuration')
+    config_actions.add_parser('check',
+                              help='Check if config is missing '
+                              'and initiate fresh configuration')
 
     config_new = config_actions.add_parser('create',
                                            help='Create new configuration')
 
-    conf_path = config_new.add_argument('-p', '--path',
-                                        help='Create initial configuration'
-                                        ' at the specified location. '
-                                        'This will make all currently '
-                                        'registered nodes to stop working'
-                                        'and all signed certificates will '
-                                        'be no longer valid',
-                                        required=False)
+    config_new.add_argument('-p', '--path',
+                            help='Create initial configuration'
+                            ' at the specified location. '
+                            'This will make all currently '
+                            'registered nodes to stop working'
+                            'and all signed certificates will '
+                            'be no longer valid',
+                            required=False)
 
-    conf_overwrite = config_new.add_argument('-o', '--overwrite',
-                                             action='store_true',
-                                             help='Overwrite any existing '
-                                             'configuration. Use with caution!',
-                                             required=False)
+    config_new.add_argument('-o', '--overwrite',
+                            action='store_true',
+                            help='Overwrite any existing '
+                            'configuration. Use with caution!',
+                            required=False)
 
-    key_size = config_new.add_argument('-k', '--key-size', default=2048,
-                                       help='Default size of keys for '
-                                       'CA/Server. Default is %(default)s',
-                                       required=False)
+    config_new.add_argument('-k', '--key-size', default=2048,
+                            help='Default size of keys for '
+                            'CA/Server. Default is %(default)s',
+                            required=False)
 
-    conf_show = config_actions.add_parser('show',
-                                          help='Printing current configuration')
+    config_actions.add_parser('show',
+                              help='Printing current configuration')
 
     conf_set = config_actions.add_parser('set',
                                          help='Set config values')
 
-    conf_val_set = conf_set.add_argument('Section.key=value',
-                                         help='Section.key=value')
+    conf_set.add_argument('Section.key=value',
+                          help='Section.key=value')
 
     conf_get = config_actions.add_parser('get',
                                          help='Get config values')
 
-    conf_val_get = conf_get.add_argument('Section.key',
-                                         help='Section.key')
+    conf_get.add_argument('Section.key',
+                          help='Section.key')
 
     # Scheduler
 
@@ -221,20 +216,18 @@ def main():
 
     job_list = sched_actions.add_parser('list',
                                         help='List all scheduled jobs')
-    job_search = job_list.add_argument('-s', '--search',
-                                       help='Search pattern')
+    job_list.add_argument('-s', '--search',
+                          help='Search pattern')
 
     job_exec = sched_actions.add_parser('run', help='Run scheduled jobs')
 
-    job_id = job_exec.add_argument('job_id', help='Job id')
+    job_exec.add_argument('job_id', help='Job id')
 
     # Users command
 
     def _list_users(prefix, parsed_args, **kwargs):
-        try:
-            if __USERS__:
-                pass
-        except:
+        global __USERS__
+        if not __USERS__:
             __USERS__ = []
             _config = _eval_config()
             for u in functions.UserController(_config, to_print=False).list():
@@ -244,10 +237,8 @@ def main():
 
     if _eval_config().security.use_org:
         def _list_org(prefix, parsed_args, **kwargs):
-            try:
-                if __ORG__:
-                    pass
-            except:
+            global __ORG__
+            if not __ORG__:
                 __ORG__ = []
                 _config = _eval_config()
                 for u in functions.UserController(_config,
@@ -261,8 +252,8 @@ def main():
         orgs_actions = orgs.add_subparsers(dest='action',
                                            help='Manage Organizations')
 
-        org_list = orgs_actions.add_parser('list',
-                                           help='List all organizations')
+        orgs_actions.add_parser('list',
+                                help='List all organizations')
 
         org_add = orgs_actions.add_parser('create',
                                           help='Create new organization')
@@ -279,8 +270,9 @@ def main():
         org_activate.add_argument('name', help='Organization name').\
             completer = _list_org
 
-        org_deactivate = orgs_actions.add_parser('deactivate',
-                                                 help='Deactivate organization')
+        org_deactivate = orgs_actions.add_parser(
+            'deactivate', help='Deactivate organization')
+
         org_deactivate.add_argument('name', help='Organization name').\
             completer = _list_org
 
@@ -290,11 +282,9 @@ def main():
     users_actions = users.add_subparsers(dest='action',
                                          help='Manage CloudRunner users')
 
-    users_list = users_actions.add_parser('list',
-                                          help='List all users')
+    users_actions.add_parser('list', help='List all users')
 
-    users_list_orgs = users_actions.add_parser('list_orgs',
-                                               help='List all organizations')
+    users_actions.add_parser('list_orgs', help='List all organizations')
 
     users_add = users_actions.add_parser('create',
                                          help='Create new user')
@@ -342,7 +332,6 @@ def main():
 
     args = parser.parse_args()
 
-    controller = args.controller
     action = args.action
 
     class OrgController(object):

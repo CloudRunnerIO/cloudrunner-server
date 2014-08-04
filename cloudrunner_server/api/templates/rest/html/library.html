@@ -1,0 +1,442 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=ascii" />
+    
+    <title>Library Controller &mdash; CloudRunner REST API 1 documentation</title>
+    
+    <link rel="stylesheet" href="_static/nature.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    './',
+        VERSION:     '1',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <link rel="top" title="CloudRunner REST API 1 documentation" href="index.html" />
+    <link rel="next" title="Management Controller" href="manage.html" />
+    <link rel="prev" title="Dispatcher Controller" href="dispatch.html" /> 
+  </head>
+  <body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="manage.html" title="Management Controller"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="dispatch.html" title="Dispatcher Controller"
+             accesskey="P">previous</a> |</li>
+        <li><a href="index.html">CloudRunner REST API 1 documentation</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="library-controller">
+<span id="library"></span><h1>Library Controller<a class="headerlink" href="#library-controller" title="Permalink to this headline">&#182;</a></h1>
+<p>Provides functions for library</p>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<ul class="last simple">
+<li>This controller requires authentication headers. See how to add headers in request: <a class="reference internal" href="_templates/_secure.html#secure-headers"><em>Security headers</em></a></li>
+</ul>
+</div>
+<div class="section" id="workflows">
+<span id="id1"></span><h2>Workflows<a class="headerlink" href="#workflows" title="Permalink to this headline">&#182;</a></h2>
+<div class="section" id="list-workflows">
+<h3>List workflows<a class="headerlink" href="#list-workflows" title="Permalink to this headline">&#182;</a></h3>
+<p><strong>[GET] /rest/library/workflows/</strong></p>
+<blockquote>
+<div><p>Request:</p>
+<div class="highlight-python"><div class="highlight"><pre>curl -H &quot;Cr-User=user&quot; -H &quot;Cr-Token=token&quot; \
+        https://rest-api-server/library/workflows
+</pre></div>
+</div>
+<p>Response:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="p">{</span>
+        <span class="s">&quot;workflows&quot;</span><span class="p">:</span> <span class="p">{</span>
+                <span class="s">&quot;cloudrunner&quot;</span><span class="p">:</span> <span class="p">[</span>
+                        <span class="p">{</span>
+                                <span class="s">&quot;created_at&quot;</span><span class="p">:</span> <span class="s">&quot;2014-07-08 00:53:23&quot;</span><span class="p">,</span>
+                                <span class="s">&quot;name&quot;</span><span class="p">:</span> <span class="s">&quot;scripts/wf1&quot;</span><span class="p">,</span>
+                                <span class="s">&quot;owner&quot;</span><span class="p">:</span> <span class="s">&quot;cloudr&quot;</span><span class="p">,</span>
+                                <span class="s">&quot;visibility&quot;</span><span class="p">:</span> <span class="s">&quot;public&quot;</span>
+                        <span class="p">},</span>
+                        <span class="p">{</span>
+                                <span class="s">&quot;created_at&quot;</span><span class="p">:</span> <span class="s">&quot;2014-07-08 00:53:23&quot;</span><span class="p">,</span>
+                                <span class="s">&quot;name&quot;</span><span class="p">:</span> <span class="s">&quot;scripts/wf2&quot;</span><span class="p">,</span>
+                                <span class="s">&quot;owner&quot;</span><span class="p">:</span> <span class="s">&quot;cloudr&quot;</span><span class="p">,</span>
+                                <span class="s">&quot;visibility&quot;</span><span class="p">:</span> <span class="s">&quot;public&quot;</span>
+                        <span class="p">},</span>
+                        <span class="p">{</span>
+                                <span class="s">&quot;created_at&quot;</span><span class="p">:</span> <span class="s">&quot;2014-07-08 00:53:23&quot;</span><span class="p">,</span>
+                                <span class="s">&quot;name&quot;</span><span class="p">:</span> <span class="s">&quot;scripts/wf3&quot;</span><span class="p">,</span>
+                                <span class="s">&quot;owner&quot;</span><span class="p">:</span> <span class="s">&quot;cloudr&quot;</span><span class="p">,</span>
+                                <span class="s">&quot;visibility&quot;</span><span class="p">:</span> <span class="s">&quot;private&quot;</span>
+                        <span class="p">}</span>
+                <span class="p">]</span>
+        <span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</div></blockquote>
+</div>
+<div class="section" id="retrieve-workflow-details">
+<h3>Retrieve workflow details<a class="headerlink" href="#retrieve-workflow-details" title="Permalink to this headline">&#182;</a></h3>
+<p><strong>[GET] /rest/library/workflows/&lt;item_name&gt;</strong></p>
+<blockquote>
+<div><p><strong>Params</strong></p>
+<blockquote>
+<div><p>&lt;item_name&gt;</p>
+<blockquote>
+<div>Workflow to retrieve</div></blockquote>
+</div></blockquote>
+<p>Request:</p>
+<div class="highlight-python"><div class="highlight"><pre>curl -H &quot;Cr-User=user&quot; -H &quot;Cr-Token=token&quot; \
+        https://rest-api-server/library/workflows/wf_item1
+</pre></div>
+</div>
+<p>Response:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="p">{</span>
+        <span class="s">&quot;workflow&quot;</span><span class="p">:</span> <span class="p">{</span>
+                <span class="s">&quot;content&quot;</span><span class="p">:</span> <span class="s">&quot;#! switch [*]</span><span class="se">\n</span><span class="s">cloudrunner-node details&quot;</span><span class="p">,</span>
+                <span class="s">&quot;created_at&quot;</span><span class="p">:</span> <span class="s">&quot;2014-07-08 00:53:23&quot;</span><span class="p">,</span>
+                <span class="s">&quot;name&quot;</span><span class="p">:</span> <span class="s">&quot;scripts/wf3&quot;</span><span class="p">,</span>
+                <span class="s">&quot;owner&quot;</span><span class="p">:</span> <span class="s">&quot;cloudr&quot;</span><span class="p">,</span>
+                <span class="s">&quot;visibility&quot;</span><span class="p">:</span> <span class="s">&quot;private&quot;</span>
+        <span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</div></blockquote>
+</div>
+<div class="section" id="create-new-workflow">
+<h3>Create new workflow<a class="headerlink" href="#create-new-workflow" title="Permalink to this headline">&#182;</a></h3>
+<p><strong>[POST] /rest/library/workflows/</strong></p>
+<blockquote>
+<div><p><strong>POST data</strong></p>
+<blockquote>
+<div><p>&lt;name&gt;</p>
+<blockquote>
+<div>Creates new workflow</div></blockquote>
+<p>&lt;content&gt;</p>
+<blockquote>
+<div>Workflow content</div></blockquote>
+<p>&lt;?private&gt;</p>
+<blockquote>
+<div><p>Optional, defaults to False.</p>
+<p>0 : Public
+1 : Private</p>
+</div></blockquote>
+</div></blockquote>
+<p>Request:</p>
+<div class="highlight-python"><div class="highlight"><pre>curl -X POST -H &quot;Cr-User=user&quot; -H &quot;Cr-Token=token&quot; \
+        https://rest-api-server/library/workflows \
+        -d name=wf_item1&amp;content=&quot;some content&quot;&amp;private=1
+</pre></div>
+</div>
+<p>Response:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="p">{</span>
+        <span class="s">&quot;status&quot;</span><span class="p">:</span> <span class="s">&quot;ok&quot;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</div></blockquote>
+</div>
+<div class="section" id="update-workflow">
+<h3>Update workflow<a class="headerlink" href="#update-workflow" title="Permalink to this headline">&#182;</a></h3>
+<p><strong>[PUT] /rest/library/workflows/</strong></p>
+<p>or</p>
+<p><strong>[PATCH] /rest/library/workflows/</strong></p>
+<blockquote>
+<div><p><strong>POST data</strong></p>
+<blockquote>
+<div><p>&lt;name&gt;</p>
+<blockquote>
+<div>Workflow name</div></blockquote>
+<p>&lt;content&gt;</p>
+<blockquote>
+<div>Workflow content</div></blockquote>
+</div></blockquote>
+<p>Request:</p>
+<div class="highlight-python"><div class="highlight"><pre>curl -X PUT -H &quot;Cr-User=user&quot; -H &quot;Cr-Token=token&quot; \
+        https://rest-api-server/library/workflows/ \
+        -d name=wf_item1&amp;content=&quot;some modified content&quot;&amp;
+</pre></div>
+</div>
+<p>Response:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="p">{</span>
+        <span class="s">&quot;status&quot;</span><span class="p">:</span> <span class="s">&quot;ok&quot;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</div></blockquote>
+</div>
+<div class="section" id="delete-workflow">
+<h3>Delete workflow<a class="headerlink" href="#delete-workflow" title="Permalink to this headline">&#182;</a></h3>
+<p><strong>[DELETE] /rest/library/workflows/&lt;name&gt;</strong></p>
+<blockquote>
+<div><p><strong>Params</strong></p>
+<blockquote>
+<div><p>&lt;name&gt;</p>
+<blockquote>
+<div>Workflow name</div></blockquote>
+</div></blockquote>
+<p>Request:</p>
+<div class="highlight-python"><div class="highlight"><pre>curl -X DELETE -H &quot;Cr-User=user&quot; -H &quot;Cr-Token=token&quot; \
+        https://rest-api-server/library/workflows/wf_item1
+</pre></div>
+</div>
+<p>Response:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="p">{</span>
+        <span class="s">&quot;status&quot;</span><span class="p">:</span> <span class="s">&quot;ok&quot;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</div></blockquote>
+</div>
+</div>
+<div class="section" id="inlines">
+<span id="id2"></span><h2>Inlines<a class="headerlink" href="#inlines" title="Permalink to this headline">&#182;</a></h2>
+<div class="section" id="list-inline">
+<h3>List inline<a class="headerlink" href="#list-inline" title="Permalink to this headline">&#182;</a></h3>
+<p><strong>[GET] /rest/library/inlines/</strong></p>
+<blockquote>
+<div><p>Request:</p>
+<div class="highlight-python"><div class="highlight"><pre>curl -H &quot;Cr-User=user&quot; -H &quot;Cr-Token=token&quot; \
+        https://rest-api-server/library/inlines
+</pre></div>
+</div>
+<p>Response:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="p">{</span>
+        <span class="s">&quot;inlines&quot;</span><span class="p">:</span>
+        <span class="p">[</span>
+                <span class="p">{</span>
+                        <span class="s">&quot;owner&quot;</span><span class="p">:</span> <span class="s">&quot;testuser&quot;</span><span class="p">,</span>
+                        <span class="s">&quot;created_at&quot;</span><span class="p">:</span> <span class="s">&quot;2014-06-30 22:31:14&quot;</span><span class="p">,</span>
+                        <span class="s">&quot;name&quot;</span><span class="p">:</span> <span class="s">&quot;tools/ifconfig&quot;</span>
+                <span class="p">},</span>
+                <span class="p">{</span>
+                        <span class="s">&quot;owner&quot;</span><span class="p">:</span> <span class="s">&quot;testuser&quot;</span><span class="p">,</span>
+                        <span class="s">&quot;created_at&quot;</span><span class="p">:</span> <span class="s">&quot;2014-06-30 22:31:14&quot;</span><span class="p">,</span>
+                        <span class="s">&quot;name&quot;</span><span class="p">:</span> <span class="s">&quot;tools/nginx_status&quot;</span>
+                <span class="p">}</span>
+        <span class="p">]</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</div></blockquote>
+</div>
+<div class="section" id="retrieve-inline-details">
+<h3>Retrieve inline details<a class="headerlink" href="#retrieve-inline-details" title="Permalink to this headline">&#182;</a></h3>
+<p><strong>[GET] /rest/library/inlines/&lt;item_name&gt;</strong></p>
+<blockquote>
+<div><p><strong>Params</strong></p>
+<blockquote>
+<div><p>&lt;item_name&gt;</p>
+<blockquote>
+<div>Inline to retrieve</div></blockquote>
+</div></blockquote>
+<p>Request:</p>
+<div class="highlight-python"><div class="highlight"><pre>curl -H &quot;Cr-User=user&quot; -H &quot;Cr-Token=token&quot; \
+        https://rest-api-server/library/workflows/wf_item1
+</pre></div>
+</div>
+<p>Response:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="p">{</span>
+        <span class="s">&quot;inline&quot;</span><span class="p">:</span> <span class="p">{</span>
+                <span class="s">&quot;content&quot;</span><span class="p">:</span> <span class="s">&quot;echo </span><span class="se">\&quot;</span><span class="s">IN TEST</span><span class="se">\&quot;\n</span><span class="s">export TEST=</span><span class="se">\&quot;</span><span class="s">1</span><span class="se">\&quot;</span><span class="s">&quot;</span><span class="p">,</span>
+                <span class="s">&quot;created_at&quot;</span><span class="p">:</span> <span class="s">&quot;2014-06-30 22:31:14&quot;</span><span class="p">,</span>
+                <span class="s">&quot;name&quot;</span><span class="p">:</span> <span class="s">&quot;test&quot;</span><span class="p">,</span>
+                <span class="s">&quot;owner&quot;</span><span class="p">:</span> <span class="s">&quot;cloudr&quot;</span>
+        <span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</div></blockquote>
+</div>
+<div class="section" id="create-new-inline">
+<h3>Create new inline<a class="headerlink" href="#create-new-inline" title="Permalink to this headline">&#182;</a></h3>
+<p><strong>[POST] /rest/library/inlines/</strong></p>
+<blockquote>
+<div><p><strong>POST data</strong></p>
+<blockquote>
+<div><p>&lt;name&gt;</p>
+<blockquote>
+<div>Creates new inline</div></blockquote>
+<p>&lt;content&gt;</p>
+<blockquote>
+<div>Inline content</div></blockquote>
+</div></blockquote>
+<p>Request:</p>
+<div class="highlight-python"><div class="highlight"><pre>curl -X POST -H &quot;Cr-User=user&quot; -H &quot;Cr-Token=token&quot; \
+        https://rest-api-server/library/inlines \
+        -d name=inl_item1&amp;content=&quot;some content&quot;&amp;
+</pre></div>
+</div>
+<p>Response:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="p">{</span>
+        <span class="s">&quot;status&quot;</span><span class="p">:</span> <span class="s">&quot;ok&quot;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</div></blockquote>
+</div>
+<div class="section" id="update-inline">
+<h3>Update inline<a class="headerlink" href="#update-inline" title="Permalink to this headline">&#182;</a></h3>
+<p><strong>[PUT] /rest/library/inlines/</strong></p>
+<p>or</p>
+<p><strong>[PATCH] /rest/library/inlines/</strong></p>
+<blockquote>
+<div><p><strong>POST data</strong></p>
+<blockquote>
+<div><p>&lt;name&gt;</p>
+<blockquote>
+<div>Inline name</div></blockquote>
+<p>&lt;content&gt;</p>
+<blockquote>
+<div>Inline content</div></blockquote>
+</div></blockquote>
+<p>Request:</p>
+<div class="highlight-python"><div class="highlight"><pre>curl -X PUT -H &quot;Cr-User=user&quot; -H &quot;Cr-Token=token&quot; \
+        https://rest-api-server/library/inlines/ \
+        -d name=inl_item1&amp;content=&quot;some modified content&quot;&amp;
+</pre></div>
+</div>
+<p>Response:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="p">{</span>
+        <span class="s">&quot;status&quot;</span><span class="p">:</span> <span class="s">&quot;ok&quot;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</div></blockquote>
+</div>
+<div class="section" id="delete-inline">
+<h3>Delete Inline<a class="headerlink" href="#delete-inline" title="Permalink to this headline">&#182;</a></h3>
+<p><strong>[DELETE] /rest/library/inlines/&lt;name&gt;</strong></p>
+<blockquote>
+<div><p><strong>Params</strong></p>
+<blockquote>
+<div><p>&lt;name&gt;</p>
+<blockquote>
+<div>Inline name</div></blockquote>
+</div></blockquote>
+<p>Request:</p>
+<div class="highlight-python"><div class="highlight"><pre>curl -X DELETE -H &quot;Cr-User=user&quot; -H &quot;Cr-Token=token&quot; \
+        https://rest-api-server/library/inlines/wf_item1
+</pre></div>
+</div>
+<p>Response:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="p">{</span>
+        <span class="s">&quot;status&quot;</span><span class="p">:</span> <span class="s">&quot;ok&quot;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</div></blockquote>
+</div>
+<div class="section" id="error-handling">
+<h3>Error handling<a class="headerlink" href="#error-handling" title="Permalink to this headline">&#182;</a></h3>
+<div class="admonition seealso">
+<p class="first admonition-title">See also</p>
+<p class="last"><a class="reference internal" href="errors.html#error-handling"><em>Error handling</em></a></p>
+</div>
+</div>
+</div>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">Library Controller</a><ul>
+<li><a class="reference internal" href="#workflows">Workflows</a><ul>
+<li><a class="reference internal" href="#list-workflows">List workflows</a></li>
+<li><a class="reference internal" href="#retrieve-workflow-details">Retrieve workflow details</a></li>
+<li><a class="reference internal" href="#create-new-workflow">Create new workflow</a></li>
+<li><a class="reference internal" href="#update-workflow">Update workflow</a></li>
+<li><a class="reference internal" href="#delete-workflow">Delete workflow</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#inlines">Inlines</a><ul>
+<li><a class="reference internal" href="#list-inline">List inline</a></li>
+<li><a class="reference internal" href="#retrieve-inline-details">Retrieve inline details</a></li>
+<li><a class="reference internal" href="#create-new-inline">Create new inline</a></li>
+<li><a class="reference internal" href="#update-inline">Update inline</a></li>
+<li><a class="reference internal" href="#delete-inline">Delete Inline</a></li>
+<li><a class="reference internal" href="#error-handling">Error handling</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="dispatch.html"
+                        title="previous chapter">Dispatcher Controller</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="manage.html"
+                        title="next chapter">Management Controller</a></p>
+  <h3>This Page</h3>
+  <ul class="this-page-menu">
+    <li><a href="_sources/library.txt"
+           rel="nofollow">Show Source</a></li>
+  </ul>
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="manage.html" title="Management Controller"
+             >next</a> |</li>
+        <li class="right" >
+          <a href="dispatch.html" title="Dispatcher Controller"
+             >previous</a> |</li>
+        <li><a href="index.html">CloudRunner REST API 1 documentation</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2014, CloudRunner.IO.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.2.2.
+    </div>
+  </body>
+</html>

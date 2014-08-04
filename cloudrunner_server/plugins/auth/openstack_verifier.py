@@ -8,15 +8,13 @@
 #  * Proprietary and confidential
 #  * This file is part of CloudRunner Server.
 #  *
-#  * CloudRunner Server can not be copied and/or distributed without the express
-#  * permission of CloudRunner.io
+#  * CloudRunner Server can not be copied and/or distributed
+#  * without the express permission of CloudRunner.io
 #  *******************************************************/
 
 import logging
-import M2Crypto as m
 from keystoneclient.v2_0 import client as k
 from novaclient.v1_1 import client as n
-from novaclient import exceptions as novaexceptions
 
 from cloudrunner_server.plugins.auth.base import NodeVerifier
 
@@ -73,8 +71,8 @@ class OpenStackVerifier(NodeVerifier):
                         lambda t: t.id == server.tenant_id, tenants)
                     if tenant:
                         name = tenant[0].name
-                        LOG.info("Tenant [%s] matched for server %s" %
-                                (name, node))
+                        LOG.info("Tenant [%s] matched for server %s" % (
+                            name, node))
                         return name
         except Exception, e:
             LOG.error(e)

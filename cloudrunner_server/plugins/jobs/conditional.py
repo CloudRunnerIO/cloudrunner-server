@@ -8,14 +8,10 @@
 #  * Proprietary and confidential
 #  * This file is part of CloudRunner Server.
 #  *
-#  * CloudRunner Server can not be copied and/or distributed without the express
-#  * permission of CloudRunner.io
+#  * CloudRunner Server can not be copied and/or distributed
+#  * without the express permission of CloudRunner.io
 #  *******************************************************/
 
-import json
-import os
-
-from cloudrunner import LIB_DIR
 from cloudrunner_server.plugins.args_provider import ArgsProvider
 from cloudrunner_server.plugins.jobs.base import JobInOutProcessorPluginBase
 from cloudrunner.core.exceptions import (InterruptStep, InterruptExecution)
@@ -27,13 +23,13 @@ class ConditionalPlugin(JobInOutProcessorPluginBase, ArgsProvider):
         pass
 
     def before(self, user_org, session_id, script, env, args, ctx, **kwargs):
-        if args.if_continue and not args.if_continue in env:
+        if args.if_continue and args.if_continue not in env:
             raise InterruptStep
 
         if args.if_not_continue and args.if_not_continue in env:
             raise InterruptStep
 
-        if args.if_not_stop and not args.if_not_stop in env:
+        if args.if_not_stop and args.if_not_stop not in env:
             raise InterruptExecution
 
         if args.if_stop and args.if_stop in env:

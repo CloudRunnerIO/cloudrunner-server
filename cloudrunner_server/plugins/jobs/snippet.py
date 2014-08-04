@@ -8,11 +8,10 @@
 #  * Proprietary and confidential
 #  * This file is part of CloudRunner Server.
 #  *
-#  * CloudRunner Server can not be copied and/or distributed without the express
-#  * permission of CloudRunner.io
+#  * CloudRunner Server can not be copied and/or distributed
+#  * without the express permission of CloudRunner.io
 #  *******************************************************/
 
-import json
 import logging
 import os
 
@@ -42,6 +41,7 @@ class SnippetSavePluginEnv(JobInOutProcessorPluginBase, ArgsProvider):
             file_name = ''.join([user_org[1], user_org[0],
                                  '~', args.save, '.snp'])
             snippet_file = os.path.join(self.file_dir, file_name)
+            open(snippet_file).write(script)
         return (script, env)
 
     def after(self, user_org, session_id, job_id, env, response, args, ctx,

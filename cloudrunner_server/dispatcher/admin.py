@@ -8,18 +8,15 @@
 #  * Proprietary and confidential
 #  * This file is part of CloudRunner Server.
 #  *
-#  * CloudRunner Server can not be copied and/or distributed without the express
-#  * permission of CloudRunner.io
+#  * CloudRunner Server can not be copied and/or distributed
+#  * without the express permission of CloudRunner.io
 #  *******************************************************/
 
 import logging
-import signal
-import sys
 from threading import Thread
 
 from cloudrunner.core.exceptions import ConnectionError
-from cloudrunner.core.message import (ADMIN_TOWER, ControlReq, StatusCodes)
-from cloudrunner.util.shell import Timer
+from cloudrunner.core.message import (ADMIN_TOWER, ControlReq)
 
 LOG = logging.getLogger('Control Tower')
 
@@ -55,8 +52,7 @@ class Admin(Thread):
                     rep = self.process(req)
                     if not rep:
                         continue
-                    LOG.info("ADMIN_TOWER reply: %s: %s" %
-                             (req.ident, rep[:2]))
+                    LOG.info("ADMIN_TOWER reply: %s" % (rep[:2],))
                     packets.append([req.ident, req.node] + rep)
                 while packets:
                     packet = packets.pop(0)
@@ -69,6 +65,7 @@ class Admin(Thread):
                 LOG.exception(ex)
 
         self.close()
+        LOG.info("Exiting Admin thread")
 
     def process(self, rq):
         LOG.info("Received admin req: %s %s" % (rq.control, rq.node))

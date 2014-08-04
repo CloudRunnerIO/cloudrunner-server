@@ -8,11 +8,9 @@
 #  * Proprietary and confidential
 #  * This file is part of CloudRunner Server.
 #  *
-#  * CloudRunner Server can not be copied and/or distributed without the express
-#  * permission of CloudRunner.io
+#  * CloudRunner Server can not be copied and/or distributed
+#  * without the express permission of CloudRunner.io
 #  *******************************************************/
-
-from os import path as p
 
 
 def install():
@@ -23,7 +21,6 @@ def install():
     print "Found master config in %s" % CONFIG_LOCATION
 
     config = Config(CONFIG_LOCATION)
-    _path = p.abspath(p.join(p.dirname(__file__), '..', 'transport'))
 
     config.update('Plugins', 'openstack',
                   'cloudrunner_server.plugins.auth.openstack_verifier')

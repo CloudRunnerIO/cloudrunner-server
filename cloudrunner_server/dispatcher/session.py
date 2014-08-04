@@ -8,8 +8,8 @@
 #  * Proprietary and confidential
 #  * This file is part of CloudRunner Server.
 #  *
-#  * CloudRunner Server can not be copied and/or distributed without the express
-#  * permission of CloudRunner.io
+#  * CloudRunner Server can not be copied and/or distributed
+#  * without the express permission of CloudRunner.io
 #  *******************************************************/
 
 import json
@@ -17,7 +17,6 @@ import logging
 from sys import maxint as MAX_INT
 from threading import (Thread, Event)
 import time
-import zmq
 import uuid
 
 from cloudrunner.core import parser
@@ -26,8 +25,9 @@ from cloudrunner.core.exceptions import (ConnectionError,
                                          InterruptExecution)
 from cloudrunner.core.message import JobInput
 from cloudrunner.core.message import JobRep
-from cloudrunner.core.message import PipeMessage
-from cloudrunner.core.message import FinishedMessage
+from cloudrunner.core.message import (InitialMessage,
+                                      PipeMessage,
+                                      FinishedMessage)
 from cloudrunner.core.message import StatusCodes
 from cloudrunner.util.string import stringify
 from cloudrunner.util.string import stringify1
@@ -56,17 +56,23 @@ class JobSession(Thread):
         self.timeout = kwargs.get('timeout')
         self.manager = manager
         self.plugin_context = plugin_ctx
+        self.seq = 1
 
     def _reply(self, message):
+        message.seq_no = self.seq
+        self.seq += 1
+        self.job_done.send(json.dumps(message.pack()))
+        """
         for sub in self.manager.subscriptions.get(message.session_id, []):
             try:
                 self.job_done.send(*message.pack(sub.proxy, sub.peer))
-            except zmq.ZMQError as e:
+            except zmq.ZMQError as zerr:
                 if self.manager.context.closed or zerr.errno == zmq.ETERM \
                         or zerr.errno == zmq.ENOTSOCK:
                     break
             except ConnectionError:
                 break
+        """
 
     def parse_script(self, env):
         self.sections = []
@@ -105,7 +111,8 @@ class JobSession(Thread):
     def run(self):
         env = self.kwargs.pop('env', {})
         self.parse_script(env)
-        self.job_done = self.manager.backend.publish_queue('finished_jobs')
+
+        self.job_done = self.manager.backend.publish_queue('logger')
 
         ret = []
         timeout = None
@@ -133,8 +140,6 @@ class JobSession(Thread):
             LOG.info("Persistent Session started(%s)" % self.session_id)
             timeout = MAX_INT
 
-        tags = json.dumps(self.kwargs.get("tags", []))
-
         user_org = (self.user, self.remote_user_map.org)
 
         # Clean up
@@ -144,7 +149,6 @@ class JobSession(Thread):
         self.kwargs.pop('tgt_args', None)
 
         user_libs = []
-
         if 'includes' in self.kwargs:
             try:
                 # process runtime includes
@@ -153,12 +157,17 @@ class JobSession(Thread):
             except Exception, ex:
                 LOG.exception(ex)
 
-        start_time = time.time()
+        # start_time = time.time()
 
-        for section in self.sections:
+        for step_id, section in enumerate(self.sections):
             libs = []
             if user_libs:
                 libs.extend(user_libs)
+
+            message = InitialMessage(session_id=self.session_id,
+                                     org=user_org[1], step_id=step_id)
+            self._reply(message)
+            msg_ret = []
 
             try:
                 for plugin in self.plugin_context.job_plugins:
@@ -205,7 +214,6 @@ class JobSession(Thread):
                         pass
 
                 section.update_targets(env)
-                msg_ret = []
                 #
                 # Exec section
                 #
@@ -220,13 +228,15 @@ class JobSession(Thread):
                         # stderr
 
                         # reply-fwd: session_id, PIPEOUT, session_id, time,
-                        #   task_name, user, targets, tags, job_id, run_as,
+                        #   task_name, user, job_id, run_as,
                         #   node_id, stdout, stderr
-                        message = PipeMessage(self.session_id, self.task_name,
-                                              self.user,
-                                              self.remote_user_map.org,
-                                              section.targets, tags,
-                                              *_reply[1:])
+                        names = ("job_id", "run_as", "node",
+                                 "stdout", "stderr")
+                        message = PipeMessage(session_id=self.session_id,
+                                              step_id=step_id,
+                                              user=self.user,
+                                              org=self.remote_user_map.org,
+                                              **dict(zip(names, _reply[1:])))
                         self._reply(message)
                     else:
                         job_id, msg_ret = _reply
@@ -275,28 +285,26 @@ class JobSession(Thread):
             except Exception, ex:
                 LOG.exception(ex)
                 continue
-
-        response = []
-        for run in ret:
-            nodes = run['response']
-            exec_result = [dict(node=node['node'], run_as=node['remote_user'],
-                                ret_code=node['ret_code']) for node in nodes]
-            response.append(dict(targets=run['targets'],
-                                 jobid=run['jobid'],
-                                 args=run['args'],
-                                 nodes=exec_result))
-
-        meta = [self.session_id, str(int(time.time())),
-                self.task_name, self.user, self.remote_user_map.org, tags]
-        message = FinishedMessage(self.session_id, self.task_name, self.user,
-                                  self.remote_user_map.org, tags,
-                                  self.payload, json.dumps(response))
-        self._reply(message)
+            finally:
+                exec_result = [dict(node=node['node'],
+                                    run_as=node['remote_user'],
+                                    ret_code=node['ret_code'])
+                               for node in msg_ret]
+                # response.append(dict(targets=run['targets'],
+                #                     jobid=run['jobid'],
+                #                     args=run['args'],
+                #                     nodes=exec_result))
+                message = FinishedMessage(session_id=self.session_id,
+                                          user=self.user,
+                                          step_id=step_id,
+                                          org=self.remote_user_map.org,
+                                          result=exec_result)
+                self._reply(message)
 
         self.session_event.set()
 
         # Wait for all other threads to finish consuming session data
-        time.sleep(1)
+        time.sleep(.5)
         self.job_done.close()
 
     def exec_section(self, targets, request, timeout=None):
@@ -333,7 +341,6 @@ class JobSession(Thread):
 
         self.manager.publisher.send(
             remote_user_map.org, job_id, str(targets))
-        yield ('PIPE', job_id, str(targets), 'Job Started')
 
         try:
             while not self.session_event.is_set() and not job_event.is_set():
@@ -388,9 +395,9 @@ class JobSession(Thread):
                     continue
 
                 # Assert we have rep from the same organization
-                if self.manager.config.security.use_org and \
-                    job_rep.org != remote_user_map.org:
-                        continue
+                if (self.manager.config.security.use_org and
+                        job_rep.org != remote_user_map.org):
+                    continue
 
                 state = node_map.setdefault(
                     job_rep.peer, dict(status=StatusCodes.STARTED,
@@ -416,11 +423,9 @@ class JobSession(Thread):
 
                 if not job_rep.data:
                     continue
-
                 state['data'].update(job_rep.data)
                 state['status'] = job_rep.control
                 if job_rep.control == StatusCodes.FINISHED:
-                    #job_reply.send(job_rep.ident, job_rep.peer, job_id, 'ACK')
                     state['data']['stdout'] = state['stdout'] + \
                         state['data']['stdout']
                     state['data']['stderr'] = job_rep.data.pop('stderr')

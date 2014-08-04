@@ -8,8 +8,8 @@
 #  * Proprietary and confidential
 #  * This file is part of CloudRunner Server.
 #  *
-#  * CloudRunner Server can not be copied and/or distributed without the express
-#  * permission of CloudRunner.io
+#  * CloudRunner Server can not be copied and/or distributed
+#  * without the express permission of CloudRunner.io
 #  *******************************************************/
 
 import abc
@@ -23,18 +23,8 @@ class ArgsProvider(object):
     def append_args(self, arg_parser):
         pass
 
-
-class CliArgsProvider(object):
-
-    __metaclass__ = abc.ABCMeta
-
-    @abc.abstractmethod
-    def append_cli_args(self, arg_parser):
-        pass
-
-    @abc.abstractmethod
-    def call(self, user_org, data, ctx, args):
-        pass
+BOOL = {'1': True, 'true': True, 'True': True,
+        '0': False, 'false': False, 'False': False}
 
 
 class ManagedPlugin(object):

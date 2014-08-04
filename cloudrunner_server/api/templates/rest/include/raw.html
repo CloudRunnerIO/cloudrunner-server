@@ -1,0 +1,16 @@
+${print_(context.get("output"))}
+<%def name="print_(coll)" filter="trim">
+% for item in coll:
+% if item.get('node'):
+${item.get('node')}
+% endif
+% if item.get('stdout'):
+	${"\n\t".join(item.get('stdout'))}
+
+% endif
+% if item.get('stderr'):
+	${"\n\t".join(item.get('stderr'))}
+
+% endif
+% endfor
+</%def>

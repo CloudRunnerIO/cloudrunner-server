@@ -8,39 +8,61 @@
 #  * Proprietary and confidential
 #  * This file is part of CloudRunner Server.
 #  *
-#  * CloudRunner Server can not be copied and/or distributed without the express
-#  * permission of CloudRunner.io
+#  * CloudRunner Server can not be copied and/or distributed
+#  * without the express permission of CloudRunner.io
 #  *******************************************************/
 
-import datetime
+from datetime import datetime, timedelta
 import logging
-import random
 import re
-import string
-import sqlite3
-import uuid
-from cloudrunner_server.db import get_db
-from cloudrunner_server.db.columns import Column
+from sqlalchemy import create_engine, event
+from sqlalchemy.orm import scoped_session, sessionmaker
 
 from cloudrunner.core.message import DEFAULT_ORG
 from cloudrunner.util.crypto import hash_token
 from cloudrunner_server.plugins.auth.base import AuthPluginBase
+from cloudrunner_server.util.db import checkout_listener
+
+from cloudrunner_server.api.model import *  # noqa
 
 TOKEN_LEN = 60
 DEFAULT_EXPIRE = 1440  # 24h
 
-LOG = logging.getLogger("UserMap")
+LOG = logging.getLogger()
 
 
 class UserMap(AuthPluginBase):
 
-    def __init__(self, config):
+    def __init__(self, config, db_context=None):
         self.config = config
-        assert self.db
+        if db_context:
+            self.db = AuthDb(db_context, self.config.security.use_org)
+
+    def set_context(self, ctx):
+        self.db = AuthDb(ctx, self.config.security.use_org)
+
+    def set_context_from_config(self, recreate=False, autocommit=True,
+                                **configuration):
+        engine = create_engine(self.config.users.db, **configuration)
+        if 'mysql+pymysql://' in self.config.users.db:
+            event.listen(engine, 'checkout', checkout_listener)
+        session = scoped_session(sessionmaker(bind=engine,
+                                              autocommit=autocommit))
+        metadata.bind = session.bind
+        if recreate:
+            # For tests: re-create tables
+            metadata.create_all(engine)
+        self.set_context(session)
 
     @property
     def db(self):
-        return AuthDb(self.config.users.db, self.config.security.use_org)
+        if not getattr(self, '_db'):
+            raise Exception('DB context not provided')
+        return self._db
+
+    @db.setter
+    def db(self, db):
+        self._db = db
 
     def authenticate(self, user, password):
         """
@@ -48,33 +70,33 @@ class UserMap(AuthPluginBase):
         """
         pwd_hash = hash_token(password)
         try:
-            auth = self.db.authenticate(user, pwd_hash)
-            if auth:
-                return (True, self.db.load(*auth))
-            return (False, None)
+            (user_id, access_map) = self.db.authenticate(user, pwd_hash)
+            return (user_id, access_map)
         except Exception, ex:
             LOG.exception(ex)
-            return (False, None)
+            return (None, None)
 
     def validate(self, user, token):
         """
         Authenticate using issued auth token
         """
         try:
-            auth = self.db.validate(user, token)
-            if auth:
-                return (True, self.db.load(*auth))
-            return (False, None)
+            (user_id, access_map) = self.db.validate(user, token)
+            LOG.info("Validated %s:%s" % (user_id, access_map))
+            return (user_id, access_map)
         except Exception, ex:
             LOG.exception(ex)
-            return (False, None)
+            return (None, None)
 
     def create_token(self, user, password, **kwargs):
         return self.db.get_token(user,
                                  expiry=kwargs.get('expiry', DEFAULT_EXPIRE))
 
-    def list_users(self):
-        return self.db.all()
+    def delete_token(self, user, token, **kwargs):
+        return self.db.invalidate_token(user, token)
+
+    def list_users(self, org):
+        return self.db.all(org)
 
     def list_orgs(self):
         return self.db.orgs()
@@ -91,10 +113,17 @@ class UserMap(AuthPluginBase):
     def deactivate_org(self, orgname):
         return self.db.toggle_org(orgname, 0)
 
-    def create_user(self, username, password, org_name=None):
+    def create_user(self, username, password, email, org_name=None):
         if self.config.security.use_org and not org_name:
             return False, "Organization name is required"
-        return self.db.create(username, password, org_name)
+        return self.db.create(username, password, email, org_name)
+
+    def update_user(self, username, password=None, email=None):
+        if self.config.security.use_org and not org_name:
+            return False, "Organization name is required"
+        return self.db.update(username,
+                              password=password,
+                              email=email)
 
     def remove_org(self, name):
         return self.db.remove_org(name)
@@ -110,306 +139,263 @@ class UserMap(AuthPluginBase):
 
 
 class AuthDb(object):
-    SCHEMA = {
-        "organizations": {
-            "id": Column('id', primary_key=True, null=False),
-            "name": Column('string', length=80),
-            "org_uid": Column('text'),
-            "active": Column('boolean', default=1),
-        },
-        "users": {
-            "id": Column('id', primary_key=True, null=False),
-            "username": Column('string', length=80),
-            "token": Column('text'),
-            "org_uid": Column('text'),
-            "role": Column('text'),
-        },
-        "access_map": {
-            "user_id": Column('integer'),
-            "servers": Column('text'),
-            "role": Column('string', length=120),
-        },
-        "user_tokens": {
-            "user_id": Column('integer'),
-            "token": Column('text'),
-            "expiry": Column('timestamp'),
-        }
 
-    }
-
-    def __init__(self, db_path, use_org):
-        try:
-            self.use_org = use_org
-            self.dbm = get_db(db_path)
-        except:
-            LOG.error("Cannot connect to auth DB: %s" % db_path)
-            raise
-        self.dbm.define_schema(self.SCHEMA)
-
-        def on_create(table_name):
-            if not self.use_org and table_name == 'organizations':
-                # Create initial Default record for single-tenant
-                self.create_org('DEFAULT')
-        self.dbm.create_tables(create_callback=on_create)
+    def __init__(self, db, use_org):
+        self.use_org = use_org
+        self.db = db
 
     def authenticate(self, username, password):
-        res = self.dbm.db.select(
-            ['users', 'organizations org'],
-            what='users.id',
-            where='users.org_uid = org.org_uid '
-                  'AND username = $username '
-                  'AND token = $token '
-                  'AND org.active = 1',
-            vars={'username': username, 'token': password},
-        )
-
-        user_data = list(res)
-        if user_data:
-            return user_data[0].id, username
+        try:
+            user = self.db.query(User).join(
+                Org).filter(
+                    User.username == username, User.password == password,
+                    Org.active == True).one()  # noqa
+            if user:
+                access_map = UserRules(username)
+                access_map.org = user.org.name or DEFAULT_ORG
+                for role in user.roles:
+                    access_map.add_role(role.servers, role.as_user)
+                return user.id, access_map
+        except Exception, ex:
+            LOG.exception(ex)
+        return None, None
 
         LOG.info("Auth failed for user %s" % username)
 
     def validate(self, username, token):
-        user_token = self.dbm.db.select(
-            ['user_tokens', 'users'],
-            where="users.id = user_tokens.user_id"
-                  " AND username=$username"
-                  " AND user_tokens.token=$token"
-                  " AND expiry > date('now')",
-            vars={
-                "username": username,
-                "token": token
-            },
-            what="user_id"
-        )
+        try:
+            user = self.db.query(User).join(
+                Org, Token).filter(
+                    User.username == username, Token.value == token,
+                    Org.active == True,  # noqa
+                    Token.expires_at > datetime.now()).first()
 
-        user_token = list(user_token)
+            if user:
+                access_map = UserRules(username)
+                access_map.org = user.org.name or DEFAULT_ORG
+                for role in user.roles:
+                    access_map.add_role(role.servers, role.as_user)
 
-        if user_token:
-            return user_token[0].user_id, username
-        LOG.info("Token validation failed for user %s" % username)
+                return user.id, access_map
+        except Exception, ex:
+            LOG.exception(ex)
+        return None, None
 
-    def load(self, user_id, username, *args):
-        user_data = self.dbm.access_map.select(
-            what='servers, role',
-            where='user_id = $user_id',
-            vars=dict(user_id=user_id)
-        )
-        access_map = UserRules(username)
-        for data in user_data:
-            access_map.add_role(data.servers, data.role)
+    def all(self, org):
+        users = self.db.query(User).join(
+            Org).all()
 
-        org_data = self.dbm.db.select(
-            ['organizations org', 'users'],
-            where='org.org_uid = users.org_uid'
-                  ' AND org.active = 1'
-                  ' AND users.id=$user_id',
-            vars=dict(user_id=user_id),
-            what='org.name'
-        )
-        org_data = list(org_data)
-        if org_data and self.use_org:
-            access_map.org = org_data[0].name
-        else:
-            access_map.org = DEFAULT_ORG
-        return access_map
-
-    def all(self):
-        users = self.dbm.db.select(
-            ['users', 'organizations org'],
-            where='users.org_uid=org.org_uid',
-            what='username, org.name as org_name'
-        )
-        return [(u.username, u.org_name) for u in users]
+        return [(u.username, u.email, u.org.name) for u in users]
 
     def orgs(self):
-
-        org_data = self.dbm.organizations.select(
-            what="name, org_uid, active",
-        )
-        orgs = [(org.name, org.org_uid, 'Active' if org.active else 'Inactive')
-                for org in org_data]
+        orgs = [(org.name, org.uid, org.active)
+                for org in self.db.query(Org).all()]
         return orgs
 
     def create_org(self, org_name):
-
-        if list(self.dbm.organizations.select(where="name=$name",
-                                              vars={"name": org_name})):
+        exists = self.db.query(self.db.query(Org).filter(
+            Org.name == org_name).exists()).scalar()
+        if exists:
             return False, "Organization already exists"
 
         try:
-            uid = uuid.uuid4().hex
-            self.dbm.organizations.insert(name=org_name, org_uid=uid)
+            org = Org(name=org_name)
+            self.db.add(org)
+            self.db.commit()
+            return True, org.uid
         except Exception as exc:
             return False, "Cannot create organization, error: %r" % exc
-        return True, uid
 
-    def create(self, username, password, org_name=None):
-        users = self.dbm.users.select(where="username = $username",
-                                      vars={"username": username})
-        if list(users):
+    def create(self, username, password, email, org_name=None):
+        exists = self.db.query(self.db.query(User).filter(
+            User.username == username).exists()).scalar()
+        if exists:
             return False, "User already exists"
-
         try:
             if org_name:
-                org_id = self.dbm.organizations.select(
-                    what='org_uid',
-                    where='name=$org_name',
-                    vars={"org_name": org_name})
-                org_id = list(org_id)
-                if not org_id:
+                org = self.db.query(Org).filter(Org.name == org_name).first()
+                if not org:
                     return False, "Organization %s doesn't exist" % org_name
             else:
-                org_id = self.dbm.organizations.select(
-                    what='org_uid', limit=1)
-                org_id = list(org_id)
-                if not org_id and self.use_org:
+                org = self.db.query(Org).first()
+                if not org:
                     return False, "Default Organization is not set"
 
-            token = hash_token(password)
-            if org_id:
-                org_uid = org_id[0].org_uid
-            else:
-                org_uid = DEFAULT_ORG
-            self.dbm.users.insert(username=username, token=token,
-                                  org_uid=org_uid)
+            hash_pwd = hash_token(password)
+            user = User(username=username,
+                        password=hash_pwd,
+                        email=email,
+                        org=org)
+            self.db.add(user)
+            self.db.commit()
         except Exception, ex:
-            return False, "Cannot create user" + str(ex)
+            return False, "Cannot create user: " + str(ex)
         return True, "Added"
 
+    def update(self, username, **kwargs):
+        email = kwargs.get('email')
+        password = kwargs.get('password')
+        if not email and not password:
+            return False, "To update user, send either email or password"
+
+        try:
+            user = self.db.query(User).filter(
+                User.username == username).first()
+            if not user:
+                return False, "User doesn't exist"
+
+            user.email = email
+            user.password = hash_token(password)
+            self.db.add(user)
+            self.db.commit()
+
+        except Exception, exc:
+            LOG.error(exc)
+            return False, "Cannot update user"
+        return True, "Updated"
+
     def remove_org(self, name):
-        res = self.dbm.organizations.delete(where="name=$name",
-                                            vars=dict(name=name))
-        if res:
+        org = self.db.query(Org).filter(
+            Org.name == name).first()
+        if not org:
+            return False, "Organization doesn't exist"
+        try:
+            self.db.delete(org)
+            self.db.commit()
             return True, "Organization deleted"
-        else:
-            return False, "Organization not found"
+        except Exception as exc:
+            LOG.error(exc)
+            self.db.rollback()
+            return False, "Cannot delete organization"
 
     def toggle_org(self, name, new_status):
-        res = self.dbm.organizations.update(
-            active=new_status,
-            where="name=$name",
-            vars={"name": name}
-        )
+        org = self.db.query(Org).filter(
+            Org.name == name).first()
+        if not org:
+            return False, "Organization doesn't exist"
 
-        if res:
-            return True, "Organization %s" % ('activated' if new_status else
-                                              'deactivated')
-        else:
-            return False, "Organization not found"
+        try:
+            org.active = bool(new_status)
+            self.db.add(org)
+            self.db.commit()
+        except Exception as exc:
+            LOG.error(exc)
+            self.db.rollback()
+            return False, "Cannot toggle organization"
+        return True, "Organization %s" % ('activated' if new_status else
+                                          'deactivated')
 
     def remove(self, username):
-        res = self.dbm.users.delete(where="username=$username",
-                                    vars={"username": username})
-
-        if res:
+        try:
+            deleted = self.db.query(User).filter(
+                User.username == username).delete()
+            if not deleted:
+                return False, "User doesn't exist"
             return True, "User deleted"
-        else:
-            return False, "User not found"
-
-    def get_user_id(self, username):
-        user_data = self.dbm.users.select(
-            what="id",
-            where="username = $username",
-            vars=dict(username=username)
-        )
-
-        user_data = list(user_data)
-        if user_data:
-            return user_data[0].id
+        except Exception, exc:
+            LOG.error(exc)
+            self.db.rollback()
+            return False, "Error deleting user"
+        return False, "User not found"
 
     def user_roles(self, username):
-        user_data = self.dbm.db.select(
-            ['access_map as am', 'users'],
-            what="am.servers, am.role",
-            where="users.id = am.user_id "
-                  "AND users.username = $username",
-            vars={"username": username},
-        )
-        roles = {}
-        for data in user_data:
-            roles[data.servers] = data.role
-
-        return roles
+        roles = self.db.query(Role).join(User).filter(
+            User.username == username).all()
+        return dict([role.servers, role.as_user] for role in roles)
 
     def add_role(self, username, node, role):
-        user_id = self.get_user_id(username)
-        if user_id:
-            # Test role
-            if node != "*":
-                try:
-                    re.compile(node)
-                except re.error:
-                    return False, "%s is not a valid role/regex"
+        user = self.db.query(User).filter(User.username == username).first()
+        if not user:
+            return False, "User doesn't exist"
+        # Test role
+        if node != "*":
+            try:
+                re.compile(node)
+            except re.error:
+                return False, "%s is not a valid role/regex"
+        try:
+            exists = self.db.query(self.db.query(Role).join(User).filter(
+                User.username == username,
+                Role.servers == node,
+                Role.as_user == role).exists()).scalar()
 
-            exists = self.dbm.access_map.select(
-                where="user_id=$user_id AND servers=$servers",
-                vars=dict(user_id=user_id, servers=node)
-            )
-            if list(exists):
+            if exists:
                 return False, "Role already exists"
 
-            self.dbm.access_map.insert(
-                user_id=user_id, servers=node, role=role)
+            role = Role(name="", user_id=user.id, servers=node, as_user=role)
+            self.db.add(role)
+            self.db.commit()
             return True, "Role added"
-        else:
-            return False, "User not found"
+        except Exception, exc:
+            LOG.error(exc)
+            self.db.rollback()
+            return False, "Error adding role"
+        return False, "User not found"
 
     def remove_role(self, username, node):
-        user_id = self.get_user_id(username)
-        if user_id:
-            deleted = self.dbm.access_map.delete(
-                where="user_id=$user_id AND servers=$servers",
-                vars=dict(user_id=user_id, servers=node)
-            )
-            if deleted:
-                return True, "Role deleted"
-            else:
+        try:
+            user = self.db.query(User).filter(
+                User.username == username).first()
+            if not user:
+                return False, "User doesn't exist"
+            roles = self.db.query(Role).join(User).filter(
+                User.username == username, Role.servers == node).all()
+            if not roles:
                 return False, "Role not found"
-        else:
-            return False, "User not found"
+            for role in roles:
+                self.db.delete(role)
+            self.db.commit()
+        except Exception, exc:
+            LOG.error(exc)
+            self.db.rollback()
+            return False, "Not deleted"
+        return True, "Role deleted"
 
-    def get_token(self, user, expiry):
+    def get_token(self, username, expiry):
         """
         Create auth token, valid for the specified (expiry) minutes.
         If expiry == -1, then the token will not expire
         """
-        token = ''.join(random.choice(string.printable[:-6])
-                        for x in range(TOKEN_LEN))
+        try:
+            user = self.db.query(User).join(Org).filter(
+                User.username == username).first()
+            if user:
+                try:
+                    expiry = int(expiry)
+                    if expiry == -1:
+                        # Max
+                        expiry_date = datetime.max
+                    else:
+                        exp = int(expiry)
+                        expiry_date = datetime.now() + timedelta(minutes=exp)
+                except Exception, ex:
+                    LOG.warn(ex)
+                    expiry_date = datetime.now() + \
+                        timedelta(minutes=DEFAULT_EXPIRE)
 
-        user_id = self.get_user_id(user)
-        org_data = self.dbm.db.select(
-            ['organizations org', 'users'],
-            where='org.org_uid = users.org_uid'
-                  ' AND org.active = 1'
-                  ' AND users.id=$user_id',
-            vars=dict(user_id=user_id),
-            what='org.name'
-        )
-        org_data = list(org_data)
-        if org_data and self.use_org:
-            org = org_data[0].name
+                _token = random_token(None)
+                LOG.warn("token expires at: %s" % expiry_date)
+                token = Token(expires_at=expiry_date, user_id=user.id,
+                              value=_token)
+                self.db.add(token)
+                self.db.commit()
+
+                LOG.info("Creating api token for user %s, "
+                         "expires at %s" % (username, expiry_date))
+                return (token.value, token.expires_at)
+        except Exception, exc:
+            LOG.error(exc)
+            self.db.rollback()
+        return (None, None)
+
+    def invalidate_token(self, user, token):
+        token = self.db.query(Token).join(User).filter(
+            Token.value == token, User.username == user).first()
+        if token:
+            self.db.delete(token)
+            return (True, "Token invalidated")
         else:
-            org = None
-
-        if user_id:
-            if expiry == -1:
-                # Max
-                expiry_date = datetime.datetime.max
-            else:
-                expiry_date = datetime.datetime.now() + \
-                    datetime.timedelta(minutes=expiry)
-            # Purge old tokens
-            self.dbm.user_tokens.delete(where="expiry < date('now')")
-            self.dbm.user_tokens.insert(
-                user_id=user_id,
-                token=token,
-                expiry=expiry_date
-            )
-            LOG.info("Creating api token for user %s, "
-                     "expires at %s" % (user, expiry_date))
-            return user, token, org
-        return (None, None, None)
+            return (False, "Token not found")
 
 
 class UserRules(object):
@@ -432,8 +418,8 @@ class UserRules(object):
             try:
                 self.rules.append((re.compile(node, re.I), role))
             except re.error:
-                LOG.error("Rule %s for user %s is invalid regex" % (node,
-                                                                    self.owner))
+                LOG.error("Rule %s for user %s is invalid regex" % (
+                    node, self.owner))
 
     def select(self, node):
         for rule, role in self.rules:

@@ -8,8 +8,8 @@
 #  * Proprietary and confidential
 #  * This file is part of CloudRunner Server.
 #  *
-#  * CloudRunner Server can not be copied and/or distributed without the express
-#  * permission of CloudRunner.io
+#  * CloudRunner Server can not be copied and/or distributed
+#  * without the express permission of CloudRunner.io
 #  *******************************************************/
 
 import fcntl
@@ -18,7 +18,6 @@ import logging
 import M2Crypto as m
 import os
 from os import path as p
-import re
 import signal
 from socket import gethostname
 from threading import Event
@@ -30,12 +29,14 @@ from zmq.eventloop import ioloop
 from cloudrunner.util.tlszmq import TLSZmqServerSocket
 from cloudrunner.core.message import (ClientReq, ClientRep, RerouteReq, FwdReq,
                                       HEARTBEAT, ADMIN_TOWER, TOKEN_SEPARATOR,
-                                      HeartBeatReq, DEFAULT_ORG,  StatusCodes,
+                                      HeartBeatReq, DEFAULT_ORG, StatusCodes,
                                       is_valid_host)
 from cloudrunner.plugins.transport.zmq_transport import (SockWrapper,
                                                          PollerWrapper)
 from cloudrunner.util.aes_crypto import Crypter
 from cloudrunner.util.shell import Timer
+
+from cloudrunner_server.plugins.auth.base import NodeVerifier
 from cloudrunner_server.plugins.transport.base import (ServerTransportBackend,
                                                        Tenant)
 from cloudrunner_server.master.functions import CertController
@@ -100,6 +101,9 @@ class ZmqTransport(ServerTransportBackend):
 
         ssl_proxy_uri = 'inproc://ssl-proxy-uri'
 
+        self.local_api_uri = config.local_api_uri or \
+            "ipc://%(sock_dir)s/local-api.sock" % config
+
         self.buses.ssl_proxy = Pipe(
             'tcp://' + (config.listen_uri or '0.0.0.0:5559'),
             ssl_proxy_uri
@@ -124,16 +128,26 @@ class ZmqTransport(ServerTransportBackend):
             "inproc://scheduler-pull"
         )
 
+        self.buses.logger = Pipe(
+            "inproc://logger-queue",
+            "inproc://logger-queue-workers",
+        )
+
+        self.buses.logger_fwd = Pipe(
+            config.logger_uri or (
+                "ipc://%(sock_dir)s/logger.sock" % config),
+            None
+        )
+
+        self.buses.publisher = Pipe(
+            "inproc://pub-proxy.sock",
+            self.master_pub_uri
+        )
+
         proxy_pub_port = config.proxy_pub_port or 5553
 
         self.endpoints = {
-            'logger':
-            "inproc://logger-queue",
-            'logger_fanout':
-            config.logger_uri or (
-                "ipc://%(sock_dir)s/logger.sock" % config),
             'node_reply': 'tcp://%s' % config.master_repl,
-            'publisher': "inproc://pub-proxy.sock",
             "replicator": "tcp://0.0.0.0:%s" % proxy_pub_port,
             "router_fwd": "ipc://%(sock_dir)s/router-fwd.sock" % config,
             "pub_fwd": "ipc://%(sock_dir)s/pub-fwd.sock" % config
@@ -189,7 +203,7 @@ class ZmqTransport(ServerTransportBackend):
         signal.signal(signal.SIGIO, callback)
 
     def _nodes_changed(self, wait=True, *args):
-        fd = None
+        fd = None  # noqa
 
         def read():
             crl_file = p.join(
@@ -300,11 +314,12 @@ class ZmqTransport(ServerTransportBackend):
                         'nodes',
                         '%s.%s.crt' % (cert_id, cn))
                     open(node_cert_name, 'w').write(str(ser_no))
-                    return True, (open(crt_file_name).read() +
-                                  TOKEN_SEPARATOR +
-                                  ca_cert +
-                                  TOKEN_SEPARATOR +
-                                  open(self.config.security.server_cert).read())
+                    return True, (
+                        open(crt_file_name).read() +
+                        TOKEN_SEPARATOR +
+                        ca_cert +
+                        TOKEN_SEPARATOR +
+                        open(self.config.security.server_cert).read())
                 except:
                     raise
             else:
@@ -335,7 +350,7 @@ class ZmqTransport(ServerTransportBackend):
         # Check if node is already requested or signed
 
         # if node in self.ccont.list_all_approved():
-            # cert already issued
+        # cert already issued
         #    return self._build_cert_response(node, request, crt_file_name)
         # Saving CSR
         csr = None
@@ -395,11 +410,24 @@ class ZmqTransport(ServerTransportBackend):
             # Routes requests from master listener(pubid:5559) to workers
             router = self.context.socket(zmq.ROUTER)
             router.bind(self.buses.requests.publish)
+            if self.local_api_uri:
+                router.bind(self.local_api_uri)
+                LOGR.info("LOCAL endpoint at: %s" % self.local_api_uri)
             worker_proxy = self.context.socket(zmq.DEALER)
             worker_proxy.bind(self.buses.requests.consume)
+            poller = zmq.Poller()
+            poller.register(router, zmq.POLLIN)
+            poller.register(worker_proxy, zmq.POLLIN)
+
             while not self.running.is_set():
                 try:
-                    zmq.device(zmq.QUEUE, router, worker_proxy)
+                    socks = dict(poller.poll(500))
+                    if router in socks:
+                        frames = router.recv_multipart()
+                        worker_proxy.send_multipart(frames)
+                    if worker_proxy in socks:
+                        frames = worker_proxy.recv_multipart()
+                        router.send_multipart(frames)
                 except zmq.ZMQError, err:
                     if self.context.closed or \
                             getattr(err, 'errno', 0) == zmq.ETERM or \
@@ -414,40 +442,25 @@ class ZmqTransport(ServerTransportBackend):
             worker_proxy.close()
             LOGR.info("Exited requests queue")
 
-        def finished_jobs_queue():
-            # Routes requests from job_done queue to user (on pubip:5559)
-            job_done = self.context.socket(zmq.DEALER)
-            job_done.bind(self.buses.finished_jobs.consume)
-            worker_out_proxy = self.context.socket(zmq.DEALER)
-            worker_out_proxy.bind(self.buses.finished_jobs.publish)
-
-            while not self.running.is_set():
-                try:
-                    zmq.device(zmq.QUEUE, worker_out_proxy, job_done)
-                except zmq.ZMQError, err:
-                    if self.context.closed or \
-                            getattr(err, 'errno', 0) == zmq.ETERM or \
-                            getattr(err, 'errno', 0) == zmq.ENOTSOCK:
-                        break
-                    else:
-                        raise err
-                except KeyboardInterrupt:
-                    break
-            job_done.close()
-            worker_out_proxy.close()
-            LOGR.info("Exited requests queue")
-
         def logger_queue():
-            # Listens to logger queue and transmits to ...
-            log_xsub = self.context.socket(zmq.XSUB)
-            log_xsub.bind(self.endpoints['logger'])
-            log_xpub = self.context.socket(zmq.XPUB)
-            log_xpub.bind(self.endpoints['logger_fanout'])
+            # Logger proxy
+            log_proxy = self.context.socket(zmq.DEALER)
+            log_proxy.bind(self.buses.logger.publish)
+            log_proxy_fwd = self.context.socket(zmq.DEALER)
+            log_proxy_fwd.bind(self.buses.logger.consume)
+            # Logger PUB forwarder
+            log_pub_fwd = self.context.socket(zmq.PUB)
+            log_pub_fwd.bind(self.buses.logger_fwd.publish)
             LOGP.info("Logger publishing at %s" %
-                      self.endpoints['logger_fanout'])
+                      self.buses.logger_fwd.publish)
             while not self.running.is_set():
                 try:
-                    zmq.device(zmq.FORWARDER, log_xsub, log_xpub)
+                    if not log_proxy.poll(500):
+                        continue
+                    frames = log_proxy.recv()
+                    log_proxy_fwd.send(frames)
+                    log_pub_fwd.send(frames)
+                    # zmq.device(zmq.FORWARDER, log_proxy, log_proxy_fwd)
                 except zmq.ZMQError, err:
                     if self.context.closed or \
                             getattr(err, 'errno', 0) == zmq.ETERM or \
@@ -460,8 +473,9 @@ class ZmqTransport(ServerTransportBackend):
                 except KeyboardInterrupt:
                     break
 
-            log_xpub.close()
-            log_xsub.close()
+            log_proxy.close()
+            log_proxy_fwd.close()
+            log_pub_fwd.close(0)
             LOGR.info("Exited logger queue")
 
         def scheduler_queue():
@@ -517,10 +531,8 @@ class ZmqTransport(ServerTransportBackend):
         self.bindings['requests'] = True
         self.bindings['replies'] = True
 
-        Thread(target=finished_jobs_queue).start()
-        self.bindings['finished_jobs'] = True
-
         Thread(target=logger_queue).start()
+        self.bindings['logger'] = True
 
         self.bindings['in_messages'] = True
         self.bindings['out_messages'] = True
@@ -539,12 +551,11 @@ class ZmqTransport(ServerTransportBackend):
 
     def heartbeat(self, req):
         if req.control == 'QUIT':
-            LOGR.info("QUIT: Node %s dropped from %s" %
-                     (req.peer, req.org))
+            LOGR.info("QUIT: Node %s dropped from %s" % (req.peer, req.org))
             if req.org in self.tenants:
                 self.tenants[req.org].pop(req.peer)
         elif req.org not in self.tenants:
-            LOGR.warn("Unrecognized node: %s" % hb_msg[1:3])
+            LOGR.warn("Unrecognized node: %s" % req)
         else:
             if self.config.security.use_org:
                 LOGR.info("HB from %s@%s" % (req.peer, req.org))
@@ -562,9 +573,9 @@ class ZmqTransport(ServerTransportBackend):
         # and forwards to Master PUB socket(5551)
 
         xsub_listener = self.context.socket(zmq.XSUB)
-        xsub_listener.bind(self.endpoints['publisher'])
+        xsub_listener.bind(self.buses.publisher.publish)
         xpub_listener = self.context.socket(zmq.XPUB)
-        xpub_listener.bind(self.master_pub_uri)
+        xpub_listener.bind(self.buses.publisher.consume)
 
         heartbeat = self.context.socket(zmq.DEALER)
         heartbeat.setsockopt(zmq.IDENTITY, HEARTBEAT)
@@ -639,7 +650,7 @@ class ZmqTransport(ServerTransportBackend):
                                       self.tenants.items()
                                       if t_val == target][0][0]
                             LOGP.info(
-                                'Started publishing on %s' % self.tenants)
+                                'Started publishing on %s' % tenant)
                             xpub_listener.send_multipart(
                                 [target, StatusCodes.HB])
                     elif action == b'\x00':
@@ -672,8 +683,6 @@ class ZmqTransport(ServerTransportBackend):
                         packet.pop(0)
                         org_uid = translate(org_name)
                         if org_uid:
-                            signed_packets = self.crypter.encrypt(
-                                json.dumps(packet))
                             xpub_listener.send_multipart([org_uid] +
                                                          process(packet))
 
@@ -686,7 +695,7 @@ class ZmqTransport(ServerTransportBackend):
                                 # Forward to other masters
                                 pub_proxy.send_multipart(
                                     ['PUB', org_name] + packet)
-                                LOGR.info(
+                                LOGR.debug(
                                     "PUB FWD %s" % ([org_name] + packet))
 
                 if heartbeat in socks:
@@ -718,8 +727,6 @@ class ZmqTransport(ServerTransportBackend):
                         packet.pop(0)
                         org_uid = translate(org_name)
                         if org_uid:
-                            signed_packets = self.crypter.encrypt(
-                                json.dumps(packet))
                             xpub_listener.send_multipart([org_uid] +
                                                          process(packet))
 
@@ -858,7 +865,7 @@ class ZmqTransport(ServerTransportBackend):
         LOGR.info("Exited replicator thread")
 
     def _validate(self, endp_type, ident):
-        if not endp_type in self.buses:
+        if endp_type not in self.buses:
             raise ValueError("Type %s not in allowed types %s" % (
                 endp_type, self.buses))
         # if ident and len(ident) > 32:
@@ -870,7 +877,6 @@ class ZmqTransport(ServerTransportBackend):
 
     def consume_queue(self, endp_type, ident=None, **kwargs):
         self._validate(endp_type, ident)
-        sock = self.context.socket(zmq.DEALER)
         return self._connect(endp_type, self.buses[endp_type].consume, ident)
 
     def publish_queue(self, endp_type, ident=None, **kwargs):
@@ -892,14 +898,15 @@ class ZmqTransport(ServerTransportBackend):
     def create_fanout(self, endpoint, *args, **kwargs):
         sock = self.context.socket(zmq.PUB)
         # Connect here, all binds are defined in router
-        sock.connect(self.endpoints[endpoint])
+        sock.connect(getattr(self.buses, endpoint).publish)
         _sock = SockWrapper(endpoint, sock)
         self._sockets.append(_sock)
         return _sock
 
-    def subscribe_fanout(self, endpoint, *args, **kwargs):
+    def subscribe_fanout(self, endpoint, sub_pattern=None, *args, **kwargs):
         sock = self.context.socket(zmq.SUB)
-        sock.connect(self.endpoints[endpoint])
+        sock.setsockopt(zmq.SUBSCRIBE, sub_pattern or '')
+        sock.connect(getattr(self.buses, endpoint).consume)
         _sock = SockWrapper(endpoint, sock)
         self._sockets.append(_sock)
         return _sock
@@ -959,7 +966,7 @@ class Router(Thread):
             poller.register(reply_router, zmq.POLLIN)
             poller.register(ssl_worker, zmq.POLLIN)
 
-            router_proxy = None, None
+            router_proxy = None
             if self.proxies:
                 router_proxy = self.context.socket(zmq.DEALER)
                 router_proxy.bind(self.endpoints['router_fwd'])
@@ -971,7 +978,7 @@ class Router(Thread):
                     socks = dict(poller.poll(100))
                 except zmq.ZMQError, zerr:
                     if zerr.errno == zmq.ETERM or zerr.errno == zmq.ENOTSUP \
-                        or zerr.errno == zmq.ENOTSOCK:
+                            or zerr.errno == zmq.ENOTSOCK:
                         break
                     continue
                 try:
@@ -984,13 +991,15 @@ class Router(Thread):
                                 sess_id = fwd_packet[0]
                                 if (sess_id == HEARTBEAT and
                                     fwd_packet[4] != 'IDENT') or \
-                                    sess_id in ZmqTransport.managed_sessions:
+                                        sess_id in \
+                                        ZmqTransport.managed_sessions:
                                     router.send_multipart(fwd_packet)
                             elif direction == "OUT":
                                 fwd_msg = FwdReq.build(*fwd_packet)
                                 if fwd_msg:
                                     sid = fwd_msg.data[0]
-                                    if sid not in ZmqTransport.managed_sessions:
+                                    if sid not in \
+                                            ZmqTransport.managed_sessions:
                                         ssl_worker.send_multipart(fwd_packet)
 
                         if sock == ssl_worker:
@@ -1024,8 +1033,8 @@ class Router(Thread):
                                 LOGR.debug('IN-MSG re-routed: %s' % rer_packet)
 
                             router.send_multipart(rer_packet)
-                            if router_proxy and \
-                                rer.dest not in ZmqTransport.managed_sessions:
+                            if router_proxy and rer.dest not in \
+                                    ZmqTransport.managed_sessions:
                                 router_proxy.send_multipart(
                                     ["IN"] + rer_packet)
 
@@ -1045,7 +1054,7 @@ class Router(Thread):
                                     ["OUT"] + rep_packet)
                 except zmq.ZMQError, zerr:
                     if zerr.errno == zmq.ETERM or zerr.errno == zmq.ENOTSUP \
-                        or zerr.errno == zmq.ENOTSOCK:
+                            or zerr.errno == zmq.ENOTSOCK:
                         break
             router.close()
             reply_router.close()
@@ -1087,7 +1096,7 @@ class Router(Thread):
                     self.master_repl.start()  # Start TLS ZMQ server socket
                 except zmq.ZMQError, zerr:
                     if zerr.errno == zmq.ETERM or zerr.errno == zmq.ENOTSUP \
-                        or zerr.errno == zmq.ENOTSOCK:
+                            or zerr.errno == zmq.ENOTSOCK:
                         # System interrupt
                         break
                 except KeyboardInterrupt:
@@ -1117,7 +1126,7 @@ class Router(Thread):
                     self.dispatcher_proxy.start()  # Start TLSZMQ server socket
                 except zmq.ZMQError, zerr:
                     if zerr.errno == zmq.ETERM or zerr.errno == zmq.ENOTSUP \
-                        or zerr.errno == zmq.ENOTSOCK:
+                            or zerr.errno == zmq.ENOTSOCK:
                         # System interrupt
                         break
                 except KeyboardInterrupt:
