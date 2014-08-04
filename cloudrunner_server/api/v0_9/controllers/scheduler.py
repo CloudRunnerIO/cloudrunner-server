@@ -30,17 +30,23 @@ class Scheduler(HookController):
     @jobs.when(method='POST', template='json')
     @signal('scheduler.jobs', 'create',
             when=lambda x: x.get("status") == "ok")
-    def create(self, name=None, **kwargs):
+    def create(self, name=None, **kw):
         try:
+            kwargs = kw or request.json
             name = name or kwargs['name']
             content = kwargs['content']
             period = kwargs['period']
+            exec_ = {"exec": "cloudrunner-master"}
             success, res = schedule_manager.add(request.user.username,
                                                 name=name,
                                                 payload=content,
                                                 period=period,
-                                                auth_token=request.user.token)
-            return dict(status='ok')
+                                                auth_token=request.user.token,
+                                                **exec_)
+            if success:
+                return dict(status='ok')
+            else:
+                return dict(error=res)
         except KeyError, kex:
             return dict(error='Value not present: %s' % kex)
         except Exception, ex:
@@ -49,8 +55,9 @@ class Scheduler(HookController):
     @jobs.when(method='PUT', template='json')
     @signal('scheduler.jobs', 'update',
             when=lambda x: x.get("status") == "ok")
-    def update(self, **kwargs):
+    def update(self, **kw):
         try:
+            kwargs = kw or request.json
             name = kwargs['name']
             content = kwargs['content']
             period = kwargs['period']
@@ -58,7 +65,10 @@ class Scheduler(HookController):
                                                  name=name,
                                                  payload=content,
                                                  period=period)
-            return dict(status='ok')
+            if success:
+                return dict(status='ok')
+            else:
+                return dict(error=res)
         except KeyError, kex:
             return dict(error='Value not present: %s' % kex)
         except Exception, ex:
@@ -67,7 +77,8 @@ class Scheduler(HookController):
     @jobs.when(method='PATCH', template='json')
     @signal('scheduler.jobs', 'update',
             when=lambda x: x.get("status") == "ok")
-    def patch(self, **kwargs):
+    def patch(self, **kw):
+        kwargs = kw or request.json
         kwargs.setdefault('content', None)
         kwargs.setdefault('period', None)
 
@@ -76,11 +87,14 @@ class Scheduler(HookController):
     @jobs.when(method='DELETE', template='json')
     @signal('scheduler.jobs', 'delete',
             when=lambda x: x.get("status") == "ok")
-    def delete(self, name, **kwargs):
+    def delete(self, name):
         try:
             success, res = schedule_manager.delete(request.user.username,
                                                    name=name)
-            return dict(status='ok')
+            if success:
+                return dict(status='ok')
+            else:
+                return dict(error=res)
         except KeyError, kex:
             return dict(error='Value not present: %s' % kex)
         except Exception, ex:

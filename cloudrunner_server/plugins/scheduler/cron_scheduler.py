@@ -69,19 +69,24 @@ def _default_dir():
 class CronScheduler(object):
 
     def __init__(self):
-        if os.geteuid() == 0:
-            # Root/system cron
-            self.crontab = CronTab()
-        else:
-            self.crontab = CronTab(user=pwd.getpwuid(os.getuid())[0])
+        self.uid = None
+        if os.geteuid() != 0:
+            self.uid = pwd.getpwuid(os.getuid())[0]
         self.job_dir = getattr(CronScheduler, 'job_dir', _default_dir())
         if not os.path.exists(self.job_dir):
             os.makedirs(self.job_dir)
 
+    def crontab(self):
+        if self.uid:
+            crontab = CronTab(user=self.uid)
+        else:
+            crontab = CronTab(user='root')
+        return crontab
+
     def _own(self, user):
         jobs = []
         user_pattern = "%s%s" % (user, SEPARATOR)
-        for cron_job in self.crontab:
+        for cron_job in self.crontab():
             job = Job(cron_job)
             if job.meta.startswith(user_pattern):
                 jobs.append(job)
@@ -90,7 +95,7 @@ class CronScheduler(object):
 
     def _all(self, **filters):
         jobs = []
-        for cron_job in self.crontab:
+        for cron_job in self.crontab():
             job = Job(cron_job)
             if filters:
                 for k, v in filters.items():
@@ -104,7 +109,7 @@ class CronScheduler(object):
     def add(self, user, payload=None, name=None,
             period=None, auth_token=None, **kwargs):
         try:
-
+            _cron = self.crontab()
             job_id = uuid.uuid4().hex
             kwargs['job_id'] = job_id
             name = name.replace(SEPARATOR, '_')
@@ -127,7 +132,7 @@ class CronScheduler(object):
             os.close(_file_fd)
             comment = Job._prepare_job_meta(user, auth_token, job_id,
                                             name, task_file)
-            cron = self.crontab.new(command=command, comment=comment)
+            cron = _cron.new(command=command, comment=comment)
             try:
                 if not isinstance(period, list):
                     period = period.split(' ')
@@ -138,7 +143,7 @@ class CronScheduler(object):
             if not cron.is_valid():
                 return (False, 'Cron is not valid')
             cron.enable()
-            self.crontab.write()
+            _cron.write()
 
             return (True, None)
         except Exception, ex:
@@ -146,7 +151,7 @@ class CronScheduler(object):
             return (False, '%r' % ex)
 
     def get(self, job_id):
-        for cron_job in self.crontab:
+        for cron_job in self.crontab():
             job = Job(cron_job)
             if job.id == job_id:
                 return job
@@ -166,7 +171,7 @@ class CronScheduler(object):
                 period = period.split(' ')
             if period and job.period != period:
                 job.cron_job.setall(*period)
-                self.crontab.write()
+                self.crontab().write()
             return (True, "Updated")
 
         return (False, 'Not found')
@@ -205,10 +210,11 @@ class CronScheduler(object):
 
     def delete(self, user, name=None, **kwargs):
         crons = self._own(user)
+        _cron = self.crontab()
         for job in crons:
             if job.user == user and job.name == name:
-                self.crontab.remove(job.cron_job)
-                self.crontab.write()
+                _cron.remove(job.cron_job)
+                _cron.write()
                 os.unlink(job.file)
                 return (True, 'Cron job %s removed' % name)
 
