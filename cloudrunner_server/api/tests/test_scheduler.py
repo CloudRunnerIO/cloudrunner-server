@@ -83,12 +83,14 @@ class TestScheduler(base.BaseRESTTestCase):
         self.assertEqual(resp.status_int, 200, resp.status_int)
         resp_json = json.loads(resp.body)
 
+        kw = {'exec': 'cloudrunner-master'}
         self.assertEqual(scheduler.add.call_args_list,
                          [call('testuser',
                                payload='somecontent',
                                name=u'job1',
                                auth_token='PREDEFINED_TOKEN',
-                               period=u'* 0 * * *')])
+                               period=u'* 0 * * *',
+                               **kw)])
 
         self.assertRedisInc('MyOrg:scheduler.jobs')
         self.assertRedisPub('MyOrg:scheduler.jobs', 'create')
