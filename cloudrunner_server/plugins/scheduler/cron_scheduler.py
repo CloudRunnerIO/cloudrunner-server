@@ -83,19 +83,21 @@ class CronScheduler(object):
             crontab = CronTab(user='root')
         return crontab
 
-    def _own(self, user):
+    def _own(self, user, cron=None):
         jobs = []
+        cron= cron or self.crontab()
         user_pattern = "%s%s" % (user, SEPARATOR)
-        for cron_job in self.crontab():
+        for cron_job in cron:
             job = Job(cron_job)
             if job.meta.startswith(user_pattern):
                 jobs.append(job)
 
         return jobs
 
-    def _all(self, **filters):
+    def _all(self, cron=None, **filters):
         jobs = []
-        for cron_job in self.crontab():
+        _cron = cron or self.crontab()
+        for cron_job in _cron:
             job = Job(cron_job)
             if filters:
                 for k, v in filters.items():
@@ -161,7 +163,8 @@ class CronScheduler(object):
         if not name:
             return (False, 'Not found')
         name = name.replace(SEPARATOR, '_')
-        job = self._all(name=name)
+        _cron = self.crontab()
+        job = self._all(name=name, cron=_cron)
         if job:
             job = job[0]
             if payload:
@@ -171,7 +174,7 @@ class CronScheduler(object):
                 period = period.split(' ')
             if period and job.period != period:
                 job.cron_job.setall(*period)
-                self.crontab().write()
+                _cron.write()
             return (True, "Updated")
 
         return (False, 'Not found')
@@ -209,13 +212,13 @@ class CronScheduler(object):
         return (True, jobs)
 
     def delete(self, user, name=None, **kwargs):
-        crons = self._own(user)
         _cron = self.crontab()
+        crons = self._own(user, cron=_cron)
         for job in crons:
             if job.user == user and job.name == name:
                 _cron.remove(job.cron_job)
                 _cron.write()
                 os.unlink(job.file)
-                return (True, 'Cron job %s removed' % name)
+                return (True, 'Job %s removed' % name)
 
-        return (False, 'Cron not found')
+        return (False, 'Job not found')
