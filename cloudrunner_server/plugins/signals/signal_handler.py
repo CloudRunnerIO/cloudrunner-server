@@ -169,6 +169,8 @@ class SignalHandlerPlugin(JobInOutProcessorPluginBase,
             meta = red.hgetall(trig + '__meta')
             sig = trig.split('__')[2]
             meta['signal'] = sig
+            meta['is_link'] = meta['is_link'] == 'True'
+            meta['auth'] = meta['auth'] == 'True'
             coll.append(meta)
 
         return True, coll
@@ -185,7 +187,7 @@ class SignalHandlerPlugin(JobInOutProcessorPluginBase,
         new_hndl = red.sadd('signals', key)
         red.hmset(key + '__meta', dict(user=user[0],
                                        target=target,
-                                       auth=use_auth,
+                                       auth=bool(use_auth),
                                        is_link=is_link))
 
         if new_hndl:

@@ -3,14 +3,16 @@ from pecan.hooks import HookController
 
 from cloudrunner_server.api.hooks.error_hook import ErrorHook
 from cloudrunner_server.api.hooks.signal_hook import SignalHook, signal
+from cloudrunner_server.api.hooks.user_hook import UserHook
 from cloudrunner_server.api.util import JsonOutput as O
 
 schedule_manager = conf.schedule_manager
+user_manager = conf.auth_manager
 
 
 class Scheduler(HookController):
 
-    __hooks__ = [SignalHook(), ErrorHook()]
+    __hooks__ = [UserHook(), SignalHook(), ErrorHook()]
 
     @expose('json', generic=True)
     def jobs(self, *args, **kwargs):
@@ -36,7 +38,13 @@ class Scheduler(HookController):
             name = name or kwargs['name']
             content = kwargs['content']
             period = kwargs['period']
-            exec_ = {"exec": "cloudrunner-master"}
+            (token, expires) = user_manager.create_token(
+                request.user.username, "", expiry=99999999)
+            exec_ = {"exec": 'curl -s -H "Cr-User: %s" -H "Cr-Token: %s" '
+                     '%sdispatch/execute '
+                     '-d data="${cat %%s}"' % (request.user.username,
+                                               token,
+                                               conf.REST_SERVER_URL)}
             success, res = schedule_manager.add(request.user.username,
                                                 name=name,
                                                 payload=content,

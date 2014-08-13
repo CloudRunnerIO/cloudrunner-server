@@ -19,7 +19,8 @@ class Triggers(HookController):
         success, res = sig_manager.list(user_org)  # , signal, target, auth)
         if success:
             triggers.extend(res)
-        return O.triggers(_list=triggers)
+        return O.triggers(_list=sorted(triggers,
+                                       key=lambda t: t['signal'].lower()))
 
     @bindings.when(method='POST', template='json')
     @signal('triggers.binding', 'attach',

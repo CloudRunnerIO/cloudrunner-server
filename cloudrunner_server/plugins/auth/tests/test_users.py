@@ -154,12 +154,12 @@ class TestUsersWithOrg(base.BaseTestCase):
         self.assertEquals(access_map.org, 'MyOrg')
 
     def test_list_all(self):
-        users = [("user1", "email1@site.com", "MyOrg")]
+        users = [("user1", "email1@site.com", "MyOrg", [])]
         for idx in range(10, 20):
             username = 'user%s' % (idx)
             self.auth.create_user(
                 username, 'token', 'email3@site.com', org_name='MyOrg')
-            users.append((username, 'email3@site.com', 'MyOrg'))
+            users.append((username, 'email3@site.com', 'MyOrg', []))
 
         res = self.auth.db.all('MyOrg')
         self.maxDiff = None

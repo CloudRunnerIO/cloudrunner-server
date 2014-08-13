@@ -167,7 +167,10 @@ class Logs(HookController):
                         # Initial
                         pass
                     elif frame.frame_type == "B":
-                        step['lines'].extend(frame.body)
+                        step['lines'].append(
+                            [frame.ts, frame.header.get('src', 'O')] +
+                            frame.body)
+                        frame.header.pop('src')
                     elif frame.frame_type == "S":
                         # Summary
                         step.update(json.loads(frame.body[0]))

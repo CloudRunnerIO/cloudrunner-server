@@ -1,5 +1,5 @@
 from sqlalchemy.sql.expression import func
-from sqlalchemy import (Column, Boolean, Integer, String,
+from sqlalchemy import (Table, Column, Boolean, Integer, String,
                         DateTime, ForeignKey, Text)
 from sqlalchemy.orm import relationship
 import uuid
@@ -55,6 +55,24 @@ class Role(TableBase):
     user_id = Column(Integer, ForeignKey('users.id'))
     servers = Column(String(100))
     as_user = Column(String(100))
+    group_id = Column(Integer, ForeignKey('groups.id'))
+    group = relationship('Group', backref='roles')
+
+user2group_rel = Table('user2group', TableBase.metadata,
+                       Column('user_id', Integer, ForeignKey('users.id')),
+                       Column('group_id', Integer, ForeignKey('groups.id'))
+                       )
+
+
+class Group(TableBase):
+    __tablename__ = 'groups'
+
+    id = Column(Integer, primary_key=True)
+    org_id = Column(Integer, ForeignKey('organizations.id'))
+    name = Column(String(100))
+
+    org = relationship('Org')
+    users = relationship('User', secondary=user2group_rel, backref="groups")
 
 
 class Token(TableBase):

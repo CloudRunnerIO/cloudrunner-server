@@ -27,17 +27,18 @@ class TestTriggers(base.BaseRESTTestCase):
             {
                 "auth": "True",
                 "is_link": "True",
-                "signal": "TEST",
+                "signal": "BEST",
                 "target": "http://site.com",
                 "user": "cloudr"
             },
             {
                 "auth": "True",
                 "is_link": "True",
-                "signal": "BEST",
+                "signal": "TEST",
                 "target": "http://site.com",
                 "user": "cloudr"
-            }])
+            }
+        ])
 
         resp = self.app.get('/rest/triggers/bindings',
                             headers={
@@ -49,8 +50,7 @@ class TestTriggers(base.BaseRESTTestCase):
         self.assertEqual(signals.list.call_args_list,
                          [call(('testuser', 'MyOrg'))])
         self.assertEqual(resp_json['triggers'],
-                         signals.list.return_value[1],
-                         resp.body)
+                         signals.list.return_value[1])
 
     @patch('cloudrunner_server.api.v0_9.controllers.triggers.sig_manager')
     def test_attach_signal(self, signals):
@@ -66,8 +66,8 @@ class TestTriggers(base.BaseRESTTestCase):
         self.assertEqual(signals.attach.call_args_list,
                          [call(('testuser', 'MyOrg'), 'SIG', 'TGT', None)])
 
-        self.assertRedisInc('MyOrg:triggers.binding')
-        self.assertRedisPub('MyOrg:triggers.binding', 'attach')
+        self.assertRedisInc('triggers.binding')
+        self.assertRedisPub('triggers.binding', 'attach')
 
         self.assertEqual(resp_json, {'status': 'ok'}, resp.body)
 
@@ -82,8 +82,8 @@ class TestTriggers(base.BaseRESTTestCase):
         self.assertEqual(resp.status_int, 200, resp.status_int)
         resp_json = json.loads(resp.body)
 
-        self.assertRedisInc('MyOrg:triggers.binding')
-        self.assertRedisPub('MyOrg:triggers.binding', 'detach')
+        self.assertRedisInc('triggers.binding')
+        self.assertRedisPub('triggers.binding', 'detach')
 
         self.assertEqual(signals.detach.call_args_list,
                          [call(('testuser', 'MyOrg'), 'SIG', 'http://target')])

@@ -56,6 +56,7 @@ class Dispatch(HookController):
                 kw = kwargs
             else:
                 kw = request.json_body
+
             script = kw['data']
             timeout = kw.get('timeout', 0)
             tags = sorted(re.split('[\s,;]', kw.get('tags', '')))

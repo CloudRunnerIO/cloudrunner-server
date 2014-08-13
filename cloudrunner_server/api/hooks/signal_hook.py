@@ -11,7 +11,6 @@ class SignalHook(RedisHook):
     def after(self, state):
         sig = getattr(state.response, 'fire_up_event', None)
         if sig:
-            sig = "%s:%s" % (request.user.org, sig)
             if conf.app.debug:
                 state.response.headers['X-Pecan-Fire-Signal'] = sig
             request.redis.incr(sig)

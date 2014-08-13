@@ -26,29 +26,35 @@ class CacheRegistry(object):
             raise Exception("Provide either config or redis connection")
 
     def check(self, org, target):
-        last_id = self.redis.get(RegBase._get_rel_id(org, target))
+        self.switch_db(org, self.redis)
+        last_id = self.redis.get(RegBase._get_rel_id(target))
         return last_id
 
     def check_group(self, org, *tags):
+        self.switch_db(org, self.redis)
         pipe = self.redis.pipeline()
         for tag in tags:
-            pipe.lrange(RegBase._get_rel_id(org, tag), -20, -1)
+            pipe.lrange(RegBase._get_rel_id(tag), -20, -1)
         arrays = pipe.execute()
         for tag_arr in arrays:
             for arr in tag_arr:
                 if not arr:
                     continue
-                pipe.get(RegBase._get_rel_id(org, arr))
+                pipe.get(RegBase._get_rel_id(arr))
         ids = pipe.execute()
-        return max(ids, key=int)
+        if ids:
+            return max(ids, key=int)
+        return 0
 
     def associate(self, org, tag, *ids):
-        self.redis.rpush(RegBase._get_rel_id(org, tag), *ids)
+        self.switch_db(org, self.redis)
+        self.redis.rpush(RegBase._get_rel_id(tag), *ids)
 
     @contextmanager
     def writer(self, org, *args):
+        self.switch_db(org, self.redis)
         try:
-            yield RegWriter(self.redis, org, *args)
+            yield RegWriter(self.redis, *args)
         except Exception, ex:
             LOG.exception(ex)
             # Do not execute on error
@@ -57,25 +63,36 @@ class CacheRegistry(object):
 
     @contextmanager
     def reader(self, org, *args):
+        self.switch_db(org, self.redis)
         try:
-            yield RegReader(self.redis, org, *args)
+            yield RegReader(self.redis, *args)
         except Exception, ex:
             # Do not execute on error
             LOG.exception(ex)
         finally:
             pass
 
+    @staticmethod
+    def switch_db(space, redis):
+        db_key = "__DB__%s__" % space
+        db = redis.get(db_key)
+        if not db:
+            db = redis.incr("ORGS")
+            redis.set(db_key, db)
+        # redis.select(db)
+        redis.execute_command("SELECT", db)
+
 
 class RegBase(object):
 
-    def __init__(self, redis, space, _id):
+    def __init__(self, redis, _id):
         self.redis = redis
-        map_key = self._get_rel_id(space, "K", _id)
+        map_key = self._get_rel_id("_K", _id)
         map_id = self.redis.get(map_key)
         if not map_id:
             map_id = self.redis.incr(REL_MAP_KEY)
             self.redis.set(map_key, map_id)
-        self.id = self._get_rel_id(space, _id)
+        self.id = self._get_rel_id(_id)
         self.key = map_id
 
     @staticmethod
@@ -92,27 +109,29 @@ class RegBase(object):
 class RegWriter(RegBase):
 
     def store(self, frame):
+        LOG.info("Storing frame %s" % vars(frame))
+        seq_no = self.redis.incr("___INCR___")
         data_key = self._get_rel_id(self.key, **frame.header)
         if frame.body:
             end = self.redis.rpush(data_key, *frame.body)
             begin = end - len(frame.body)
-            rel_key = self._get_rel_id(data_key, begin, end)
+            rel_key = self._get_rel_id(data_key, begin, end, frame.ts)
             self.redis.zadd(self.key,
                             rel_key,
-                            int(frame.seq_no))
+                            seq_no)
 
         self.redis.publish(self.id, 'update')
-        self.redis.set(self.id, self.redis.incr("___INCR___"))
+        self.redis.set(self.id, seq_no)
 
 
 class RegReader(RegBase):
 
-    def __init__(self, redis, space, *_ids):
+    def __init__(self, redis, *_ids):
         self.redis = redis.pipeline()
         self.ids = []
         self.keys = []
         for _id in _ids:
-            self.redis.get(self._get_rel_id(space, "K", _id))
+            self.redis.get(self._get_rel_id("_K", _id))
             self.ids.append(_id)
 
         for out in self.redis.execute():
@@ -133,8 +152,8 @@ class RegReader(RegBase):
             rel_keys = self.redis.execute()[0]
 
             if not rel_keys:
-                self.redis.zcard(key)
-                new_score = self.redis.execute()[0]
+                self.redis.zrevrange(key, 0, 1, withscores=True)
+                elem, new_score = self.redis.execute()[0]
                 return new_score, {}
 
             for rel in rel_keys:
@@ -142,7 +161,7 @@ class RegReader(RegBase):
                     continue
 
                 key, score = rel
-                rel_key, beg, end = key.rsplit(":", 2)
+                rel_key, beg, end, ts = key.rsplit(":", 3)
                 beg, end = int(beg), int(end)
 
                 meta = rel_key.split(":")
@@ -153,30 +172,31 @@ class RegReader(RegBase):
                     k, v = _key.split('=', 1)
                     keys[k] = v
 
-                frame_data = filter(lambda x: x[0] == rel_key, frames)
+                frame_data = filter(lambda x: x[0] == rel_key and
+                                    x[1] == ts, frames)
                 if not frame_data:
-                    frame = FrameBase.restore(int(score), **keys)
+                    frame = FrameBase.restore(int(score), ts, ** keys)
 
                     if isinstance(frame,
                                   BodyFrame) and not self.is_match(keys):
                         continue
 
-                    frames.append((rel_key, frame))
+                    frames.append((rel_key, ts, frame))
 
                     frame.begin = beg
                     frame.end = end
                 else:
-                    frame = frame_data[0][1]
+                    frame = frame_data[0][2]
                     frame.end = end
                 frame.seq_no = score
                 new_score = max(new_score, score)
 
-            for rel_key, frame in frames:
-                self.redis.lrange(rel_key, frame.begin, frame.end)
+            for rel_key, _, frame in frames:
+                self.redis.lrange(rel_key, frame.begin, frame.end - 1)
 
             data = self.redis.execute()
             for i, tup in enumerate(frames):
-                _, frame = tup
+                _, ts, frame = tup
                 _data = data[i]
                 if isinstance(frame, BodyFrame):
                     if self.is_match(keys):
@@ -185,7 +205,7 @@ class RegReader(RegBase):
                         frame.body = []
                 else:
                     frame.body = _data
-            output[self.ids[fid]] = [f[1] for f in frames]
+            output[self.ids[fid]] = [f[2] for f in frames]
         return new_score, output
 
     def is_match(self, meta):

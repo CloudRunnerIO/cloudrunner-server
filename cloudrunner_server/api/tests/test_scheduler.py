@@ -13,8 +13,7 @@
 #  *******************************************************/
 
 import json
-from mock import call
-from mock import patch
+from mock import call, patch
 
 from cloudrunner_server.api.tests import base
 
@@ -71,10 +70,12 @@ class TestScheduler(base.BaseRESTTestCase):
                          resp.body)
 
     @patch('cloudrunner_server.api.v0_9.controllers.'
+           'scheduler.user_manager')
+    @patch('cloudrunner_server.api.v0_9.controllers.'
            'scheduler.schedule_manager')
-    def test_create(self, scheduler):
+    def test_create(self, scheduler, auth):
         scheduler.add.return_value = (True, None)
-
+        auth.create_token.return_value = ("JOB_TOKEN", 0)
         resp = self.app.post('/rest/scheduler/jobs',
                              "name=job1&period=* 0 * * *&content=somecontent",
                              headers={
@@ -83,17 +84,20 @@ class TestScheduler(base.BaseRESTTestCase):
         self.assertEqual(resp.status_int, 200, resp.status_int)
         resp_json = json.loads(resp.body)
 
-        kw = {'exec': 'cloudrunner-master'}
+        kw = {'exec': 'curl -s -H "Cr-User: testuser" -H '
+              '"Cr-Token: JOB_TOKEN" '
+              'https://localhost/rest/dispatch/execute '
+              '-d data="${cat %s}"'}
         self.assertEqual(scheduler.add.call_args_list,
                          [call('testuser',
                                payload='somecontent',
-                               name=u'job1',
+                               name='job1',
                                auth_token='PREDEFINED_TOKEN',
-                               period=u'* 0 * * *',
+                               period='* 0 * * *',
                                **kw)])
 
-        self.assertRedisInc('MyOrg:scheduler.jobs')
-        self.assertRedisPub('MyOrg:scheduler.jobs', 'create')
+        self.assertRedisInc('scheduler.jobs')
+        self.assertRedisPub('scheduler.jobs', 'create')
 
         self.assertEqual(resp_json, {"status": "ok"},
                          resp.body)
@@ -117,8 +121,8 @@ class TestScheduler(base.BaseRESTTestCase):
                                name=u'job1',
                                period=u'* 0 * * *')])
 
-        self.assertRedisInc('MyOrg:scheduler.jobs')
-        self.assertRedisPub('MyOrg:scheduler.jobs', 'update')
+        self.assertRedisInc('scheduler.jobs')
+        self.assertRedisPub('scheduler.jobs', 'update')
 
         self.assertEqual(resp_json, {"status": "ok"},
                          resp.body)
@@ -159,8 +163,8 @@ class TestScheduler(base.BaseRESTTestCase):
         self.assertEqual(scheduler.delete.call_args_list,
                          [call('testuser', name='job1')])
 
-        self.assertRedisInc('MyOrg:scheduler.jobs')
-        self.assertRedisPub('MyOrg:scheduler.jobs', 'delete')
+        self.assertRedisInc('scheduler.jobs')
+        self.assertRedisPub('scheduler.jobs', 'delete')
 
         self.assertEqual(resp_json, {"status": "ok"},
                          resp.body)

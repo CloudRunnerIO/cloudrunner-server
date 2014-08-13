@@ -19,6 +19,8 @@ server = {
     'host': '0.0.0.0'
 }
 
+REST_SERVER_URL = "https://localhost/rest/"
+
 APP_DIR = cloudrunner_server.api.__path__[0]
 
 API_VER = VERSION.replace('.', '_')

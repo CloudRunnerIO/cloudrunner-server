@@ -27,9 +27,11 @@ class TestManage(base.BaseRESTTestCase):
         self.assertEqual(resp_json['users'],
                          [{"org": "MyOrg",
                            "email": "email",
+                           "groups": [],
                            "name": "testuser"},
                           {"org": "MyOrg",
                            "email": "email",
+                           "groups": ["admin"],
                            "name": "testuser2"}], resp.body)
 
     def test_create_user(self):
@@ -43,8 +45,8 @@ class TestManage(base.BaseRESTTestCase):
 
         self.assertEqual(resp_json, {'status': "ok"}, resp.body)
 
-        self.assertRedisInc('MyOrg:manage.users')
-        self.assertRedisPub('MyOrg:manage.users', 'create')
+        self.assertRedisInc('manage.users')
+        self.assertRedisPub('manage.users', 'create')
 
     def test_update_user(self):
         resp = self.app.put(
@@ -58,8 +60,8 @@ class TestManage(base.BaseRESTTestCase):
         self.assertEqual(
             resp_json, {'status': "ok"}, resp.body)
 
-        self.assertRedisInc('MyOrg:manage.users')
-        self.assertRedisPub('MyOrg:manage.users', 'update')
+        self.assertRedisInc('manage.users')
+        self.assertRedisPub('manage.users', 'update')
 
     def test_update_user_fail(self):
         resp = self.app.put('/rest/manage/users',
@@ -102,8 +104,8 @@ class TestManage(base.BaseRESTTestCase):
         self.assertEqual(
             resp_json, {"status": "ok"}, resp.body)
 
-        self.assertRedisInc('MyOrg:manage.users')
-        self.assertRedisPub('MyOrg:manage.users', 'update')
+        self.assertRedisInc('manage.users')
+        self.assertRedisPub('manage.users', 'update')
 
     def test_patch_user_fail(self):
         resp = self.app.patch('/rest/manage/users',
@@ -129,8 +131,8 @@ class TestManage(base.BaseRESTTestCase):
         self.assertEqual(
             resp_json, {"status": "ok"}, resp.body)
 
-        self.assertRedisInc('MyOrg:manage.users')
-        self.assertRedisPub('MyOrg:manage.users', 'delete')
+        self.assertRedisInc('manage.users')
+        self.assertRedisPub('manage.users', 'delete')
 
     def test_delete_user_fail(self):
         resp = self.app.delete('/rest/manage/users/nonexistinguser',
@@ -169,8 +171,8 @@ class TestManage(base.BaseRESTTestCase):
         self.assertEqual(resp.status_int, 200, resp.status_int)
         resp_json = resp.json
 
-        self.assertRedisInc('MyOrg:manage.roles')
-        self.assertRedisPub('MyOrg:manage.roles', 'create')
+        self.assertRedisInc('manage.roles')
+        self.assertRedisPub('manage.roles', 'create')
 
         self.assertEqual(resp_json, {"status": "ok"},
                          resp.body)
@@ -185,8 +187,8 @@ class TestManage(base.BaseRESTTestCase):
         self.assertEqual(resp_json, {"status": "ok"},
                          resp.body)
 
-        self.assertRedisInc('MyOrg:manage.roles')
-        self.assertRedisPub('MyOrg:manage.roles', 'delete')
+        self.assertRedisInc('manage.roles')
+        self.assertRedisPub('manage.roles', 'delete')
 
     def test_list_orgs(self):
         resp = self.app.get('/rest/manage/orgs',
@@ -215,8 +217,8 @@ class TestManage(base.BaseRESTTestCase):
 
         self.assertEqual(resp_json, {'status': 'ok'}, resp.body)
 
-        self.assertRedisInc('MyOrg:manage.orgs')
-        self.assertRedisPub('MyOrg:manage.orgs', 'create')
+        self.assertRedisInc('manage.orgs')
+        self.assertRedisPub('manage.orgs', 'create')
 
     def test_activate_org(self):
         resp = self.app.patch('/rest/manage/orgs/MyOrg2',
@@ -229,8 +231,8 @@ class TestManage(base.BaseRESTTestCase):
         self.assertEqual(resp_json, {'status': 'ok'},
                          resp.body)
 
-        self.assertRedisInc('MyOrg:manage.orgs')
-        self.assertRedisPub('MyOrg:manage.orgs', 'update')
+        self.assertRedisInc('manage.orgs')
+        self.assertRedisPub('manage.orgs', 'update')
 
     def test_deactivate_org(self):
         resp = self.app.patch('/rest/manage/orgs/MyOrg2',
@@ -243,8 +245,8 @@ class TestManage(base.BaseRESTTestCase):
         self.assertEqual(resp_json, {'status': 'ok'},
                          resp.body)
 
-        self.assertRedisInc('MyOrg:manage.orgs')
-        self.assertRedisPub('MyOrg:manage.orgs', 'update')
+        self.assertRedisInc('manage.orgs')
+        self.assertRedisPub('manage.orgs', 'update')
 
     def test_delete_org(self):
         resp = self.app.delete('/rest/manage/orgs/MyOrg2',
@@ -253,8 +255,8 @@ class TestManage(base.BaseRESTTestCase):
         self.assertEqual(resp.status_int, 200, resp.status_int)
         resp_json = resp.json
 
-        self.assertRedisInc('MyOrg:manage.orgs')
-        self.assertRedisPub('MyOrg:manage.orgs', 'delete')
+        self.assertRedisInc('manage.orgs')
+        self.assertRedisPub('manage.orgs', 'delete')
 
         self.assertEqual(resp_json, {'status': 'ok'},
                          resp.body)

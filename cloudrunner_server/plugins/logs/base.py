@@ -56,7 +56,7 @@ class FrameBase(object):
         return frame
 
     @classmethod
-    def restore(cls, seq_no, **keys):
+    def restore(cls, seq_no, ts, **keys):
         _type = keys.pop('type')
         frame = None
         if _type == "I":
@@ -68,6 +68,7 @@ class FrameBase(object):
         else:
             return None
         frame.seq_no = seq_no
+        frame.ts = ts
         frame.header = keys
         return frame
 
@@ -81,9 +82,10 @@ class FrameBase(object):
 class InitialFrame(FrameBase):
     frame_type = "I"
 
-    def push(self, seq_no=None, job_id=None, step_id=None, **kwargs):
+    def push(self, ts=None, seq_no=None, job_id=None, step_id=None, **kwargs):
         self.body = [json.dumps(kwargs)]
         self.seq_no = seq_no
+        self.ts = int(ts or 0)
         self.header['job_id'] = job_id
         self.header['step_id'] = step_id
 
@@ -91,13 +93,16 @@ class InitialFrame(FrameBase):
 class BodyFrame(FrameBase):
     frame_type = "B"
 
-    def push(self, seq_no=None, node=None, step_id=None,
+    def push(self, ts=None, seq_no=None, node=None, step_id=None,
              stdout=None, stderr=None, **kwargs):
         if stdout:
             self.body = stdout.splitlines()
+            self.header['src'] = 'O'
         elif stderr:
             self.body = stderr.splitlines()
+            self.header['src'] = 'E'
         self.seq_no = seq_no
+        self.ts = int(ts or 0)
         self.header['node'] = node
         self.header['step_id'] = step_id
 
@@ -105,8 +110,9 @@ class BodyFrame(FrameBase):
 class SummaryFrame(FrameBase):
     frame_type = "S"
 
-    def push(self, seq_no=None, job_id=None, step_id=None, **kwargs):
+    def push(self, ts=None, seq_no=None, job_id=None, step_id=None, **kwargs):
         self.body = [json.dumps(kwargs)]
         self.seq_no = seq_no
+        self.ts = int(ts or 0)
         self.header['job_id'] = job_id
         self.header['step_id'] = step_id

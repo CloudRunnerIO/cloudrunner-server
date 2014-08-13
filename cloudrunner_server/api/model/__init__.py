@@ -58,12 +58,30 @@ def populate(session):
     session.commit()
 
     from cloudrunner.util.crypto import hash_token
+
     demo = User(username='demo', password=hash_token('demo'),
                 email='user@site.com', org=org)
     session.add(demo)
     cloudr = User(username='cloudr', password=hash_token('cloudr'),
                   email='cloudr@site.com', org=org)
     session.add(cloudr)
+    guest = User(username='guest', password=hash_token('guest'),
+                 email='guest@site.com', org=org)
+    session.add(guest)
+
+    group1 = Group(name="admin", org=org)
+    group1.users.append(demo)
+    session.add(group1)
+
+    group2 = Group(name="developers", org=org)
+    group2.users.append(cloudr)
+    group2.users.append(demo)
+    session.add(group2)
+
+    group3 = Group(name="guests", org=org)
+    group3.users.append(guest)
+    session.add(group3)
+
     session.commit()
 
     from datetime import datetime, timedelta
@@ -83,7 +101,20 @@ def populate(session):
     session.add(role1)
     session.commit()
 
+    role11 = Role(name='win', servers='*win*', as_user='Administrator')
+    session.add(role11)
+    session.commit()
+
     demo.roles.append(role1)
+    session.commit()
+
+    role2 = Role(name='root', servers='*', as_user='root')
+    session.add(role2)
+    group1.roles.append(role2)
+    group1.roles.append(role11)
+    role3 = Role(name='dev', servers='*-stg*', as_user='developer')
+    session.add(role3)
+    group2.roles.append(role3)
     session.commit()
 
     store = Store(name='cloudrunner', store_type='local')

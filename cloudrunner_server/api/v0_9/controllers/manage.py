@@ -5,6 +5,7 @@ from cloudrunner_server.api.hooks.db_hook import DbHook
 from cloudrunner_server.api.hooks.error_hook import ErrorHook
 from cloudrunner_server.api.hooks.user_hook import UserHook
 from cloudrunner_server.api.hooks.signal_hook import SignalHook, signal
+from cloudrunner_server.api.model import Group, Org, Role
 from cloudrunner_server.api.util import JsonOutput as O
 
 
@@ -20,7 +21,8 @@ class Manage(HookController):
     def users(self, *args, **kwargs):
         users = [dict(name=u[0],
                       email=u[1],
-                      org=u[2])
+                      org=u[2],
+                      groups=u[3])
                  for u in request.user_manager.list_users(request.user.org)]
         return O.users(_list=users)
 
@@ -116,6 +118,62 @@ class Manage(HookController):
             when=lambda r: not r.get("error"))
     def rm_role(self, username, node, **kwargs):
         (success, msg) = request.user_manager.remove_role(username, node)
+        if success:
+            return dict(status="ok")
+        else:
+            return dict(error=msg)
+
+    #
+    # GROUPS ##########
+    #
+
+    @expose('json', generic=True)
+    def groups(self, *args, **kwargs):
+        def modifier(roles):
+            return [dict(as_user=role.as_user, servers=role.servers)
+                    for role in roles]
+
+        groups = [g.serialize(skip=['id', 'org_id'],
+                              rel=[("roles", 'roles', modifier)]) for g in
+                  request.db.query(Group).join(Org).outerjoin(Role).filter(
+                  Org.name == request.user.org).all()]
+        return O.groups(_list=groups)
+
+    @groups.when(method='POST', template='json')
+    @signal('manage.groups', 'create',
+            when=lambda r: not r.get("error"))
+    def add_group(self, name, *args, **kwargs):
+        name = name or kwargs['name']
+        (success, msg) = request.user_manager.add_group(request.user.org, name)
+        if success:
+            return dict(status="ok")
+        else:
+            return dict(error=msg)
+
+    @groups.when(method='PUT', template='json')
+    @signal('manage.groups', 'update',
+            when=lambda r: not r.get("error"))
+    def modify_group_roles(self, name, *args, **kwargs):
+        name = name or kwargs['name']
+        mods = kwargs['modifications']
+        assert isinstance(mods, dict)
+        if mods.get("add"):
+            assert isinstance(mods['add'], dict)
+        if mods.get("remove"):
+            assert isinstance(mods['remove'], dict)
+        (success, msg) = request.user_manager.add_group_role(
+            name, add=mods.get("add"), remove=mods.get("remove"))
+        if success:
+            return dict(status="ok")
+        else:
+            return dict(error=msg)
+
+    @groups.when(method='DELETE', template='json')
+    @signal('manage.groups', 'delete',
+            when=lambda r: not r.get("error"))
+    def rm_group(self, name, **kwargs):
+        (success, msg) = request.user_manager.remove_group(request.user.org,
+                                                           name)
         if success:
             return dict(status="ok")
         else:

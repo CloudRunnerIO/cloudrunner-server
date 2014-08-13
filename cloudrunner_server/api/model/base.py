@@ -19,6 +19,14 @@ class TableBase(Base):
     def serialize(self, skip=[], rel=[]):
         columns = [c.key for c in class_mapper(self.__class__).columns]
         d = dict((c, getattr(self, c)) for c in columns if c not in skip)
-        d.update(dict((k, reduce(getattr_func, c.split("."), self))
-                      for c, k in rel))
+        for r in rel:
+            c, k = r[:2]
+            modifier = None
+            if len(r) > 2:
+                modifier = r[2]
+            v = reduce(getattr_func, c.split("."), self)
+            if modifier:
+                d[k] = modifier(v)
+            else:
+                d[k] = v
         return d

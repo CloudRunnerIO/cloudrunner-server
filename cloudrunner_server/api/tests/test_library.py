@@ -76,8 +76,8 @@ class TestLibrary(base.BaseRESTTestCase):
 
         self.assertEqual(resp_json, {"status": "ok"},
                          resp.body)
-        self.assertRedisInc('MyOrg:library.workflows')
-        self.assertRedisPub('MyOrg:library.workflows', 'add')
+        self.assertRedisInc('library.workflows')
+        self.assertRedisPub('library.workflows', 'add')
 
     def test_create_workflow_private(self):
         resp = self.app.post('/rest/library/workflows',
@@ -90,8 +90,8 @@ class TestLibrary(base.BaseRESTTestCase):
 
         self.assertEqual(resp_json, {"status": "ok"},
                          resp.body)
-        self.assertRedisInc('MyOrg:library.workflows')
-        self.assertRedisPub('MyOrg:library.workflows', 'add')
+        self.assertRedisInc('library.workflows')
+        self.assertRedisPub('library.workflows', 'add')
 
     def test_create_fail_workflow(self):
         resp = self.app.post('/rest/library/workflows',
@@ -119,8 +119,8 @@ class TestLibrary(base.BaseRESTTestCase):
         self.assertEqual(resp_json, {"status": "ok"},
                          resp.body)
 
-        self.assertRedisInc('MyOrg:library.workflows')
-        self.assertRedisPub('MyOrg:library.workflows', 'update')
+        self.assertRedisInc('library.workflows')
+        self.assertRedisPub('library.workflows', 'update')
 
     def test_delete_workflow(self):
         resp = self.app.delete('/rest/library/workflows/test/wf1',
@@ -133,8 +133,8 @@ class TestLibrary(base.BaseRESTTestCase):
         self.assertEqual(resp_json, {"status": "ok"},
                          resp.body)
 
-        self.assertRedisInc('MyOrg:library.workflows')
-        self.assertRedisPub('MyOrg:library.workflows', 'delete')
+        self.assertRedisInc('library.workflows')
+        self.assertRedisPub('library.workflows', 'delete')
 
     def test_delete_fail_workflow(self):
         resp = self.app.delete('/rest/library/workflows/test/non-existing',
@@ -195,8 +195,8 @@ class TestLibrary(base.BaseRESTTestCase):
 
         self.assertEqual(resp_json, {"status": "ok"},
                          resp.body)
-        self.assertRedisInc('MyOrg:library.inlines')
-        self.assertRedisPub('MyOrg:library.inlines', 'add')
+        self.assertRedisInc('library.inlines')
+        self.assertRedisPub('library.inlines', 'add')
 
     def test_create_inline_private(self):
         resp = self.app.post('/rest/library/inlines',
@@ -209,8 +209,8 @@ class TestLibrary(base.BaseRESTTestCase):
 
         self.assertEqual(resp_json, {"status": "ok"},
                          resp.body)
-        self.assertRedisInc('MyOrg:library.inlines')
-        self.assertRedisPub('MyOrg:library.inlines', 'add')
+        self.assertRedisInc('library.inlines')
+        self.assertRedisPub('library.inlines', 'add')
 
     def test_create_inline_fail(self):
         resp = self.app.post('/rest/library/inlines',
@@ -238,8 +238,8 @@ class TestLibrary(base.BaseRESTTestCase):
 
         self.assertEqual(resp_json, {"status": "ok"},
                          resp.body)
-        self.assertRedisInc('MyOrg:library.inlines')
-        self.assertRedisPub('MyOrg:library.inlines', 'update')
+        self.assertRedisInc('library.inlines')
+        self.assertRedisPub('library.inlines', 'update')
 
     def test_delete_inline(self):
         resp = self.app.delete('/rest/library/inlines/tools/nginx_status',
@@ -249,8 +249,8 @@ class TestLibrary(base.BaseRESTTestCase):
         self.assertEqual(resp.status_int, 200, resp.status_int)
         resp_json = json.loads(resp.body)
 
-        self.assertRedisInc('MyOrg:library.inlines')
-        self.assertRedisPub('MyOrg:library.inlines', 'delete')
+        self.assertRedisInc('library.inlines')
+        self.assertRedisPub('library.inlines', 'delete')
 
         self.assertEqual(resp_json, {"status": "ok"},
                          resp.body)

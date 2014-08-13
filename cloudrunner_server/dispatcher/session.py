@@ -164,7 +164,9 @@ class JobSession(Thread):
             if user_libs:
                 libs.extend(user_libs)
 
+            ts = time.mktime(time.gmtime())
             message = InitialMessage(session_id=self.session_id,
+                                     ts=ts,
                                      org=user_org[1], step_id=step_id)
             self._reply(message)
             msg_ret = []
@@ -232,10 +234,12 @@ class JobSession(Thread):
                         #   node_id, stdout, stderr
                         names = ("job_id", "run_as", "node",
                                  "stdout", "stderr")
+                        ts = time.mktime(time.gmtime())
                         message = PipeMessage(session_id=self.session_id,
                                               step_id=step_id,
                                               user=self.user,
                                               org=self.remote_user_map.org,
+                                              ts=ts,
                                               **dict(zip(names, _reply[1:])))
                         self._reply(message)
                     else:
@@ -290,11 +294,9 @@ class JobSession(Thread):
                                     run_as=node['remote_user'],
                                     ret_code=node['ret_code'])
                                for node in msg_ret]
-                # response.append(dict(targets=run['targets'],
-                #                     jobid=run['jobid'],
-                #                     args=run['args'],
-                #                     nodes=exec_result))
+                ts = time.mktime(time.gmtime())
                 message = FinishedMessage(session_id=self.session_id,
+                                          ts=ts,
                                           user=self.user,
                                           step_id=step_id,
                                           org=self.remote_user_map.org,

@@ -85,7 +85,7 @@ class CronScheduler(object):
 
     def _own(self, user, cron=None):
         jobs = []
-        cron= cron or self.crontab()
+        cron = cron or self.crontab()
         user_pattern = "%s%s" % (user, SEPARATOR)
         for cron_job in cron:
             job = Job(cron_job)
@@ -118,8 +118,6 @@ class CronScheduler(object):
             if self._all(name=name):
                 return (False, "Job with the name %s exists" % name)
 
-            command = '%(exec)s schedule run %(job_id)s' % kwargs
-
             def create_payload():
                 return tempfile.mkstemp(dir=self.job_dir,
                                         prefix='cloudr_',
@@ -134,7 +132,8 @@ class CronScheduler(object):
             os.close(_file_fd)
             comment = Job._prepare_job_meta(user, auth_token, job_id,
                                             name, task_file)
-            cron = _cron.new(command=command, comment=comment)
+            cmd = kwargs.get("exec", "%s") % task_file
+            cron = _cron.new(command=cmd, comment=comment)
             try:
                 if not isinstance(period, list):
                     period = period.split(' ')

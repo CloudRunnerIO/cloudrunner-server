@@ -185,7 +185,8 @@ class AuthDb(object):
         users = self.db.query(User).join(
             Org).all()
 
-        return [(u.username, u.email, u.org.name) for u in users]
+        return [(u.username, u.email,
+                 u.org.name, [g.name for g in u.groups]) for u in users]
 
     def orgs(self):
         orgs = [(org.name, org.uid, org.active)

@@ -71,6 +71,11 @@ class BaseRESTTestCase(BaseTestCase):
         Session.add(user2)
         Session.commit()
 
+        grp_admin = Group(name="admin")
+        grp_admin.users.append(user2)
+        Session.add(grp_admin)
+        Session.commit()
+
         token = Token(value="PREDEFINED_TOKEN",
                       expires_at=datetime.now() + timedelta(minutes=60),
                       user_id=user.id)

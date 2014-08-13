@@ -4,8 +4,8 @@ from pecan import conf, expose, request
 from pecan.hooks import HookController
 
 from cloudrunner_server.api.hooks.db_hook import DbHook
-from cloudrunner_server.api.hooks.user_hook import UserHook
 from cloudrunner_server.api.hooks.error_hook import ErrorHook
+from cloudrunner_server.api.hooks.user_hook import UserHook
 from cloudrunner_server.api.util import JsonOutput as O
 
 from cloudrunner_server.api.client import redis_client as r
