@@ -5,12 +5,12 @@ from pecan.secure import secure
 
 from .auth import Auth
 from .dispatch import Dispatch
-from .events import Events
 from .help import HtmlDocs
 from .library import Library
 from .logs import Logs
 from .manage import Manage
 from .scheduler import Scheduler
+from .status import EntityStatus
 from .triggers import Triggers
 
 from cloudrunner_server.api import VERSION
@@ -60,7 +60,7 @@ class RestApi(object):
     #
     # SSE
     #
-    events = Events()
+    status = EntityStatus()
 
     # Docs
     html = HtmlDocs()

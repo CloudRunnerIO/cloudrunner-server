@@ -6,6 +6,7 @@ from .base import metadata
 from .log import *  # noqa
 from .users import *  # noqa
 from .library import *  # noqa
+from .triggers import *  # noqa
 
 from cloudrunner_server.util.db import checkout_listener
 
@@ -31,7 +32,7 @@ def start():
     Session.bind = conf.sqlalchemy.engine
     metadata.bind = Session.bind
     # print "DROPPING & CREATING TABLES"
-    # metadata.drop_all(conf.sqlalchemy.engine, tables=[Step.__table__, Log.__table__])  # noqa
+    # metadata.drop_all(conf.sqlalchemy.engine, tables=[Workflow.__table__, Inline.__table__])  # noqa
     # metadata.drop_all(conf.sqlalchemy.engine)  # noqa
     # metadata.create_all(conf.sqlalchemy.engine)  # noqa
     # populate(Session)
@@ -121,39 +122,39 @@ def populate(session):
     session.add(store)
     session.commit()
 
-    wf1 = Workflow(name='test/wf1', store=store, owner=demo,
-                   content="#! switch [*]\nhostname")
-    session.add(wf1)
+    scr1 = Script(name='test/scr1', store=store, owner=demo,
+                  content="#! switch [*]\nhostname")
+    session.add(scr1)
 
-    wf2 = Workflow(name='test/wf2', store=store, owner=demo,
-                   content="#! switch [*]\ncloudrunner-node details")
-    session.add(wf2)
+    scr2 = Script(name='test/scr2', store=store, owner=demo,
+                  content="#! switch [*]\ncloudrunner-node details")
+    session.add(scr2)
 
-    wf3 = Workflow(name='test/wf3', store=store, owner=demo, private=True,
-                   content="#! switch [*]\ncloudrunner-node details")
-    session.add(wf3)
+    scr3 = Script(name='test/scr3', store=store, owner=demo, private=True,
+                  content="#! switch [*]\ncloudrunner-node details")
+    session.add(scr3)
 
-    wf4 = Workflow(name='test/wf4', store=store, owner=cloudr, private=True,
-                   content="#! switch [*]\ncloudrunner-node details")
-    session.add(wf4)
+    scr4 = Script(name='test/scr4', store=store, owner=cloudr, private=True,
+                  content="#! switch [*]\ncloudrunner-node details")
+    session.add(scr4)
 
-    wf5 = Workflow(name='test/wf5', store=store, owner=cloudr,
-                   content="#! switch [*]\ncloudrunner-node details")
-    session.add(wf5)
+    scr5 = Script(name='test/scr5', store=store, owner=cloudr,
+                  content="#! switch [*]\ncloudrunner-node details")
+    session.add(scr5)
 
-    inl1 = Inline(name='tools/ifconfig', content='/sbin/ifconfig', owner=demo)
-    session.add(inl1)
+    job1 = Job(name="Daily Build", enabled=True, source=SOURCE_TYPE.CRON,
+               arguments="0 * * * *", owner=demo, target=scr2)
+    session.add(job1)
 
-    inl2 = Inline(name='tools/nginx_status', private=True,
-                  content='/sbin/service/nginx status', owner=demo)
-    session.add(inl2)
+    job2 = Job(name="Error handler", enabled=True,
+               source=SOURCE_TYPE.LOG_CONTENT, arguments="ERROR*",
+               owner=demo, target=scr3)
+    session.add(job2)
 
-    inl3 = Inline(name='tools/nginx_statusx', private=True,
-                  content='/sbin/service/nginx status', owner=cloudr)
-    session.add(inl3)
-
-    inl4 = Inline(name='tools/nginx_statusz', private=False,
-                  content='/sbin/service/nginx status', owner=cloudr)
-    session.add(inl4)
+    job3 = Job(name="BitBucket commit", enabled=True,
+               source=SOURCE_TYPE.EXTERNAL,
+               arguments="ead0bc82d93b4858ba48fafc4c83fba7",
+               owner=demo, target=scr3)
+    session.add(job3)
 
     session.commit()

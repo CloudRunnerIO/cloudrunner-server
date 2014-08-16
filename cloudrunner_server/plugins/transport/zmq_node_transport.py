@@ -230,7 +230,7 @@ class NodeTransport(TransportBackend):
         # Sindicate requests from two endpoints and forward to 'requests'
         while not self.stopped.is_set():
             try:
-                ready = dict(poller.poll(100))
+                ready = dict(poller.poll(1000))
                 if master_sub in ready:
                     _, message = master_sub.recv_multipart()
                     if message:

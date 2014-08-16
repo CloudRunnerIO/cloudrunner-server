@@ -4,7 +4,7 @@ from mako.template import Template
 from sqlalchemy import or_
 from sqlalchemy.orm import exc
 
-from cloudrunner_server.api.model import Inline, User, Org
+from cloudrunner_server.api.model import Script, User, Org
 from cloudrunner_server.api.hooks.zmq_hook import ZmqHook
 
 LOG = logging.getLogger()
@@ -43,11 +43,11 @@ class LibraryRenderer(object):
 
     def render(self, template_path, res):
         try:
-            inl = request.db.query(Inline).join(User, Org).filter(
+            inl = request.db.query(Script).join(User, Org).filter(
                 Org.name == request.user.org,
-                Inline.name == template_path,
-                or_(Inline.private == None,  # noqa
-                    Inline.private == False,  # noqa
+                Script.name == template_path,
+                or_(Script.private == None,  # noqa
+                    Script.private == False,  # noqa
                     User.id == request.user.id)).one()
         except exc.NoResultFound, ex:
             LOG.error(ex)

@@ -105,32 +105,21 @@ class BaseRESTTestCase(BaseTestCase):
         Session.add(store)
         Session.commit()
 
-        wf1 = Workflow(name='test/wf1', store=store, owner=user,
-                       created_at=datetime(2014, 1, 10, 0, 0, 0),
-                       content="#! switch [*]\nhostname")
+        wf1 = Script(name='test/wf1', store=store, owner=user,
+                     created_at=datetime(2014, 1, 10, 0, 0, 0),
+                     content="#! switch [*]\nhostname")
         Session.add(wf1)
 
-        wf2 = Workflow(name='test/wf2', store=store, owner=user,
-                       private=True,
-                       created_at=datetime(2014, 1, 20, 0, 0, 0),
-                       content="#! switch [*]\ncloudrunner-node details")
+        wf2 = Script(name='test/wf2', store=store, owner=user,
+                     private=True,
+                     created_at=datetime(2014, 1, 20, 0, 0, 0),
+                     content="#! switch [*]\ncloudrunner-node details")
         Session.add(wf2)
 
-        wf3 = Workflow(name='test/wf3', store=store, owner=user,
-                       created_at=datetime(2014, 1, 30, 0, 0, 0),
-                       content="#! switch [*]\ncloudrunner-node details")
+        wf3 = Script(name='test/wf3', store=store, owner=user,
+                     created_at=datetime(2014, 1, 30, 0, 0, 0),
+                     content="#! switch [*]\ncloudrunner-node details")
         Session.add(wf3)
-
-        inl1 = Inline(name='tools/ifconfig',
-                      created_at=datetime(2014, 1, 10, 0, 0, 0),
-                      content='/sbin/ifconfig', owner=user)
-        Session.add(inl1)
-
-        inl2 = Inline(name='tools/nginx_status',
-                      private=True,
-                      created_at=datetime(2014, 1, 12, 0, 0, 0),
-                      content='/sbin/service/nginx status', owner=user)
-        Session.add(inl2)
 
         Session.commit()
 

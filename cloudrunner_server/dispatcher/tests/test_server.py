@@ -37,7 +37,9 @@ class TestServer(base.BaseTestCase):
         remote_user_map = Mock()
         remote_user_map.org = Mock(return_value='MyOrg')
         self.assertEqual(
-            disp.list_nodes('', remote_user_map), (True, ['node1', 'node2']))
+            disp.list_nodes('', remote_user_map), (True, [
+                ('node1', None),
+                ('node2', None)]))
 
     def test_scheduler(self):
         disp = Dispatcher('run', config=base.CONFIG)

@@ -9,41 +9,41 @@ Provides functions for library
 
 	* This controller requires authentication headers. See how to add headers in request: :ref:`secure-headers`
 
-.. _workflows:
+.. _scripts:
 
-Workflows
+scripts
 ---------
 
-List workflows
+List scripts
 ^^^^^^^^^^^^^^
 
-**[GET] /rest/library/workflows/**
+**[GET] /rest/library/scripts/**
 
 	Request::
 
 		curl -H "Cr-User=user" -H "Cr-Token=token" \
-			https://rest-api-server/library/workflows
+			https://rest-api-server/library/scripts
 
 	Response::
 
 		{
-			"workflows": {
+			"scripts": {
 				"cloudrunner": [
 					{
 						"created_at": "2014-07-08 00:53:23",
-						"name": "scripts/wf1",
+						"name": "scripts/scr1",
 						"owner": "cloudr",
 						"visibility": "public"
 					},
 					{
 						"created_at": "2014-07-08 00:53:23",
-						"name": "scripts/wf2",
+						"name": "scripts/scr2",
 						"owner": "cloudr",
 						"visibility": "public"
 					},
 					{
 						"created_at": "2014-07-08 00:53:23",
-						"name": "scripts/wf3",
+						"name": "scripts/scr3",
 						"owner": "cloudr",
 						"visibility": "private"
 					}
@@ -51,48 +51,48 @@ List workflows
 			}
 		}
 
-Retrieve workflow details
+Retrieve script details
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 
-**[GET] /rest/library/workflows/<item_name>**
+**[GET] /rest/library/scripts/<item_name>**
 
 	**Params**
 
 		<item_name>
 
-			Workflow to retrieve
+			script to retrieve
 
 	Request::
 
 		curl -H "Cr-User=user" -H "Cr-Token=token" \
-			https://rest-api-server/library/workflows/wf_item1
+			https://rest-api-server/library/scripts/scr_item1
 
 	Response::
 
 		{
-			"workflow": {
+			"script": {
 				"content": "#! switch [*]\ncloudrunner-node details",
 				"created_at": "2014-07-08 00:53:23",
-				"name": "scripts/wf3",
+				"name": "scripts/scr3",
 				"owner": "cloudr",
 				"visibility": "private"
 			}
 		}
 
-Create new workflow
+Create new script
 ^^^^^^^^^^^^^^^^^^^
 
-**[POST] /rest/library/workflows/**
+**[POST] /rest/library/scripts/**
 
 	**POST data**
 
 		<name>
 
-			Creates new workflow
+			Creates new script
 
 		<content>
 
-			Workflow content
+			script content
 
 		<?private>
 
@@ -104,8 +104,8 @@ Create new workflow
 	Request::
 
 		curl -X POST -H "Cr-User=user" -H "Cr-Token=token" \
-			https://rest-api-server/library/workflows \
-			-d name=wf_item1&content="some content"&private=1
+			https://rest-api-server/library/scripts \
+			-d name=scr_item1&content="some content"&private=1
 
 	Response::
 
@@ -113,30 +113,30 @@ Create new workflow
 			"status": "ok"
 		}
 
-Update workflow
+Update script
 ^^^^^^^^^^^^^^^
 
-**[PUT] /rest/library/workflows/**
+**[PUT] /rest/library/scripts/**
 
 or
 
-**[PATCH] /rest/library/workflows/**
+**[PATCH] /rest/library/scripts/**
 
 	**POST data**
 
 		<name>
 
-			Workflow name
+			script name
 
 		<content>
 
-			Workflow content
+			script content
 
 	Request::
 
 		curl -X PUT -H "Cr-User=user" -H "Cr-Token=token" \
-			https://rest-api-server/library/workflows/ \
-			-d name=wf_item1&content="some modified content"&
+			https://rest-api-server/library/scripts/ \
+			-d name=scr_item1&content="some modified content"&
 
 	Response::
 
@@ -144,161 +144,21 @@ or
 			"status": "ok"
 		}
 
-Delete workflow
+Delete script
 ^^^^^^^^^^^^^^^
 
-**[DELETE] /rest/library/workflows/<name>**
+**[DELETE] /rest/library/scripts/<name>**
 
 	**Params**
 
 		<name>
 
-			Workflow name
+			script name
 
 	Request::
 
 		curl -X DELETE -H "Cr-User=user" -H "Cr-Token=token" \
-			https://rest-api-server/library/workflows/wf_item1
-
-	Response::
-
-		{
-			"status": "ok"
-		}
-
-.. _inlines:
-
-Inlines
--------
-
-List inline
-^^^^^^^^^^^
-
-**[GET] /rest/library/inlines/**
-
-	Request::
-
-		curl -H "Cr-User=user" -H "Cr-Token=token" \
-			https://rest-api-server/library/inlines
-
-	Response::
-
-		{
-			"inlines":
-			[
-				{
-					"owner": "testuser",
-					"created_at": "2014-06-30 22:31:14",
-					"name": "tools/ifconfig"
-				},
-				{
-					"owner": "testuser",
-					"created_at": "2014-06-30 22:31:14",
-					"name": "tools/nginx_status"
-				}
-			]
-		}
-
-Retrieve inline details
-^^^^^^^^^^^^^^^^^^^^^^^
-
-**[GET] /rest/library/inlines/<item_name>**
-
-	**Params**
-
-		<item_name>
-
-			Inline to retrieve
-
-	Request::
-
-		curl -H "Cr-User=user" -H "Cr-Token=token" \
-			https://rest-api-server/library/workflows/wf_item1
-
-	Response::
-
-		{
-			"inline": {
-				"content": "echo \"IN TEST\"\nexport TEST=\"1\"",
-				"created_at": "2014-06-30 22:31:14",
-				"name": "test",
-				"owner": "cloudr"
-			}
-		}
-
-Create new inline
-^^^^^^^^^^^^^^^^^
-
-**[POST] /rest/library/inlines/**
-
-	**POST data**
-
-		<name>
-
-			Creates new inline
-
-		<content>
-
-			Inline content
-
-	Request::
-
-		curl -X POST -H "Cr-User=user" -H "Cr-Token=token" \
-			https://rest-api-server/library/inlines \
-			-d name=inl_item1&content="some content"&
-
-	Response::
-
-		{
-			"status": "ok"
-		}
-
-Update inline
-^^^^^^^^^^^^^
-
-**[PUT] /rest/library/inlines/**
-
-or
-
-**[PATCH] /rest/library/inlines/**
-
-	**POST data**
-
-		<name>
-
-			Inline name
-
-		<content>
-
-			Inline content
-
-	Request::
-
-		curl -X PUT -H "Cr-User=user" -H "Cr-Token=token" \
-			https://rest-api-server/library/inlines/ \
-			-d name=inl_item1&content="some modified content"&
-
-	Response::
-
-		{
-			"status": "ok"
-		}
-
-Delete Inline
-^^^^^^^^^^^^^
-
-**[DELETE] /rest/library/inlines/<name>**
-
-	**Params**
-
-		<name>
-
-			Inline name
-
-	Request::
-
-		curl -X DELETE -H "Cr-User=user" -H "Cr-Token=token" \
-			https://rest-api-server/library/inlines/wf_item1
+			https://rest-api-server/library/scripts/scr_item1
 
 	Response::
 

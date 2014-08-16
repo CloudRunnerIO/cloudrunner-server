@@ -122,15 +122,13 @@ class Dispatcher(Daemon):
             LOG.fatal('Cannot find transport class. Set it in config file.')
             exit(1)
 
-        load_plugins(CONFIG)
-
+        self.loaded_plugins = load_plugins(CONFIG, bases=PLUGIN_BASES)
         args_plugins = argparse.ArgumentParser(add_help=False)
         args_plugins.add_argument('-t', '--timeout', help="Timeout")
 
         self.plugin_register = {}
-        for plugin_base in PLUGIN_BASES:
-            for plugin in plugin_base.__subclasses__():
-
+        for plugin_classes in self.loaded_plugins.values():
+            for plugin in plugin_classes:
                 if issubclass(plugin, ArgsProvider):
                     try:
                         _args = plugin().append_args()
@@ -292,7 +290,13 @@ class Dispatcher(Daemon):
         cert = CertController(CONFIG)
         org = remote_user_map.org if self.config.security.use_org else None
         nodes = cert.get_approved_nodes(org)
-        return (True, [node for node in nodes])
+        all_nodes = self.list_active_nodes(payload, remote_user_map,
+                                           **kwargs)[1]
+        active_nodes = [a[0] for a in all_nodes]
+        for node in nodes:
+            if node not in active_nodes:
+                all_nodes.append((node, None))
+        return (True, all_nodes)
 
     def list_pending_nodes(self, payload, remote_user_map, **kwargs):
         cert = CertController(CONFIG)
@@ -301,11 +305,14 @@ class Dispatcher(Daemon):
         return (True, [node[0] for node in nodes])
 
     def list_active_nodes(self, payload, remote_user_map, **kwargs):
-        tenant = self.backend.tenants.get(remote_user_map.org, [])
-        nodes = []
-        if tenant:
-            nodes = [n.name for n in tenant.active_nodes()]
-        return (True, nodes)
+        if hasattr(self, 'backend'):
+            tenant = self.backend.tenants.get(remote_user_map.org, [])
+            nodes = []
+            if tenant:
+                nodes = [(n.name, int(n.last_seen))
+                         for n in tenant.active_nodes()]
+            return (True, nodes)
+        return (True, [])
 
     def attach(self, payload, remote_user_map, **kwargs):
         """

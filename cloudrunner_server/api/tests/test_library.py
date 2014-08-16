@@ -19,7 +19,7 @@ from cloudrunner_server.api.tests import base
 
 class TestLibrary(base.BaseRESTTestCase):
 
-    def test_list_workflows(self):
+    def test_list_scripts(self):
         cr_data = {
             'cloudrunner': [
                 {
@@ -43,30 +43,30 @@ class TestLibrary(base.BaseRESTTestCase):
             ]
         }
 
-        resp = self.app.get('/rest/library/workflows', headers={
+        resp = self.app.get('/rest/library/scripts', headers={
             'Cr-Token': 'PREDEFINED_TOKEN', 'Cr-User': 'testuser'})
         self.assertEqual(resp.status_int, 200, resp.status_int)
         resp_json = json.loads(resp.body)
 
-        self.assertEqual(resp_json['workflows'], cr_data)
+        self.assertEqual(resp_json['scripts'], cr_data)
 
-    def test_show_workflow(self):
-        resp = self.app.get('/rest/library/workflows/test/wf1',
+    def test_show_script(self):
+        resp = self.app.get('/rest/library/scripts/test/wf1',
                             headers={
                                 'Cr-Token': 'PREDEFINED_TOKEN',
                                 'Cr-User': 'testuser'})
         self.assertEqual(resp.status_int, 200, resp.status_int)
         resp_json = json.loads(resp.body)
 
-        self.assertEqual(resp_json['workflow'],
+        self.assertEqual(resp_json['script'],
                          {"content": "#! switch [*]\nhostname",
                           "owner": "testuser",
                           "visibility": "public",
                           'created_at': '2014-01-10 00:00:00',
                           "name": "test/wf1"})
 
-    def test_create_workflow(self):
-        resp = self.app.post('/rest/library/workflows',
+    def test_create_script(self):
+        resp = self.app.post('/rest/library/scripts',
                              "name=wf1&content=some content",
                              headers={
                                  'Cr-Token': 'PREDEFINED_TOKEN',
@@ -76,11 +76,11 @@ class TestLibrary(base.BaseRESTTestCase):
 
         self.assertEqual(resp_json, {"status": "ok"},
                          resp.body)
-        self.assertRedisInc('library.workflows')
-        self.assertRedisPub('library.workflows', 'add')
+        self.assertRedisInc('library.scripts')
+        self.assertRedisPub('library.scripts', 'add')
 
-    def test_create_workflow_private(self):
-        resp = self.app.post('/rest/library/workflows',
+    def test_create_script_private(self):
+        resp = self.app.post('/rest/library/scripts',
                              "name=wf1&content=some content&private=1",
                              headers={
                                  'Cr-Token': 'PREDEFINED_TOKEN',
@@ -90,11 +90,11 @@ class TestLibrary(base.BaseRESTTestCase):
 
         self.assertEqual(resp_json, {"status": "ok"},
                          resp.body)
-        self.assertRedisInc('library.workflows')
-        self.assertRedisPub('library.workflows', 'add')
+        self.assertRedisInc('library.scripts')
+        self.assertRedisPub('library.scripts', 'add')
 
-    def test_create_fail_workflow(self):
-        resp = self.app.post('/rest/library/workflows',
+    def test_create_fail_script(self):
+        resp = self.app.post('/rest/library/scripts',
                              "name=wf1&",
                              headers={
                                  'Cr-Token': 'PREDEFINED_TOKEN',
@@ -107,8 +107,8 @@ class TestLibrary(base.BaseRESTTestCase):
         self.assertRedisInc(None)
         self.assertRedisPub(None, None)
 
-    def test_update_workflow(self):
-        resp = self.app.put('/rest/library/workflows',
+    def test_update_script(self):
+        resp = self.app.put('/rest/library/scripts',
                             "name=test/wf1&content=some modified content",
                             headers={
                                 'Cr-Token': 'PREDEFINED_TOKEN',
@@ -119,11 +119,11 @@ class TestLibrary(base.BaseRESTTestCase):
         self.assertEqual(resp_json, {"status": "ok"},
                          resp.body)
 
-        self.assertRedisInc('library.workflows')
-        self.assertRedisPub('library.workflows', 'update')
+        self.assertRedisInc('library.scripts')
+        self.assertRedisPub('library.scripts', 'update')
 
-    def test_delete_workflow(self):
-        resp = self.app.delete('/rest/library/workflows/test/wf1',
+    def test_delete_script(self):
+        resp = self.app.delete('/rest/library/scripts/test/wf1',
                                headers={
                                    'Cr-Token': 'PREDEFINED_TOKEN',
                                    'Cr-User': 'testuser'})
@@ -133,138 +133,19 @@ class TestLibrary(base.BaseRESTTestCase):
         self.assertEqual(resp_json, {"status": "ok"},
                          resp.body)
 
-        self.assertRedisInc('library.workflows')
-        self.assertRedisPub('library.workflows', 'delete')
+        self.assertRedisInc('library.scripts')
+        self.assertRedisPub('library.scripts', 'delete')
 
-    def test_delete_fail_workflow(self):
-        resp = self.app.delete('/rest/library/workflows/test/non-existing',
+    def test_delete_fail_script(self):
+        resp = self.app.delete('/rest/library/scripts/test/non-existing',
                                headers={
                                    'Cr-Token': 'PREDEFINED_TOKEN',
                                    'Cr-User': 'testuser'})
         self.assertEqual(resp.status_int, 200, resp.status_int)
         resp_json = json.loads(resp.body)
 
-        self.assertEqual(resp_json, {"error": "Workflow not found!"},
+        self.assertEqual(resp_json, {"error": "Script not found!"},
                          resp.body)
 
         self.assertRedisInc(None)
         self.assertRedisPub(None, None)
-
-    def test_list_inlines(self):
-        cr_data = [
-            {
-                "owner": "testuser",
-                "visibility": "public",
-                "name": "tools/ifconfig"},
-            {
-                "owner": "testuser",
-                "visibility": "private",
-                "name": "tools/nginx_status"
-            }
-        ]
-
-        resp = self.app.get('/rest/library/inlines', headers={
-            'Cr-Token': 'PREDEFINED_TOKEN', 'Cr-User': 'testuser'})
-        self.assertEqual(resp.status_int, 200, resp.status_int)
-        resp_json = json.loads(resp.body)
-
-        self.assertEqual(resp_json['inlines'], cr_data)
-
-    def test_show_inline(self):
-        resp = self.app.get('/rest/library/inlines/tools/ifconfig',
-                            headers={
-                                'Cr-Token': 'PREDEFINED_TOKEN',
-                                'Cr-User': 'testuser'})
-        self.assertEqual(resp.status_int, 200, resp.status_int)
-        resp_json = json.loads(resp.body)
-
-        self.assertEqual(resp_json['inline'],
-                         {"content": "/sbin/ifconfig",
-                          "owner": "testuser",
-                          "visibility": "public",
-                          "name": "tools/ifconfig"}, resp.body)
-
-    def test_create_inline(self):
-        resp = self.app.post('/rest/library/inlines',
-                             "name=wf1&content=some content",
-                             headers={
-                                 'Cr-Token': 'PREDEFINED_TOKEN',
-                                 'Cr-User': 'testuser'})
-        self.assertEqual(resp.status_int, 200, resp.status_int)
-        resp_json = json.loads(resp.body)
-
-        self.assertEqual(resp_json, {"status": "ok"},
-                         resp.body)
-        self.assertRedisInc('library.inlines')
-        self.assertRedisPub('library.inlines', 'add')
-
-    def test_create_inline_private(self):
-        resp = self.app.post('/rest/library/inlines',
-                             "name=wf1&content=some content&private=1",
-                             headers={
-                                 'Cr-Token': 'PREDEFINED_TOKEN',
-                                 'Cr-User': 'testuser'})
-        self.assertEqual(resp.status_int, 200, resp.status_int)
-        resp_json = json.loads(resp.body)
-
-        self.assertEqual(resp_json, {"status": "ok"},
-                         resp.body)
-        self.assertRedisInc('library.inlines')
-        self.assertRedisPub('library.inlines', 'add')
-
-    def test_create_inline_fail(self):
-        resp = self.app.post('/rest/library/inlines',
-                             "name=wf1&",
-                             headers={
-                                 'Cr-Token': 'PREDEFINED_TOKEN',
-                                 'Cr-User': 'testuser'})
-        self.assertEqual(resp.status_int, 200, resp.status_int)
-        resp_json = json.loads(resp.body)
-
-        self.assertEqual(resp_json, {"error": "Value not present: 'content'"},
-                         resp.body)
-        self.assertRedisInc(None)
-        self.assertRedisPub(None, None)
-
-    def test_update_inline(self):
-        resp = self.app.put('/rest/library/inlines',
-                            "name=tools/nginx_status&content="
-                            "some modified content",
-                            headers={
-                                'Cr-Token': 'PREDEFINED_TOKEN',
-                                'Cr-User': 'testuser'})
-        self.assertEqual(resp.status_int, 200, resp.status_int)
-        resp_json = json.loads(resp.body)
-
-        self.assertEqual(resp_json, {"status": "ok"},
-                         resp.body)
-        self.assertRedisInc('library.inlines')
-        self.assertRedisPub('library.inlines', 'update')
-
-    def test_delete_inline(self):
-        resp = self.app.delete('/rest/library/inlines/tools/nginx_status',
-                               headers={
-                                   'Cr-Token': 'PREDEFINED_TOKEN',
-                                   'Cr-User': 'testuser'})
-        self.assertEqual(resp.status_int, 200, resp.status_int)
-        resp_json = json.loads(resp.body)
-
-        self.assertRedisInc('library.inlines')
-        self.assertRedisPub('library.inlines', 'delete')
-
-        self.assertEqual(resp_json, {"status": "ok"},
-                         resp.body)
-
-    def test_delete_inline_fail(self):
-        resp = self.app.delete('/rest/library/inlines/test/non-existing',
-                               headers={
-                                   'Cr-Token': 'PREDEFINED_TOKEN',
-                                   'Cr-User': 'testuser'})
-        self.assertEqual(resp.status_int, 200, resp.status_int)
-        resp_json = json.loads(resp.body)
-
-        self.assertRedisInc(None)
-        self.assertRedisPub(None, None)
-
-        self.assertEqual(resp_json, {"error": "Inline not found!"},
-                         resp.body)

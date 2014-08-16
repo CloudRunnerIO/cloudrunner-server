@@ -17,7 +17,6 @@ import os
 from unittest import TestCase
 
 import cloudrunner.plugins as plugins
-import cloudrunner_server.plugins as server_plugins
 from cloudrunner.util.config import Config
 from cloudrunner.util.loader import load_plugins
 
@@ -27,9 +26,7 @@ LOG = logging.getLogger("BaseTest")
 _plugins = [('common',
             os.path.join(os.path.dirname(plugins.__file__),
                          "state/functions.py")),
-            ('signals',
-            os.path.join(os.path.dirname(server_plugins.__file__),
-                         "signals/signal_handler.py"))]
+            ('signals', "cloudrunner_server.plugins.signals.signal_handler")]
 
 CONFIG.plugins.items = lambda: _plugins
 

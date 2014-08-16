@@ -30,8 +30,10 @@ class Dispatch(HookController):
     def nodes(self):
         success, nodes = request.zmq("list_nodes",
                                      return_type="json")
+        print success, nodes
         if success:
-            return O.nodes(_list=nodes)
+            return O.nodes(_list=[dict(name=n[0],
+                                       last_seen=n[1]) for n in nodes])
         else:
             return O.error(msg=nodes)
 
@@ -45,14 +47,15 @@ class Dispatch(HookController):
             return O.error(msg=nodes)
 
     @expose('json')
-    @signal('activities', 'add',
+    @signal('logs', 'add',
             when=lambda x: bool(x.get("dispatch")))
     def execute(self, **kwargs):
         if request.method != "POST":
             return O.dispatch(error="Use POST method instead")
 
         try:
-            if request.headers['Content-Type'].find("x-www-form-urlencoded"):
+            if request.headers['Content-Type'].find(
+                    "x-www-form-urlencoded") >= 0:
                 kw = kwargs
             else:
                 kw = request.json_body

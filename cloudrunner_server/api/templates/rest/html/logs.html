@@ -162,10 +162,16 @@
 </div>
 <div class="section" id="load-log-output">
 <h3>Load log output<a class="headerlink" href="#load-log-output" title="Permalink to this headline">&#182;</a></h3>
-<p><strong>[GET] /rest/logs/output/&lt;log_uuid&gt;?tail=100&amp;step=1,2&amp;nodes=node1,node2&amp;show=stdout&amp;filter=^ERROR</strong></p>
+<p><strong>[GET] /rest/logs/output?&lt;uuid&gt;=1234567890&amp;&lt;tags&gt;=sometag?tail=100&amp;step=1,2&amp;nodes=node1,node2&amp;show=stdout&amp;filter=^ERROR</strong></p>
 <blockquote>
 <div><p><strong>Params</strong>:</p>
-<div class="highlight-python"><div class="highlight"><pre>&lt;tail&gt;
+<div class="highlight-python"><div class="highlight"><pre>&lt;uuid&gt;
+        UUID of a log to get output.
+
+&lt;tags&gt;
+        Tags to select log uuids. Mutually exclusive with uuid.
+
+&lt;tail&gt;
         Show last N lines from stdout/stderr.
 
 &lt;step&gt;
@@ -183,33 +189,35 @@
 </div>
 <p>Request:</p>
 <div class="highlight-python"><div class="highlight"><pre>curl -H &quot;Cr-User=user&quot; -H &quot;Cr-Token=token&quot; \
-        https://rest-api-server/logs/output/d127f47490474c4a990c534f8b377d65
+        https://rest-api-server/logs/output?uuid=d127f47490474c4a990c534f8b377d65
 </pre></div>
 </div>
 <p>Response:</p>
 <div class="highlight-python"><div class="highlight"><pre><span class="p">{</span>
-        <span class="s">&quot;output&quot;</span><span class="p">:</span> <span class="p">[</span>
+    <span class="s">&quot;outputs&quot;</span><span class="p">:</span> <span class="p">[</span>
+        <span class="p">{</span>
+            <span class="s">&quot;created_at&quot;</span><span class="p">:</span> <span class="s">&quot;2014-08-03 19:07:52&quot;</span><span class="p">,</span>
+            <span class="s">&quot;etag&quot;</span><span class="p">:</span> <span class="mi">3</span><span class="p">,</span>
+            <span class="s">&quot;status&quot;</span><span class="p">:</span> <span class="s">&quot;finished&quot;</span><span class="p">,</span>
+            <span class="s">&quot;steps&quot;</span><span class="p">:</span> <span class="p">[</span>
                 <span class="p">{</span>
-                        <span class="s">&quot;step&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
-                        <span class="s">&quot;stderr&quot;</span><span class="p">:</span> <span class="p">[],</span>
-                        <span class="s">&quot;stdout&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s">&quot;rest-api&quot;</span><span class="p">]</span>
-                <span class="p">},</span>
-                <span class="p">{</span>
-                        <span class="s">&quot;step&quot;</span><span class="p">:</span> <span class="mi">2</span><span class="p">,</span>
-                        <span class="s">&quot;stderr&quot;</span><span class="p">:</span> <span class="p">[],</span>
-                        <span class="s">&quot;stdout&quot;</span><span class="p">:</span> <span class="p">[]</span>
-                <span class="p">},</span>
-                <span class="p">{</span>
-                        <span class="s">&quot;step&quot;</span><span class="p">:</span> <span class="mi">3</span><span class="p">,</span>
-                        <span class="s">&quot;stderr&quot;</span><span class="p">:</span> <span class="p">[],</span>
-                        <span class="s">&quot;stdout&quot;</span><span class="p">:</span> <span class="p">[</span>
-                                <span class="s">&quot;CentOS release 6.5 (Final)&quot;</span><span class="p">,</span>
-                                <span class="s">&quot;LSB_VERSION=base-4.0-amd64:base-4.0-noarch:core-4.0-amd64:core-4.0-noarch&quot;</span><span class="p">,</span>
-                                <span class="s">&quot;CentOS release 6.5 (Final)&quot;</span><span class="p">,</span>
-                                <span class="s">&quot;CentOS release 6.5 (Final)&quot;</span>
-                        <span class="p">]</span>
+                    <span class="s">&quot;lines&quot;</span><span class="p">:</span> <span class="p">[</span>
+                        <span class="s">&quot;ERROR&quot;</span>
+                    <span class="p">],</span>
+                    <span class="s">&quot;node&quot;</span><span class="p">:</span> <span class="s">&quot;yoga&quot;</span><span class="p">,</span>
+                    <span class="s">&quot;result&quot;</span><span class="p">:</span> <span class="p">[</span>
+                        <span class="p">{</span>
+                            <span class="s">&quot;node&quot;</span><span class="p">:</span> <span class="s">&quot;yoga&quot;</span><span class="p">,</span>
+                            <span class="s">&quot;ret_code&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
+                            <span class="s">&quot;run_as&quot;</span><span class="p">:</span> <span class="s">&quot;@&quot;</span>
+                        <span class="p">}</span>
+                    <span class="p">],</span>
+                    <span class="s">&quot;step&quot;</span><span class="p">:</span> <span class="mi">1</span>
                 <span class="p">}</span>
-        <span class="p">]</span>
+            <span class="p">],</span>
+            <span class="s">&quot;uuid&quot;</span><span class="p">:</span> <span class="s">&quot;8bbc8d45a3b4436bba9b54963d1fe30f&quot;</span>
+        <span class="p">}</span>
+    <span class="p">]</span>
 <span class="p">}</span>
 </pre></div>
 </div>
@@ -218,7 +226,7 @@
 <dt>The log output can be rendered in plain text, if specified in headers: Accept: text/plain</dt>
 <dd><p class="first">Request:</p>
 <div class="highlight-python"><div class="highlight"><pre>curl -H &quot;Cr-User=user&quot; -H &quot;Cr-Token=token&quot; -H &quot;Accept: text/plain&quot; \
-        https://rest-api-server/logs/output/d127f47490474c4a990c534f8b377d65
+        https://rest-api-server/logs/output?uuid=d127f47490474c4a990c534f8b377d65
 </pre></div>
 </div>
 <p>Response:</p>

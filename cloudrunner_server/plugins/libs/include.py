@@ -66,10 +66,10 @@ class LibIncludePlugin(IncludeLibPluginBase, ArgsProvider, ManagedPlugin):
         return reply == 0, ['N/A', data]
 
     def _load_local(self, user_org, name, **kwargs):
-        inl = self.session.query(Inline).join(User, Org).filter(
-            Inline.name == name, Org.name == user_org[1],
-                or_(Inline.private == None,  # noqa
-                    Inline.private == False,  # noqa
+        inl = self.session.query(Script).join(User, Org).filter(
+            Script.name == name, Org.name == user_org[1],
+                or_(Script.private == None,  # noqa
+                    Script.private == False,  # noqa
                     User.username == user_org[0])).first()
 
         if inl:

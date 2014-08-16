@@ -61,22 +61,3 @@ class Tag(TableBase):
     log_id = Column(Integer, ForeignKey('logs.id'))
 
     log = relationship(Log, backref=backref('tags'))
-
-"""
-class Output(TableBase):
-    __tablename__ = 'outputs'
-
-    id = Column(Integer, primary_key=True)
-    created_at = Column(DateTime, default=func.now())
-    node = Column(String(100))
-    run_as = Column(String(100))
-    stdout = Column(Text)
-    stderr = Column(Text)
-    stdin = Column(Text)
-    exit_code = Column(Integer)
-    quit_signal = Column(Integer)
-
-    step_id = Column(Integer, ForeignKey('steps.id'))
-
-    step = relationship('Step')
-"""

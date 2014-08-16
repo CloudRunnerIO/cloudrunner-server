@@ -12,6 +12,7 @@
 #  * without the express permission of CloudRunner.io
 #  *******************************************************/
 
+from datetime import datetime
 import json
 from mock import call, patch
 
@@ -75,7 +76,7 @@ class TestScheduler(base.BaseRESTTestCase):
            'scheduler.schedule_manager')
     def test_create(self, scheduler, auth):
         scheduler.add.return_value = (True, None)
-        auth.create_token.return_value = ("JOB_TOKEN", 0)
+        auth.create_token.return_value = ("JOB_TOKEN", datetime(2020, 10, 1))
         resp = self.app.post('/rest/scheduler/jobs',
                              "name=job1&period=* 0 * * *&content=somecontent",
                              headers={
@@ -83,16 +84,17 @@ class TestScheduler(base.BaseRESTTestCase):
                                  'Cr-User': 'testuser'})
         self.assertEqual(resp.status_int, 200, resp.status_int)
         resp_json = json.loads(resp.body)
+        print resp_json
 
         kw = {'exec': 'curl -s -H "Cr-User: testuser" -H '
               '"Cr-Token: JOB_TOKEN" '
-              'https://localhost/rest/dispatch/execute '
-              '-d data="${cat %s}"'}
+              'https://localhost/rest/dispatch/execute?tags=scheduler,job1 '
+              '-d data="$(cat %s)"'}
         self.assertEqual(scheduler.add.call_args_list,
                          [call('testuser',
                                payload='somecontent',
                                name='job1',
-                               auth_token='PREDEFINED_TOKEN',
+                               auth_token='JOB_TOKEN',
                                period='* 0 * * *',
                                **kw)])
 

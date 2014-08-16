@@ -1,10 +1,15 @@
+import time
+
 from pecan import conf, expose, request
 from pecan.hooks import HookController
 
 from cloudrunner_server.api.hooks.error_hook import ErrorHook
 from cloudrunner_server.api.hooks.signal_hook import SignalHook, signal
 from cloudrunner_server.api.hooks.user_hook import UserHook
-from cloudrunner_server.api.util import JsonOutput as O
+from cloudrunner_server.api.util import (JsonOutput as O,
+                                         REDIS_AUTH_USER,
+                                         REDIS_AUTH_TOKEN)
+from cloudrunner_server.api.client import redis_client as r
 
 schedule_manager = conf.schedule_manager
 user_manager = conf.auth_manager
@@ -22,12 +27,6 @@ class Scheduler(HookController):
             if success:
                 jobs.extend(res)
             return O.jobs(_list=jobs)
-        else:
-            name = "/".join(args).rstrip('/')
-            success, res = schedule_manager.show(request.user.username, name)
-            if success:
-                    return O.job(**res)
-        return O.jobs(_list=[])
 
     @jobs.when(method='POST', template='json')
     @signal('scheduler.jobs', 'create',
@@ -40,16 +39,25 @@ class Scheduler(HookController):
             period = kwargs['period']
             (token, expires) = user_manager.create_token(
                 request.user.username, "", expiry=99999999)
+            key = REDIS_AUTH_TOKEN % request.user.username
+            ts = time.mktime(expires.timetuple())
+            r.zadd(key, token, ts)
+
+            r.hmset(REDIS_AUTH_USER % request.user.username,
+                    dict(uid=str(request.user.id), org=request.user.org))
+
+            tags = ["scheduler", name]
             exec_ = {"exec": 'curl -s -H "Cr-User: %s" -H "Cr-Token: %s" '
-                     '%sdispatch/execute '
-                     '-d data="${cat %%s}"' % (request.user.username,
+                     '%sdispatch/execute?tags=%s '
+                     '-d data="$(cat %%s)"' % (request.user.username,
                                                token,
-                                               conf.REST_SERVER_URL)}
+                                               conf.REST_SERVER_URL,
+                                               ",".join(tags))}
             success, res = schedule_manager.add(request.user.username,
                                                 name=name,
                                                 payload=content,
                                                 period=period,
-                                                auth_token=request.user.token,
+                                                auth_token=token,
                                                 **exec_)
             if success:
                 return dict(status='ok')

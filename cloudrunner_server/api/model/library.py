@@ -14,32 +14,17 @@ class Store(TableBase):
     store_type = Column(String(255))
 
 
-class Workflow(TableBase):
-    __tablename__ = 'workflows'
+class Script(TableBase):
+    __tablename__ = 'scripts'
 
     id = Column(Integer, primary_key=True)
     name = Column(String(255), unique=True)
     created_at = Column(DateTime, default=func.now())
     content = Column(Text)
     private = Column(Boolean, default=False)
-
+    mime_type = Column(String(255), default="text/plain")
     store_id = Column(Integer, ForeignKey('stores.id'))
     owner_id = Column(Integer, ForeignKey('users.id'))
 
     store = relationship(Store)
-    owner = relationship(User)
-
-
-class Inline(TableBase):
-    __tablename__ = 'inlines'
-
-    id = Column(Integer, primary_key=True)
-    name = Column(String(255), unique=True)
-    created_at = Column(DateTime, default=func.now())
-    lang = Column(String(100), default='bash')
-    content = Column(Text)
-    private = Column(Boolean, default=False)
-
-    owner_id = Column(Integer, ForeignKey('users.id'))
-
     owner = relationship(User)
