@@ -14,7 +14,7 @@ class Library(TableBase):
     )
 
     id = Column(Integer, primary_key=True)
-    name = Column(String(255))
+    name = Column(String(255), unique=True)
     is_link = Column(Boolean)
     owner_id = Column(Integer, ForeignKey(User.id))
     private = Column(Boolean, default=False)

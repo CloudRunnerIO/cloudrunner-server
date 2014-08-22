@@ -30,7 +30,7 @@ class Library(HookController):
 
     @repo.when(method='POST', template='json')
     @signal('library.repo', 'add',
-            when=lambda x: x.get("status") == "ok")
+            when=lambda x: x.get('success', {}).get("status") == "ok")
     def library_create(self, name=None, **kwargs):
         try:
             name = name or kwargs['name']
@@ -46,16 +46,19 @@ class Library(HookController):
                           owner_id=request.user.id)
             request.db.add(root)
             request.db.commit()
-            return O.status('ok')
+            return O.success(status='ok')
         except KeyError, kex:
             return O.error(msg='Value not present: %s' % kex, field=str(kex))
+        except IntegrityError:
+            request.db.rollback()
+            return O.error("Repo with this name already exists")
         except Exception, ex:
             request.db.rollback()
             return O.error(msg='%r' % ex)
 
     @repo.when(method='PUT', template='json')
     @signal('library.repo', 'update',
-            when=lambda x: x.get("status") == "ok")
+            when=lambda x: x.get('success', {}).get("status") == "ok")
     def library_update(self, name=None, **kwargs):
         try:
             new_name = kwargs['name']
@@ -65,7 +68,7 @@ class Library(HookController):
             library.private = private
             request.db.add(library)
             request.db.commit()
-            return O.status('ok')
+            return O.success(status='ok')
         except KeyError, kex:
             return O.error(msg='Value not present: %s' % kex, field=str(kex))
         except Exception, ex:
@@ -74,7 +77,7 @@ class Library(HookController):
 
     @repo.when(method='DELETE', template='json')
     @signal('library.repo', 'delete',
-            when=lambda x: x.get("status") == "ok")
+            when=lambda x: x.get('success', {}).get("status") == "ok")
     def library_delete(self, *args, **kwargs):
         try:
             name = args[0]
@@ -86,7 +89,7 @@ class Library(HookController):
                 request.db.delete(folder)
             request.db.delete(library)
             request.db.commit()
-            return O.status('ok')
+            return O.success(status='ok')
         except KeyError, kex:
             return O.error(msg='Value not present: %s' % kex, field=str(kex))
         except IntegrityError:
@@ -151,7 +154,7 @@ class Library(HookController):
 
     @script.when(method='POST', template='json')
     @signal('library.scripts', 'add',
-            when=lambda x: x.get("status") == "ok")
+            when=lambda x: x.get('success', {}).get("status") == "ok")
     def script_create(self, name=None, **kwargs):
         try:
             name = name or kwargs['name']
@@ -172,7 +175,7 @@ class Library(HookController):
                          mime_type=mime)
             request.db.add(scr)
             request.db.commit()
-            return O.status('ok')
+            return O.success(status='ok')
         except KeyError, kex:
             return O.error(msg='Value not present: %s' % kex, field=str(kex))
         except Exception, ex:
@@ -181,7 +184,7 @@ class Library(HookController):
 
     @script.when(method='PUT', template='json')
     @signal('library.scripts', 'update',
-            when=lambda x: x.get("status") == "ok")
+            when=lambda x: x.get('success', {}).get("status") == "ok")
     def script_update(self, name=None, **kwargs):
         try:
             name = name or kwargs['name']
@@ -204,7 +207,7 @@ class Library(HookController):
             scr.mime_type = mime
             request.db.add(scr)
             request.db.commit()
-            return O.status('ok')
+            return O.success(status='ok')
         except KeyError, kex:
             return O.error(msg='Value not present: %s' % kex, field=str(kex))
         except Exception, ex:
@@ -218,7 +221,7 @@ class Library(HookController):
 
     @script.when(method='DELETE', template='json')
     @signal('library.scripts', 'delete',
-            when=lambda x: x.get("status") == "ok")
+            when=lambda x: x.get('success', {}).get("status") == "ok")
     def script_delete(self, *args, **kwargs):
         try:
             full_path = "/".join(args).strip("/")
@@ -236,7 +239,7 @@ class Library(HookController):
                 return O.error(msg="Script '%s' not found" % name)
             request.db.delete(scr)
             request.db.commit()
-            return O.status('ok')
+            return O.success(status='ok')
         except KeyError, kex:
             return O.error(msg='Value not present: %s' % kex)
         except IntegrityError:
@@ -256,7 +259,7 @@ class Library(HookController):
 
     @folder.when(method='POST', template='json')
     @signal('library.folder', 'add',
-            when=lambda x: x.get("status") == "ok")
+            when=lambda x: x.get('success', {}).get("status") == "ok")
     def folder_create(self, name=None, **kwargs):
         try:
             name = name or kwargs['name']
@@ -276,7 +279,7 @@ class Library(HookController):
                             full_name="%s%s/" % (parent.full_name, name))
             request.db.add(folder)
             request.db.commit()
-            return O.status('ok')
+            return O.success(status='ok')
         except KeyError, kex:
             return O.error(msg='Value not present: %s' % kex, field=str(kex))
         except IntegrityError:
@@ -288,7 +291,7 @@ class Library(HookController):
 
     @folder.when(method='DELETE', template='json')
     @signal('library.folder', 'delete',
-            when=lambda x: x.get("status") == "ok")
+            when=lambda x: x.get('success', {}).get("status") == "ok")
     def folder_delete(self, *args, **kwargs):
         try:
             full_path = "/".join(args).strip("/")
@@ -304,7 +307,7 @@ class Library(HookController):
                 return O.error(msg="Folder '%s' not found" % name)
             request.db.delete(folder)
             request.db.commit()
-            return O.status('ok')
+            return O.success(status='ok')
         except KeyError, kex:
             return O.error(msg='Value not present: %s' % kex)
         except IntegrityError:

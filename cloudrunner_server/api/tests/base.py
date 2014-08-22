@@ -103,10 +103,14 @@ class BaseRESTTestCase(BaseTestCase):
         # Library data
         repo1 = Library(name='cloudrunner', owner=user)
         Session.add(repo1)
+        repo11 = Library(name='empty_repo', owner=user)
+        Session.add(repo11)
         repo2 = Library(name='private', owner=user2, private=True)
         Session.add(repo2)
         root1 = Folder(name="/", full_name="/", library=repo1, owner=user)
         Session.add(root1)
+        root11 = Folder(name="/", full_name="/", library=repo11, owner=user)
+        Session.add(root11)
         root2 = Folder(name="/", full_name="/", library=repo2, owner=user)
         Session.add(root2)
         folder1 = Folder(name="/folder1", full_name="/folder1/",
@@ -170,11 +174,11 @@ class BaseRESTTestCase(BaseTestCase):
 
         Session.commit()
 
-        job1 = Job(name="trigger1", enabled=True, source=1, 
-            arguments="* * * * *", target_id=1, owner_id=1)
+        job1 = Job(name="trigger1", enabled=True, source=1,
+                   arguments="* * * * *", target_id=1, owner_id=1)
         Session.add(job1)
         job2 = Job(name="trigger2", enabled=True, source=2, arguments="JOB",
-            target_id=3, owner_id=2)
+                   target_id=3, owner_id=2)
         Session.add(job2)
         Session.commit()
 

@@ -19,10 +19,116 @@ from cloudrunner_server.api.tests import base
 
 class TestLibrary(base.BaseRESTTestCase):
 
+    def test_list_repos(self):
+        cr_data = {'libraries': [
+            {'owner': 'testuser',
+             'is_link': None,
+             'name': 'cloudrunner',
+             'private': False},
+            {'owner': 'testuser',
+             'is_link': None,
+             'name': 'empty_repo',
+             'private': False}]}
+
+        resp = self.app.get('/rest/library/repo', headers={
+            'Cr-Token': 'PREDEFINED_TOKEN', 'Cr-User': 'testuser'})
+        self.assertEqual(resp.status_int, 200, resp.status_int)
+        resp_json = json.loads(resp.body)
+
+        self.assertEqual(resp_json, cr_data, resp_json)
+
+    def test_create_repo(self):
+        resp = self.app.post('/rest/library/repo',
+                             "name=newrepo&private=0,is_link=1"
+                             "&folder=cloudrunner/folder1/",
+                             headers={
+                                 'Cr-Token': 'PREDEFINED_TOKEN',
+                                 'Cr-User': 'testuser'})
+        self.assertEqual(resp.status_int, 200, resp.status_int)
+        resp_json = json.loads(resp.body)
+
+        self.assertEqual(resp_json, {'success': {'status': 'ok'}}, resp_json)
+
+    def test_create_repo_fail_name(self):
+        resp = self.app.post('/rest/library/repo',
+                             "name=empty_repo&private=0,is_link=1"
+                             "&folder=cloudrunner/folder1/",
+                             headers={
+                                 'Cr-Token': 'PREDEFINED_TOKEN',
+                                 'Cr-User': 'testuser'})
+        self.assertEqual(resp.status_int, 200, resp.status_int)
+        resp_json = json.loads(resp.body)
+
+        self.assertEqual(resp_json,
+                         {'error': 'Repo with this name already exists'},
+                         resp_json)
+
+    def test_delete_repo(self):
+        resp = self.app.delete('/rest/library/repo/empty_repo',
+                               headers={
+                                   'Cr-Token': 'PREDEFINED_TOKEN',
+                                   'Cr-User': 'testuser'})
+        self.assertEqual(resp.status_int, 200, resp.status_int)
+        resp_json = json.loads(resp.body)
+
+        self.assertEqual(resp_json,
+                         {'success': {'status': 'ok'}},
+                         resp_json)
+
+    def test_delete_repo_fail_non_empty(self):
+        resp = self.app.delete('/rest/library/repo/cloudrunner',
+                               headers={
+                                   'Cr-Token': 'PREDEFINED_TOKEN',
+                                   'Cr-User': 'testuser'})
+        self.assertEqual(resp.status_int, 200, resp.status_int)
+        resp_json = json.loads(resp.body)
+
+        self.assertEqual(resp_json,
+                         {'error': 'Cannot remove repo, not empty'},
+                         resp_json)
+
+    def test_create_folder(self):
+        resp = self.app.post('/rest/library/folder',
+                             "name=folder_new"
+                             "&folder=cloudrunner/folder1/",
+                             headers={
+                                 'Cr-Token': 'PREDEFINED_TOKEN',
+                                 'Cr-User': 'testuser'})
+        self.assertEqual(resp.status_int, 200, resp.status_int)
+        resp_json = json.loads(resp.body)
+
+        self.assertEqual(resp_json, {'success': {'status': 'ok'}}, resp_json)
+
+    def test_create_folder_fail_name(self):
+        resp = self.app.post('/rest/library/folder',
+                             "name=folder11"
+                             "&folder=cloudrunner/folder1/",
+                             headers={
+                                 'Cr-Token': 'PREDEFINED_TOKEN',
+                                 'Cr-User': 'testuser'})
+        self.assertEqual(resp.status_int, 200, resp.status_int)
+        resp_json = json.loads(resp.body)
+
+        self.assertEqual(resp_json,
+                         {'error': 'Cannot add folder, check name'}, resp_json)
+
+    def test_delete_folder(self):
+        resp = self.app.delete(
+            '/rest/library/folder/cloudrunner/folder1/folder11',
+            headers={
+                'Cr-Token': 'PREDEFINED_TOKEN',
+                'Cr-User': 'testuser'})
+        self.assertEqual(resp.status_int, 200, resp.status_int)
+        resp_json = json.loads(resp.body)
+
+        self.assertEqual(resp_json,
+                         {'success': {'status': 'ok'}},
+                         resp_json)
+
     def test_list_scripts(self):
         cr_data = {'folders': [
                    {'owner': 'testuser',
-                    'id': 3,
+                    'id': 4,
                     'full_name':
                     '/folder1/',
                     'name': '/folder1'}
@@ -48,7 +154,7 @@ class TestLibrary(base.BaseRESTTestCase):
         result = {u"content": u"#! switch [*]\ncloudrunner-node details",
                   u"owner": u"testuser",
                   u"mime": u"text/workflow",
-                  u'created_at': u'2014-01-20 00:00:00',
+                  'created_at': '2014-01-20 00:00:00',
                   u"name": u"test2"}
         self.assertEqual(resp_json['script'], result)
 
@@ -62,7 +168,7 @@ class TestLibrary(base.BaseRESTTestCase):
         self.assertEqual(resp.status_int, 200, resp.status_int)
         resp_json = json.loads(resp.body)
 
-        self.assertEqual(resp_json, {"status": "ok"},
+        self.assertEqual(resp_json, {"success": {"status": "ok"}},
                          resp.body)
         self.assertRedisInc('library.scripts')
         self.assertRedisPub('library.scripts', 'add')
@@ -94,7 +200,7 @@ class TestLibrary(base.BaseRESTTestCase):
         self.assertEqual(resp.status_int, 200, resp.status_int)
         resp_json = json.loads(resp.body)
 
-        self.assertEqual(resp_json, {"status": "ok"},
+        self.assertEqual(resp_json, {"success": {"status": "ok"}},
                          resp.body)
 
         self.assertRedisInc('library.scripts')
@@ -109,7 +215,7 @@ class TestLibrary(base.BaseRESTTestCase):
         self.assertEqual(resp.status_int, 200, resp.status_int)
         resp_json = json.loads(resp.body)
 
-        self.assertEqual(resp_json, {"status": "ok"},
+        self.assertEqual(resp_json, {"success": {"status": "ok"}},
                          resp.body)
 
         self.assertRedisInc('library.scripts')
