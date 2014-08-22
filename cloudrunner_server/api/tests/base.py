@@ -33,6 +33,7 @@ class BaseRESTTestCase(BaseTestCase):
 
         self.redis.zrangebyscore.return_value = ['PREDEFINED_TOKEN']
         self.redis.hgetall.return_value = dict(uid=1, org='MyOrg')
+        self.redis.smembers.return_value = {'role1', 'is_test_user'}
         self.redis.get.return_value = "10"
         self.populate()
         global engine
@@ -62,16 +63,22 @@ class BaseRESTTestCase(BaseTestCase):
         Session.add(org2)
 
         user = User(username='testuser', email='email',
-                    password=hash_token('testpassword'), org=org)
+                    created_at=datetime(2014, 8, 1),
+                    password=hash_token('testpassword'), org=org,
+                    first_name="User", last_name="One", department="Dept",
+                    position="Sr engineer")
         Session.add(user)
         Session.commit()
 
         user2 = User(username='testuser2', email='email',
-                     password=hash_token('testpassword'), org=org)
+                     created_at=datetime(2014, 8, 2),
+                     password=hash_token('testpassword'), org=org,
+                     first_name="User", last_name="Second", department="HR",
+                     position="HR manager")
         Session.add(user2)
         Session.commit()
 
-        grp_admin = Group(name="admin")
+        grp_admin = Group(name="admin", org=org)
         grp_admin.users.append(user2)
         Session.add(grp_admin)
         Session.commit()
@@ -82,19 +89,22 @@ class BaseRESTTestCase(BaseTestCase):
         Session.add(token)
         Session.commit()
 
-        role1 = Role(name="default", user_id=user.id,
+        role_admin = Role(group=grp_admin, servers='production',
+                          as_user='root')
+        Session.add(role_admin)
+        role1 = Role(user_id=user.id,
                      servers="*", as_user='root')
         Session.add(role1)
 
-        role2 = Role(name="production", user_id=user.id,
+        role2 = Role(user_id=user.id,
                      servers="prod.*", as_user='guest')
         Session.add(role2)
 
-        role3 = Role(name="staging", user_id=user.id,
+        role3 = Role(user_id=user.id,
                      servers="stg.*", as_user='developer')
         Session.add(role3)
 
-        role2_1 = Role(name="default", user_id=user2.id,
+        role2_1 = Role(user_id=user2.id,
                        servers="stg.*", as_user='developer')
         Session.add(role2_1)
 

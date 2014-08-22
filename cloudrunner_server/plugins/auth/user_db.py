@@ -323,7 +323,7 @@ class AuthDb(object):
             if exists:
                 return False, "Role already exists"
 
-            role = Role(name="", user_id=user.id, servers=node, as_user=role)
+            role = Role(user_id=user.id, servers=node, as_user=role)
             self.db.add(role)
             self.db.commit()
             return True, "Role added"
