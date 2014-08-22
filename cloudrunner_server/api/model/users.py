@@ -34,13 +34,13 @@ class User(TableBase):
     org_id = Column(Integer, ForeignKey('organizations.id'))
 
     org = relationship('Org')
-    rights = relationship('Right')
+    permissions = relationship('Permission')
     roles = relationship('Role')
     tokens = relationship('Token')
 
 
-class Right(TableBase):
-    __tablename__ = 'rights'
+class Permission(TableBase):
+    __tablename__ = 'permissions'
 
     id = Column(Integer, primary_key=True)
     name = Column(String(100))

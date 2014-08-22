@@ -110,12 +110,12 @@ class Triggers(HookController):
             except exc.NoResultFound, ex:
                 LOG.error(ex)
                 request.db.rollback()
-                return O.error("Job %s not found" % name)
+                return O.error("Job %s not found" % job_id)
         return O.error("Invalid request")
 
     @jobs.when(method='POST', template='json')
-    @signal('triggers.jobs', 'attach',
-            when=lambda x: x.get("status") == "ok")
+    @signal('triggers.jobs', 'create',
+            when=lambda x: x.get("success", {}).get("status") == "ok")
     def create(self, name=None, **kwargs):
         try:
             name = name or kwargs['name']
@@ -123,7 +123,7 @@ class Triggers(HookController):
             target = kwargs['target']
             if target:
                 target = target.lstrip('/')
-            args = kwargs['args']
+            args = kwargs['arguments']
             tags = kwargs.get('tags') or []
 
             tags.extend(["Scheduler", name])
@@ -185,7 +185,7 @@ class Triggers(HookController):
 
     @jobs.when(method='PATCH', template='json')
     @signal('triggers.jobs', 'update',
-            when=lambda x: x.get("status") == "ok")
+            when=lambda x: x.get("success", {}).get("status") == "ok")
     def patch(self, name=None, **kw):
         try:
             kwargs = kw or request.json
@@ -234,7 +234,7 @@ class Triggers(HookController):
 
     @jobs.when(method='PUT', template='json')
     @signal('triggers.jobs', 'update',
-            when=lambda x: x.get("status") == "ok")
+            when=lambda x: x.get("success", {}).get("status") == "ok")
     def update(self, **kw):
         kwargs = kw or request.json
         try:
@@ -249,7 +249,7 @@ class Triggers(HookController):
 
     @jobs.when(method='DELETE', template='json')
     @signal('triggers.jobs', 'delete',
-            when=lambda x: x.get("status") == "ok")
+            when=lambda x: x.get("success", {}).get("status") == "ok")
     def delete(self, job_id, **kwargs):
         try:
             job = Job.own(request).filter(

@@ -12,98 +12,164 @@
 #  * without the express permission of CloudRunner.io
 #  *******************************************************/
 
+from datetime import datetime
 import json
-from mock import call
-from mock import patch
+from mock import call, patch, Mock
 
 from cloudrunner_server.api.tests import base
+from cloudrunner_server.api.model.triggers import random_token
 
 
 class TestTriggers(base.BaseRESTTestCase):
 
-    @patch('cloudrunner_server.api.v0_9.controllers.triggers.sig_manager')
-    def test_list_triggers(self, signals):
-        signals.list.return_value = (True, [
-            {
-                "auth": "True",
-                "is_link": "True",
-                "signal": "BEST",
-                "target": "http://site.com",
-                "user": "cloudr"
-            },
-            {
-                "auth": "True",
-                "is_link": "True",
-                "signal": "TEST",
-                "target": "http://site.com",
-                "user": "cloudr"
-            }
-        ])
+    def test_list_jobs(self):
+        response = [
+            {'name': 'trigger1',
+             'script': 'test1',
+             'enabled': True,
+             'private': False,
+             'source': 1,
+             'arguments': '* * * * *',
+             'owner': 'testuser',
+             'path': '/folder1/',
+             'id': 1,
+             'library': 'cloudrunner'},
+            {'name': 'trigger2',
+             'script': 'test1',
+             'enabled': True,
+             'private': False,
+             'source': 2,
+             'arguments': 'JOB',
+             'owner': 'testuser2',
+             'path': '/folder2/',
+             'id': 2,
+             'library': 'private'}
+        ]
 
-        resp = self.app.get('/rest/triggers/bindings',
+        resp = self.app.get('/rest/triggers/jobs',
                             headers={
                                 'Cr-Token': 'PREDEFINED_TOKEN',
                                 'Cr-User': 'testuser'})
         self.assertEqual(resp.status_int, 200, resp.status_int)
         resp_json = json.loads(resp.body)
 
-        self.assertEqual(signals.list.call_args_list,
-                         [call(('testuser', 'MyOrg'))])
+        for trig in resp_json['triggers']:
+            trig.pop('key')
+            trig.pop('created_at')
         self.assertEqual(resp_json['triggers'],
-                         signals.list.return_value[1])
+                         response, resp_json['triggers'])
 
-    @patch('cloudrunner_server.api.v0_9.controllers.triggers.sig_manager')
-    def test_attach_signal(self, signals):
-        signals.attach.return_value = (True, None)
-        resp = self.app.post('/rest/triggers/bindings',
-                             "signal=SIG&target=TGT",
+    def test_show_job(self):
+        resp = self.app.get('/rest/triggers/jobs/1/trigger1', headers={
+            'Cr-Token': 'PREDEFINED_TOKEN', 'Cr-User': 'testuser'})
+        self.assertEqual(resp.status_int, 200, resp.status_int)
+        resp_json = json.loads(resp.body)
+
+        resp_json['job'].pop('created_at')
+        self.assertEqual(resp_json['job'], {"name": "trigger1",
+                                            "script": "test1",
+                                            "enabled": True,
+                                            "private": False,
+                                            "source": 1,
+                                            "arguments": "* * * * *",
+                                            "owner": "testuser",
+                                            "path": "/folder1/",
+                                            "id": 1,
+                                            "library": "cloudrunner"},
+                         resp.body)
+
+    @patch('cloudrunner_server.api.v0_9.controllers.'
+           'triggers.user_manager')
+    @patch('cloudrunner_server.api.v0_9.controllers.'
+           'triggers.schedule_manager')
+    @patch('cloudrunner_server.api.model.triggers.random_token')
+    def test_create(self, rand, scheduler, auth):
+        rand.return_value = '111111111'
+        scheduler.add.return_value = (True, None)
+        auth.create_token.return_value = ("JOB_TOKEN", datetime(2020, 10, 1))
+        resp = self.app.post('/rest/triggers/jobs',
+                             "name=trigger_new&arguments=* 0 * * *&target=/folder1/scr1"  # noqa
+                             "&source=1",
                              headers={
                                  'Cr-Token': 'PREDEFINED_TOKEN',
                                  'Cr-User': 'testuser'})
         self.assertEqual(resp.status_int, 200, resp.status_int)
         resp_json = json.loads(resp.body)
 
-        self.assertEqual(signals.attach.call_args_list,
-                         [call(('testuser', 'MyOrg'), 'SIG', 'TGT', None)])
+        kw = {'exec': 'curl https://localhost/rest/fire/?user=testuser\\&token=JOB_TOKEN'  # noqa
+        '\\&trigger=trigger_new\\&key=111111111\\&tags=Scheduler,trigger_new '}  # noqa
 
-        self.assertRedisInc('triggers.binding')
-        self.assertRedisPub('triggers.binding', 'attach')
+        self.assertEqual(resp_json,  {"success": {"status": "ok"}},
+                         resp.body)
+        self.assertEqual(scheduler.add.call_args_list,
+                         [call('testuser',
+                               auth_token='JOB_TOKEN',
+                               period='* 0 * * *',
+                               name='trigger_new',
+                               **kw)])
+        self.assertRedisInc('triggers.jobs')
+        self.assertRedisPub('triggers.jobs', 'create')
 
-        self.assertEqual(resp_json, {'status': 'ok'}, resp.body)
+    @patch('cloudrunner_server.api.v0_9.controllers.'
+           'triggers.schedule_manager')
+    def test_update(self, scheduler):
+        scheduler.edit.return_value = (True, None)
 
-    @patch('cloudrunner_server.api.v0_9.controllers.triggers.sig_manager')
-    def test_detach_signal(self, signals):
-        signals.detach.return_value = (True, None)
-        resp = self.app.put('/rest/triggers/bindings/',
-                            "signal=SIG&target=http://target", headers={
-                                'Cr-Token': 'PREDEFINED_TOKEN',
-                                'Cr-User': 'testuser'
-                            })
+        resp = self.app.patch('/rest/triggers/jobs',
+                              "name=trigger1&arguments=* 1 2 3 *",
+                              headers={
+                                  'Cr-Token': 'PREDEFINED_TOKEN',
+                                  'Cr-User': 'testuser'})
         self.assertEqual(resp.status_int, 200, resp.status_int)
         resp_json = json.loads(resp.body)
 
-        self.assertRedisInc('triggers.binding')
-        self.assertRedisPub('triggers.binding', 'detach')
+        self.assertEqual(resp_json, {"success": {"status": "ok"}}, resp.body)
+        self.assertEqual(scheduler.edit.call_args_list,
+                         [call('testuser',
+                               name='trigger1',
+                               period='* 1 2 3 *')])
 
-        self.assertEqual(signals.detach.call_args_list,
-                         [call(('testuser', 'MyOrg'), 'SIG', 'http://target')])
-        self.assertEqual(resp_json, {'status': 'ok'}, resp.body)
+        self.assertRedisInc('triggers.jobs')
+        self.assertRedisPub('triggers.jobs', 'update')
 
-    @patch('cloudrunner_server.api.v0_9.controllers.triggers.sig_manager')
-    def test_detach_signal_fake(self, signals):
-        signals.detach.return_value = (False, "Signal not detached")
-        resp = self.app.put('/rest/triggers/bindings/',
-                            "signal=SIG&target=http://target",
+    @patch('cloudrunner_server.api.v0_9.controllers.'
+           'triggers.schedule_manager')
+    def test_update_fail(self, scheduler):
+        scheduler.edit.return_value = (True, None)
+
+        resp = self.app.put('/rest/triggers/jobs',
+                            "name=job1",
                             headers={
                                 'Cr-Token': 'PREDEFINED_TOKEN',
                                 'Cr-User': 'testuser'})
         self.assertEqual(resp.status_int, 200, resp.status_int)
         resp_json = json.loads(resp.body)
 
+        self.assertEqual(scheduler.edit.call_args_list, [])
+
         self.assertRedisInc(None)
         self.assertRedisPub(None, None)
 
-        self.assertEqual(signals.detach.call_args_list,
-                         [call(('testuser', 'MyOrg'), 'SIG', 'http://target')])
         self.assertEqual(resp_json,
-                         {'error': "Signal not detached"}, resp.body)
+                         {"error": {"msg": "Value not present: ''source''",
+                         "field": "'source'"}},
+                         resp.body)
+
+    @patch('cloudrunner_server.api.v0_9.controllers.'
+           'triggers.schedule_manager')
+    def test_delete_job(self, scheduler):
+        scheduler.delete.return_value = (True, None)
+
+        resp = self.app.delete('/rest/triggers/jobs/1',
+                               headers={
+                                   'Cr-Token': 'PREDEFINED_TOKEN',
+                                   'Cr-User': 'testuser'})
+        self.assertEqual(resp.status_int, 200, resp.status_int)
+        resp_json = json.loads(resp.body)
+
+        # self.assertEqual(scheduler.delete.call_args_list,
+        #                 [call('testuser', name='job1')])
+
+        self.assertEqual(resp_json, {"success": {"status": "ok"}}, resp.body)
+        self.assertRedisInc('triggers.jobs')
+        self.assertRedisPub('triggers.jobs', 'delete')

@@ -101,25 +101,49 @@ class BaseRESTTestCase(BaseTestCase):
         Session.commit()
 
         # Library data
-        store = Store(name='cloudrunner', store_type='local')
-        Session.add(store)
+        repo1 = Library(name='cloudrunner', owner=user)
+        Session.add(repo1)
+        repo2 = Library(name='private', owner=user2, private=True)
+        Session.add(repo2)
+        root1 = Folder(name="/", full_name="/", library=repo1, owner=user)
+        Session.add(root1)
+        root2 = Folder(name="/", full_name="/", library=repo2, owner=user)
+        Session.add(root2)
+        folder1 = Folder(name="/folder1", full_name="/folder1/",
+                         library=repo1, owner=user, parent=root1)
+        Session.add(folder1)
+        folder11 = Folder(name="/folder11", full_name="/folder1/folder11/",
+                          library=repo1, owner=user, parent=folder1)
+        Session.add(folder11)
+        folder2 = Folder(name="/folder2", full_name="/folder2/",
+                         library=repo2, owner=user, parent=root2)
+        Session.add(folder2)
+        folder21 = Folder(name="/folder11", full_name="/folder1/folder11/",
+                          library=repo2, owner=user, parent=folder2)
+        Session.add(folder21)
         Session.commit()
 
-        wf1 = Script(name='test/wf1', store=store, owner=user,
+        wf1 = Script(name='test1', folder=folder1, owner=user,
                      created_at=datetime(2014, 1, 10, 0, 0, 0),
-                     content="#! switch [*]\nhostname")
+                     content="hostname")
         Session.add(wf1)
 
-        wf2 = Script(name='test/wf2', store=store, owner=user,
-                     private=True,
+        wf2 = Script(name='test2', folder=folder11, owner=user,
                      created_at=datetime(2014, 1, 20, 0, 0, 0),
+                     mime_type="text/workflow",
                      content="#! switch [*]\ncloudrunner-node details")
         Session.add(wf2)
 
-        wf3 = Script(name='test/wf3', store=store, owner=user,
+        wf3 = Script(name='test1', folder=folder2, owner=user2,
                      created_at=datetime(2014, 1, 30, 0, 0, 0),
-                     content="#! switch [*]\ncloudrunner-node details")
+                     content="cloudrunner-node details")
         Session.add(wf3)
+
+        wf4 = Script(name='test2', folder=folder21, owner=user2,
+                     created_at=datetime(2014, 1, 30, 0, 0, 0),
+                     mime_type="text/template",
+                     content="template 123")
+        Session.add(wf4)
 
         Session.commit()
 
@@ -144,6 +168,14 @@ class BaseRESTTestCase(BaseTestCase):
         step2 = Step(target="nodeX nodeY", timeout=90, script="script")
         log3.steps.append(step2)
 
+        Session.commit()
+
+        job1 = Job(name="trigger1", enabled=True, source=1, 
+            arguments="* * * * *", target_id=1, owner_id=1)
+        Session.add(job1)
+        job2 = Job(name="trigger2", enabled=True, source=2, arguments="JOB",
+            target_id=3, owner_id=2)
+        Session.add(job2)
         Session.commit()
 
     def assertRedisInc(self, value):

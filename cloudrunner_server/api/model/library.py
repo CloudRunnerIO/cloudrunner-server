@@ -96,9 +96,12 @@ class Folder(TableBase):
 
 class Script(TableBase):
     __tablename__ = 'scripts'
+    __table_args__ = (
+        UniqueConstraint("name", "folder_id"),
+    )
 
     id = Column(Integer, primary_key=True)
-    name = Column(String(255), unique=True)
+    name = Column(String(255))
     folder_id = Column(Integer, ForeignKey(Folder.id))
     created_at = Column(DateTime, default=func.now())
     content = Column(Text)

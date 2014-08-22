@@ -19,27 +19,37 @@ class TestLogs(base.BaseRESTTestCase):
 
     def test_list_logs(self):
         logs = [
-            {'created_at': '2014-08-03 00:00:00',
-             'tags': [],
-             'exit_code': -1,
-             'timeout': None,
-             'user': 'testuser',
-             'targets': ['*', "nodeX nodeY"],
-             'uuid': '3333333333'},
-            {'created_at': '2014-08-02 00:00:00',
-             'tags': ['tag1', 'tag2'],
-             'exit_code': 0,
-             'timeout': None,
-             'user': 'testuser',
-             'targets': [],
-             'uuid': '2222222222'},
-            {'created_at': '2014-08-01 00:00:00',
-             'tags': [],
-             'exit_code': -99,
-             'timeout': None,
-             'user': 'testuser',
-             'targets': [],
-             'uuid': '1111111111'}
+            {
+                'uuid': '3333333333',
+                'source_type': None,
+                'created_at': '2014-08-03 00:00:00',
+                'tags': None,
+                'exit_code': -1,
+                'source': None,
+                'user': 'testuser',
+                'timeout': None,
+                'targets': ['*', 'nodeX nodeY']
+            }, {
+                'uuid': '2222222222',
+                'source_type': None,
+                'created_at': '2014-08-02 00:00:00',
+                'tags': ['tag1', 'tag2'],
+                'exit_code': 0,
+                'source': None,
+                'user': 'testuser',
+                'timeout': None,
+                'targets': None
+            }, {
+                'uuid': '1111111111',
+                'source_type': None,
+                'created_at': '2014-08-01 00:00:00',
+                'tags': None,
+                'exit_code': -99,
+                'source': None,
+                'user': 'testuser',
+                'timeout': None,
+                'targets': None
+            }
         ]
 
         resp = self.app.get('/rest/logs/all', headers={

@@ -27,7 +27,7 @@ event: 1234567
 data: 1234567
 
 """
-        resp = self.app.get('/rest/events/get?1234567', headers={
+        resp = self.app.get('/rest/status/get?1234567', headers={
             'Cr-Token': 'PREDEFINED_TOKEN',
             'Cr-User': 'testuser',
             'Last-Event-Id': '100'})
