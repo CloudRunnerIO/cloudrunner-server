@@ -32,3 +32,10 @@ def random_token(*args, **kwargs):
     token = ''.join(SystemRandom().choice(token_chars)
                     for x in range(length))
     return token
+
+
+class Wrap(object):
+
+    def __init__(self, **kwargs):
+        for k, v in kwargs.items():
+            setattr(self, k, v)

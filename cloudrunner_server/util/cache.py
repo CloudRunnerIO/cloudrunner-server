@@ -109,7 +109,7 @@ class RegBase(object):
 class RegWriter(RegBase):
 
     def store(self, frame):
-        LOG.info("Storing frame %s" % vars(frame))
+        LOG.debug("Storing frame %s" % vars(frame))
         seq_no = self.redis.incr("___INCR___")
         data_key = self._get_rel_id(self.key, **frame.header)
         if frame.body:
@@ -122,6 +122,9 @@ class RegWriter(RegBase):
 
         self.redis.publish(self.id, 'update')
         self.redis.set(self.id, seq_no)
+
+    def notify(self, what):
+        self.redis.incr(what)
 
 
 class RegReader(RegBase):

@@ -46,17 +46,23 @@ class DbLogger(LoggerPluginBase):
 
     def _finalize(self, user=None, org=None, session_id=None,
                   result=None, step_id=None, **kwargs):
-        log = self.db.query(Log).join(Step, User, Org).filter(
-            Log.uuid == session_id,
-            Org.name == org).one()
-        if step_id + 1 == len(log.steps):
-            log.status = LOG_STATUS.Finished
-        success = True
-        for node in result:
-            success = success and (str(node['ret_code']) == '0')
-        if not success:
-            log.exit_code = 1
+        try:
+            log = self.db.query(Log).join(Step, User, Org).filter(
+                Log.uuid == session_id,
+                Org.name == org).one()
+            if step_id + 1 == len(log.steps):
+                log.status = LOG_STATUS.Finished
+            success = True
+            for node in result:
+                success = success and (str(node['ret_code']) == '0')
+            if success:
+                log.exit_code = 0
+            else:
+                log.exit_code = 1
             self.db.add(log)
+            self.db.commit()
+        except:
+            self.db.rollback()
 
     @wrap_error
     def log(self, **kwargs):
@@ -67,3 +73,4 @@ class DbLogger(LoggerPluginBase):
             cache.store(frame)
             if frame.frame_type == "S":
                 self._finalize(session_id=_id, org=org, **kwargs)
+                cache.notify("logs")

@@ -7,6 +7,8 @@ Base = declarative_base(metadata=metadata)
 
 
 def getattr_func(x, y):
+    if not x:
+        return None
     if isinstance(x, list):
         return [getattr(a, y) for a in x]
     else:

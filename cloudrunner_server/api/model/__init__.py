@@ -118,29 +118,61 @@ def populate(session):
     group2.roles.append(role3)
     session.commit()
 
-    store = Store(name='cloudrunner', store_type='local')
-    session.add(store)
+    public = Library(name="public", owner=demo, org=org)
+    private = Library(name="private", owner=demo, private=True, org=org)
+
+    public_root = Folder(name="/", owner=cloudr, library=public, full_name="/")
+    private_root = Folder(
+        name="/", owner=cloudr, library=private, full_name="/")
+
+    folder1 = Folder(name="folder", owner=cloudr, library=public,
+                     parent=public_root, full_name="/folder/")
+    folder11 = Folder(name="sub folder", owner=cloudr, library=public,
+                      full_name="/folder/sub folder/", parent=folder1)
+    folder2 = Folder(name="my folder", owner=demo, library=private,
+                     parent=private_root, full_name="/my folder/")
+    session.add(public)
+    session.add(private)
+    session.add(folder1)
+    session.add(folder11)
+    session.add(folder2)
     session.commit()
 
-    scr1 = Script(name='test/scr1', store=store, owner=demo,
+    scr0 = Script(name='script somewhere', owner=demo, folder=folder11,
+                  content="#! switch [*]\nhostname")
+    session.add(scr0)
+
+    scr00 = Script(name='script where', owner=demo, folder=folder1,
+                   content="#! switch [*]\nhostname")
+    session.add(scr00)
+
+    scr1 = Script(name='scr1', folder=folder1, owner=demo,
                   content="#! switch [*]\nhostname")
     session.add(scr1)
 
-    scr2 = Script(name='test/scr2', store=store, owner=demo,
+    scr2 = Script(name='scr2', folder=folder1, owner=demo,
                   content="#! switch [*]\ncloudrunner-node details")
     session.add(scr2)
 
-    scr3 = Script(name='test/scr3', store=store, owner=demo, private=True,
+    scr3 = Script(name='scr3', folder=folder1, owner=cloudr,
                   content="#! switch [*]\ncloudrunner-node details")
     session.add(scr3)
 
-    scr4 = Script(name='test/scr4', store=store, owner=cloudr, private=True,
+    scr4 = Script(name='scr4', folder=folder2, owner=demo,
                   content="#! switch [*]\ncloudrunner-node details")
     session.add(scr4)
 
-    scr5 = Script(name='test/scr5', store=store, owner=cloudr,
+    scr5 = Script(name='scr5', folder=folder2, owner=demo,
                   content="#! switch [*]\ncloudrunner-node details")
     session.add(scr5)
+
+    scr6 = Script(name='scr6', folder=folder11, owner=cloudr,
+                  content="#! switch [*]\ncloudrunner-node details")
+    session.add(scr6)
+
+    scr7 = Script(name='scr7', folder=folder11, owner=demo,
+                  content="#! switch [*]\ncloudrunner-node details")
+    session.add(scr7)
 
     job1 = Job(name="Daily Build", enabled=True, source=SOURCE_TYPE.CRON,
                arguments="0 * * * *", owner=demo, target=scr2)

@@ -63,6 +63,7 @@ class Master(object):
             try:
                 socket.send_multipart([json.dumps(req.pack(extra=True))])
                 if not socket.poll(self.timeout * 1000):
+                    LOG.warning("Timeout of %s sec expired" % self.timeout)
                     return None
                 if socket.poll(1000):
                     ret = socket.recv_multipart()

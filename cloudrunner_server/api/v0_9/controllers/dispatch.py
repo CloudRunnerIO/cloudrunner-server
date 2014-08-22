@@ -1,3 +1,4 @@
+from datetime import datetime
 from pecan import expose, request
 from pecan.hooks import HookController
 import re
@@ -30,7 +31,6 @@ class Dispatch(HookController):
     def nodes(self):
         success, nodes = request.zmq("list_nodes",
                                      return_type="json")
-        print success, nodes
         if success:
             return O.nodes(_list=[dict(name=n[0],
                                        last_seen=n[1]) for n in nodes])
@@ -50,22 +50,30 @@ class Dispatch(HookController):
     @signal('logs', 'add',
             when=lambda x: bool(x.get("dispatch")))
     def execute(self, **kwargs):
-        if request.method != "POST":
-            return O.dispatch(error="Use POST method instead")
-
         try:
             if request.headers['Content-Type'].find(
                     "x-www-form-urlencoded") >= 0:
                 kw = kwargs
             else:
-                kw = request.json_body
+                try:
+                    kw = request.json_body
+                    kw.update(kwargs)
+                except:
+                    kw = kwargs
 
+            source = kwargs.get('source')
+            source_type = kwargs.get('source_type')
+            if not source:
+                now = datetime.now()
+                source = 'Anonymous exec: %s' % now.isoformat()[:19]
             script = kw['data']
             timeout = kw.get('timeout', 0)
             tags = sorted(re.split('[\s,;]', kw.get('tags', '')))
             log = Log(exit_code=-99,
                       status=LOG_STATUS.Running,
                       timeout=timeout,
+                      source=source,
+                      source_type=source_type,
                       owner_id=request.user.id)
             for tag in tags:
                 log.tags.append(Tag(name=tag))

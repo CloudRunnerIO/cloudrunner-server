@@ -1,3 +1,5 @@
+import logging
+from httplib2 import urllib
 from pecan import conf, expose, request
 from pecan.hooks import HookController
 from sqlalchemy.orm import exc
@@ -5,40 +7,106 @@ from sqlalchemy.orm import exc
 from cloudrunner_server.api.hooks.error_hook import ErrorHook
 from cloudrunner_server.api.hooks.db_hook import DbHook
 from cloudrunner_server.api.hooks.signal_hook import SignalHook, signal
+from cloudrunner_server.api.hooks.user_hook import UserHook
+from cloudrunner_server.api.hooks.zmq_hook import ZmqHook
 from cloudrunner_server.api.model import (Job, User, Script,
                                           Org, SOURCE_TYPE)
-from cloudrunner_server.api.util import JsonOutput as O
+from cloudrunner_server.api.v0_9.controllers.dispatch import Dispatch
+from cloudrunner_server.api.util import (JsonOutput as O,
+                                         Wrap)
 
 sig_manager = conf.signal_manager
 schedule_manager = conf.schedule_manager
+user_manager = conf.auth_manager
+
+JOB_FIELDS = ('name', 'target', 'arguments', 'enabled', 'private')
+LOG = logging.getLogger()
+
+
+class TriggerSwitch(HookController):
+
+    __hooks__ = [ZmqHook(), UserHook(), SignalHook(), ErrorHook(), DbHook()]
+
+    @expose('json', generic=True)
+    def index(self, user=None, token=None, trigger=None, key=None, **kwargs):
+        if not user:
+            return O.error(msg="Unauthorized request")
+
+        LOG.info("Received trigger event(user: %s, trigger: %s) from: %s" % (
+            user, trigger, request.client_addr))
+
+        if not token:
+            # Check for external job
+            j = request.db.query(Job).join(User).filter(
+                Job.name == trigger,
+                Job.source == SOURCE_TYPE.EXTERNAL,
+                User.username == user,
+                Job.arguments == key).first()
+            if not j:
+                return O.error("Invalid request")
+
+            (token, expires) = user_manager.create_token(
+                user, "", expiry=30)
+
+        user_id, access_map = user_manager.validate(
+            user, token)
+
+        if not user_id or not access_map:
+            return O.error(msg="Unauthorized request")
+
+        request.user = Wrap(id=user_id,
+                            username=user,
+                            org=access_map.org,
+                            token=token)
+
+        q = Job.active(request).filter(
+            Job.name == trigger)
+        d = Dispatch()
+        request.reset_zmq(user, token)
+        results = []
+        for trig in q.all():
+            if (trig.source == SOURCE_TYPE.EXTERNAL
+                and trig.arguments == key) or (trig.key == key):
+
+                    results.append(dict(id=trig.id,
+                                        name=trig.name,
+                                        result=d.execute(
+                                        data=trig.target.content,
+                                        source=trig.target.name,
+                                        source_type=2,
+                                        **kwargs)))
+
+        return O.result(runs=results, trigger=trigger)
 
 
 class Triggers(HookController):
 
-    __hooks__ = [SignalHook(), ErrorHook(), DbHook()]
+    __hooks__ = [UserHook(), SignalHook(), ErrorHook(), DbHook()]
 
     @expose('json', generic=True)
     def jobs(self, *args, **kwargs):
         if not args:
             triggers = []
-            query = request.db.query(Job).join(User, Org).filter(
-                Org.name == request.user.org)
+            query = Job.visible(request)
             triggers = [t.serialize(
-                skip=['id', 'owner_id', 'target_id'],
+                skip=['owner_id', 'target_id'],
                 rel=[('owner.username', 'owner'),
-                     ('target.name', 'script')])
+                     ('target.name', 'script'),
+                     ('target.folder.library.name', 'library'),
+                     ('target.folder.full_name', 'path')])
                 for t in query.all()]
             return O.triggers(_list=sorted(triggers,
                                            key=lambda t: t['name'].lower()))
         else:
-            name = "/".join(args).rstrip('/')
+            job_id = args[0]
             try:
-                job = request.db.query(Job).join(User, Org).filter(
-                    Job.name == name, Org.name == request.user.org).one()
+                job = Job.visible(request).filter(Job.id == job_id).one()
                 return O.job(**job.serialize(
-                    skip=['id', 'owner_id', 'target_id'],
+                    skip=['key', 'owner_id', 'target_id'],
                     rel=[('owner.username', 'owner'),
-                         ('target.name', 'script')]))
+                         ('target.name', 'script'),
+                         ('target.folder.library.name', 'library'),
+                         ('target.folder.full_name', 'path')]))
             except exc.NoResultFound, ex:
                 LOG.error(ex)
                 request.db.rollback()
@@ -53,47 +121,114 @@ class Triggers(HookController):
             name = name or kwargs['name']
             source = kwargs['source']
             target = kwargs['target']
+            if target:
+                target = target.lstrip('/')
             args = kwargs['args']
+            tags = kwargs.get('tags') or []
+
+            tags.extend(["Scheduler", name])
+
             try:
-                SOURCE_TYPE.from_value(int(kwargs['source']))
+                source = int(source)
+                SOURCE_TYPE.from_value(source)
             except:
-                return O.error(msg="Invalid source")
+                return O.error(msg="Invalid source: %s" % source)
             job = Job(name=name, owner_id=request.user.id, enabled=True,
                       source=kwargs['source'],
                       arguments=args)
 
-            script = request.db.query(Script).filter(
-                Script.name == target).first()
+            script = Script.find(request, target).first()
             if script:
                 job.target = script
 
-            if source == '1':
+            request.db.add(job)
+            request.db.commit()
+            # Post-create
+            if source == SOURCE_TYPE.CRON:
                 # CRON
-                user_org = (request.user.username, request.user.org)
-                # success, res = schedule_manager.add(request.user.username,
-                #                                    name=name,
-                #                                    payload=content,
-                #                                    period=args,
-                #                                    auth_token=token,
-                #                                    **exec_)
-            elif source == '2':
+                (token, expires) = user_manager.create_token(
+                    request.user.username, "", expiry=99999999)
+                exec_ = {"exec": 'curl '
+                         '%sfire/?user=%s\&token=%s\&'
+                         'trigger=%s\&key=%s\&tags=%s '
+                         % (conf.REST_SERVER_URL,
+                            urllib.quote(request.user.username),
+                            token,
+                            urllib.quote(job.name),
+                            urllib.quote(job.key),
+                            ",".join(urllib.quote(t) for t in tags))}
+                success, res = schedule_manager.add(
+                    request.user.username,
+                    name=name,
+                    period=args,
+                    auth_token=token,
+                    **exec_)
+            elif source == SOURCE_TYPE.ENV:
                 # ENV
                 # Regiter at publisher
                 pass
-            elif source == '3':
+            elif source == SOURCE_TYPE.LOG_CONTENT:
                 # LOG
                 # Regiter at publisher
                 pass
-            elif source == '4':
+            elif source == SOURCE_TYPE.EXTERNAL:
                 # EXTERNAL
                 pass
-            request.db.add(job)
-            request.db.commit()
-            return dict(status='ok')
+            return O.success(status='ok')
         except KeyError, kex:
             request.db.rollback()
             return O.error(msg='Value not present: %s' % kex)
         except Exception, ex:
+            LOG.exception(ex)
+            request.db.rollback()
+            return O.error(msg='%r' % ex)
+
+    @jobs.when(method='PATCH', template='json')
+    @signal('triggers.jobs', 'update',
+            when=lambda x: x.get("status") == "ok")
+    def patch(self, name=None, **kw):
+        try:
+            kwargs = kw or request.json
+            name = name or kwargs.pop('name')
+
+            job = Job.own(request).filter(
+                Job.name == name).first()
+            if not job:
+                return O.error(msg="Job %s not found" % name)
+
+            if 'source' in kwargs:
+                try:
+                    job.source = int(kwargs.pop('source'))
+                except:
+                    request.db.rollback()
+                    return O.error(msg="Invalid source", field='source')
+            if 'target' in kwargs:
+                target = kwargs.pop('target').lstrip('/')
+                script = Script.find(request, target).first()
+                if script:
+                    job.target = script
+                else:
+                    return O.error(msg="Invalid target", field='target')
+
+            for k, v in kwargs.items():
+                if k in JOB_FIELDS and v is not None and hasattr(job, k):
+                    setattr(job, k, v)
+
+            request.db.add(job)
+            request.db.commit()
+
+            if job.source == SOURCE_TYPE.CRON:
+                # CRON
+                success, res = schedule_manager.edit(
+                    request.user.username,
+                    name=job.name,
+                    period=job.arguments)
+            return O.success(status='ok')
+        except KeyError, kex:
+            request.db.rollback()
+            return O.error(msg="Value not present: '%s'" % kex, field=kex)
+        except Exception, ex:
+            LOG.exception(ex)
             request.db.rollback()
             return O.error(msg='%r' % ex)
 
@@ -101,47 +236,45 @@ class Triggers(HookController):
     @signal('triggers.jobs', 'update',
             when=lambda x: x.get("status") == "ok")
     def update(self, **kw):
-        try:
-            kwargs = kw or request.json
-            name = kwargs['name']
-            content = kwargs['content']
-            period = kwargs['period']
-            success, res = schedule_manager.edit(request.user.username,
-                                                 name=name,
-                                                 payload=content,
-                                                 period=period)
-            if success:
-                return dict(status='ok')
-            else:
-                return dict(error=res)
-        except KeyError, kex:
-            return dict(error='Value not present: %s' % kex)
-        except Exception, ex:
-            return dict(error='%r' % ex)
-
-    @jobs.when(method='PATCH', template='json')
-    @signal('triggers.jobs', 'update',
-            when=lambda x: x.get("status") == "ok")
-    def patch(self, **kw):
         kwargs = kw or request.json
-        kwargs.setdefault('content', None)
-        kwargs.setdefault('period', None)
-
-        return self.update(**kwargs)
+        try:
+            assert kwargs['name']
+            assert kwargs['source']
+            assert kwargs['arguments']
+            assert kwargs['enabled']
+            return self.patch(**kwargs)
+        except KeyError, kerr:
+            return O.error(msg="Value not present: '%s'" % kerr,
+                           field=str(kerr))
 
     @jobs.when(method='DELETE', template='json')
     @signal('triggers.jobs', 'delete',
             when=lambda x: x.get("status") == "ok")
-    def delete(self, name, **kwargs):
-        name = name or kwargs['name']
+    def delete(self, job_id, **kwargs):
         try:
-            job = request.db.query(Job).join(User).filter(
-                Job.name == name,
-                User.id == request.user.id).first()
+            job = Job.own(request).filter(
+                Job.id == job_id).first()
             if job:
+                # Cleanup
+                if job.source == SOURCE_TYPE.CRON:
+                    # CRON
+                    success, res = schedule_manager.delete(
+                        user=request.user.username, name=job.name)
+                elif job.source == SOURCE_TYPE.ENV:
+                    # ENV
+                    # Regiter at publisher
+                    pass
+                elif job.source == SOURCE_TYPE.LOG_CONTENT:
+                    # LOG
+                    # Regiter at publisher
+                    pass
+                elif job.source == SOURCE_TYPE.EXTERNAL:
+                    # EXTERNAL
+                    pass
+
                 request.db.delete(job)
-                return dict(status='ok')
+                return O.success(status='ok')
             else:
-                return dict(error="Trigger %s not found" % name)
+                return O.error(msg="Trigger %s not found" % job_id)
         except Exception, ex:
-            return dict(error='%r' % ex)
+            return O.error(msg='%r' % ex)

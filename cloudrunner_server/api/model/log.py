@@ -29,6 +29,8 @@ class Log(TableBase):
     exit_code = Column(Integer)
     timeout = Column(Integer)
     status = Column(Integer)
+    source_type = Column(Integer)
+    source = Column(String(1000))
 
     owner_id = Column(Integer, ForeignKey('users.id'))
 

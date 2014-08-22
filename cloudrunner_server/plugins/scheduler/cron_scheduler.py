@@ -42,7 +42,7 @@ class Job(object):
         self._append_job_params()
 
     def _append_job_params(self):
-        keys = ('user', 'token', 'id', 'name', 'file', '_')
+        keys = ('user', 'name')
         values = self.meta.split(SEPARATOR)
 
         params = dict(zip(keys, values))
@@ -54,47 +54,21 @@ class Job(object):
         return str(self.cron_job.slices)
 
     @staticmethod
-    def _prepare_job_meta(user, token, job_id, name, task_file):
-        comment = SEPARATOR.join([user, token, job_id, name, task_file, ''])
+    def _prepare_job_meta(user, name):
+        comment = SEPARATOR.join([user, name])
         return comment
-
-
-def _default_dir():
-    _def_dir = os.path.join(LIB_DIR, "cloudrunner", "plugins", "scheduler")
-    if not os.path.exists(_def_dir):
-        os.makedirs(_def_dir)
-    return _def_dir
 
 
 class CronScheduler(object):
 
     def __init__(self):
-        self.uid = None
-        if os.geteuid() != 0:
-            self.uid = pwd.getpwuid(os.getuid())[0]
-        self.job_dir = getattr(CronScheduler, 'job_dir', _default_dir())
-        if not os.path.exists(self.job_dir):
-            os.makedirs(self.job_dir)
+        self.uid = pwd.getpwuid(os.getuid())[0]
 
     def crontab(self):
-        if self.uid:
-            crontab = CronTab(user=self.uid)
-        else:
-            crontab = CronTab(user='root')
+        crontab = CronTab(user=self.uid)
         return crontab
 
-    def _own(self, user, cron=None):
-        jobs = []
-        cron = cron or self.crontab()
-        user_pattern = "%s%s" % (user, SEPARATOR)
-        for cron_job in cron:
-            job = Job(cron_job)
-            if job.meta.startswith(user_pattern):
-                jobs.append(job)
-
-        return jobs
-
-    def _all(self, cron=None, **filters):
+    def _jobs(self, cron=None, **filters):
         jobs = []
         _cron = cron or self.crontab()
         for cron_job in _cron:
@@ -108,31 +82,17 @@ class CronScheduler(object):
 
         return jobs
 
-    def add(self, user, payload=None, name=None,
-            period=None, auth_token=None, **kwargs):
+    def add(self, user, name, period, auth_token, **kwargs):
         try:
             _cron = self.crontab()
-            job_id = uuid.uuid4().hex
-            kwargs['job_id'] = job_id
             name = name.replace(SEPARATOR, '_')
-            if self._all(name=name):
+            if self._jobs(user=user, name=name):
                 return (False, "Job with the name %s exists" % name)
 
-            def create_payload():
-                return tempfile.mkstemp(dir=self.job_dir,
-                                        prefix='cloudr_',
-                                        suffix='_job',
-                                        text=True)
-            try:
-                (_file_fd, task_file) = create_payload()
-            except OSError:
-                (_file_fd, task_file) = os.makedirs(self.job_dir)
-                create_payload()
-            os.write(_file_fd, payload)
-            os.close(_file_fd)
-            comment = Job._prepare_job_meta(user, auth_token, job_id,
-                                            name, task_file)
-            cmd = kwargs.get("exec", "%s") % task_file
+            comment = Job._prepare_job_meta(user, name)
+            cmd = kwargs.get("exec", "# CR Job scheduler: exec not passed")
+            cmd = cmd.replace('$', '\$')
+
             cron = _cron.new(command=cmd, comment=comment)
             try:
                 if not isinstance(period, list):
@@ -151,24 +111,19 @@ class CronScheduler(object):
             LOG.exception(ex)
             return (False, '%r' % ex)
 
-    def get(self, job_id):
-        for cron_job in self.crontab():
-            job = Job(cron_job)
-            if job.id == job_id:
-                return job
+    def get(self, user, name):
+        jobs = self._jobs(user=user, name=name)
+        if jobs:
+            return jobs[0]
 
-    def edit(self, user, payload=None, name=None,
-             period=None, **kwargs):
-        if not name:
-            return (False, 'Not found')
+    def edit(self, user, name, period):
         name = name.replace(SEPARATOR, '_')
         _cron = self.crontab()
-        job = self._all(name=name, cron=_cron)
-        if job:
-            job = job[0]
-            if payload:
-                with open(job.file, 'w') as f:
-                    f.write(payload)
+        jobs = self._jobs(user=user, name=name, cron=_cron)
+        if not jobs:
+            return (False, 'Job %s not found' % name)
+        job = jobs[0]
+        try:
             if not isinstance(period, list):
                 period = period.split(' ')
             if period and job.period != period:
@@ -176,48 +131,20 @@ class CronScheduler(object):
                 _cron.write()
             return (True, "Updated")
 
-        return (False, 'Not found')
+        except Exception, ex:
+            LOG.exception(ex)
+            return (False, 'Update failed')
 
-    def view(self, user, name, **kwargs):
-        crons = self._own(user)
-        for job in crons:
-            if job.name != name:
-                continue
-            try:
-                content = open(job.file).read()
-            except:
-                content = "#Error: Cannot open file!"
-            return (True, dict(job_id=job.id, name=name,
-                               content=content,
-                               owner=job.user,
-                               enabled=job.enabled,
-                               period=job.period))
-
-        return (False, 'Not found')
-
-    show = view  # Alias
-
-    def list(self, user, *args, **kwargs):
-        jobs = []
-        search = {}
-        if 'search_pattern' in kwargs:
-            search['meta'] = kwargs['search_pattern']
-        for job in self._own(user, **search):
-            jobs.append(dict(name=job.name,
-                             user=job.user,
-                             enabled=job.enabled,
-                             period=job.time))
-
-        return (True, jobs)
-
-    def delete(self, user, name=None, **kwargs):
+    def delete(self, user, name):
         _cron = self.crontab()
-        crons = self._own(user, cron=_cron)
-        for job in crons:
-            if job.user == user and job.name == name:
-                _cron.remove(job.cron_job)
-                _cron.write()
-                os.unlink(job.file)
-                return (True, 'Job %s removed' % name)
-
-        return (False, 'Job not found')
+        jobs = self._jobs(user=user, name=name, cron=_cron)
+        if not jobs:
+            return (False, 'Job %s not found' % name)
+        job = jobs[0]
+        try:
+            _cron.remove(job.cron_job)
+            _cron.write()
+            return (True, 'Job %s removed' % name)
+        except Exception, ex:
+            LOG.exception(ex)
+            return (False, 'Job not found')

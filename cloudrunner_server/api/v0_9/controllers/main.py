@@ -9,20 +9,14 @@ from .help import HtmlDocs
 from .library import Library
 from .logs import Logs
 from .manage import Manage
-from .scheduler import Scheduler
 from .status import EntityStatus
-from .triggers import Triggers
+from .triggers import Triggers, TriggerSwitch
 
 from cloudrunner_server.api import VERSION
 from cloudrunner_server.api.client import redis_client as r
-from cloudrunner_server.api.util import REDIS_AUTH_USER, REDIS_AUTH_TOKEN
-
-
-class Wrap(object):
-
-    def __init__(self, **kwargs):
-        for k, v in kwargs.items():
-            setattr(self, k, v)
+from cloudrunner_server.api.util import (REDIS_AUTH_USER,
+                                         REDIS_AUTH_TOKEN,
+                                         Wrap)
 
 
 class RestApi(object):
@@ -53,14 +47,15 @@ class RestApi(object):
     auth = Auth()
     dispatch = secure(Dispatch(), 'authorize')
     library = secure(Library(), 'authorize')
-    scheduler = secure(Scheduler(), 'authorize')
     triggers = secure(Triggers(), 'authorize')
     logs = secure(Logs(), 'authorize')
     manage = secure(Manage(), 'authorize')
-    #
+
     # SSE
-    #
     status = EntityStatus()
+
+    # SSE
+    fire = TriggerSwitch()
 
     # Docs
     html = HtmlDocs()

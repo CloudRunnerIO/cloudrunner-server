@@ -10,10 +10,18 @@ class ZmqHook(PecanHook):
     def before(self, state):
         user = state.request.headers.get('Cr-User')
         token = state.request.headers.get('Cr-Token')
-        if user and token:
-            state.request.zmq = lambda *args, **kwargs: Master(
-                user,
-                token).command(*args, **kwargs)
+
+        def zmq(user, token):
+            def wrapper(*args, **kwargs):
+                return Master(user, token).command(*args, **kwargs)
+            return wrapper
+
+        state.request.zmq = zmq(user, token)
+
+        def reset(user, token):
+            state.request.zmq = zmq(user, token)
+
+        state.request.reset_zmq = reset
 
     def after(self, state):
         return

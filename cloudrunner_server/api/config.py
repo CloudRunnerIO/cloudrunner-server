@@ -19,7 +19,7 @@ server = {
     'host': '0.0.0.0'
 }
 
-REST_SERVER_URL = "https://localhost/rest/"
+REST_SERVER_URL = "http://dash:12000/rest/"
 
 APP_DIR = cloudrunner_server.api.__path__[0]
 
