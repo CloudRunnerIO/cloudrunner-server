@@ -6,10 +6,11 @@ from sqlalchemy.orm import exc
 
 from cloudrunner_server.api.hooks.error_hook import ErrorHook
 from cloudrunner_server.api.hooks.db_hook import DbHook
+from cloudrunner_server.api.hooks.perm_hook import PermHook
 from cloudrunner_server.api.hooks.signal_hook import SignalHook, signal
 from cloudrunner_server.api.hooks.user_hook import UserHook
 from cloudrunner_server.api.hooks.zmq_hook import ZmqHook
-from cloudrunner_server.api.model import (Job, User, Script,
+from cloudrunner_server.api.model import (Job, User, Script, Permission,
                                           Org, SOURCE_TYPE)
 from cloudrunner_server.api.v0_9.controllers.dispatch import Dispatch
 from cloudrunner_server.api.util import (JsonOutput as O,
@@ -25,7 +26,8 @@ LOG = logging.getLogger()
 
 class TriggerSwitch(HookController):
 
-    __hooks__ = [ZmqHook(), UserHook(), SignalHook(), ErrorHook(), DbHook()]
+    __hooks__ = [ZmqHook(), UserHook(), SignalHook(), ErrorHook(), DbHook(),
+                 PermHook(dont_have={'is_super_admin'})]
 
     @expose('json', generic=True)
     def index(self, user=None, token=None, trigger=None, key=None, **kwargs):
@@ -54,9 +56,12 @@ class TriggerSwitch(HookController):
         if not user_id or not access_map:
             return O.error(msg="Unauthorized request")
 
+        permissions = [p.name for p in request.db.query(Permission).filter_by(
+            user_id=user_id).all()]
         request.user = Wrap(id=user_id,
                             username=user,
                             org=access_map.org,
+                            permissions=permissions,
                             token=token)
 
         q = Job.active(request).filter(
@@ -81,7 +86,8 @@ class TriggerSwitch(HookController):
 
 class Triggers(HookController):
 
-    __hooks__ = [UserHook(), SignalHook(), ErrorHook(), DbHook()]
+    __hooks__ = [UserHook(), SignalHook(), ErrorHook(), DbHook(),
+                 PermHook(dont_have={'is_super_admin'})]
 
     @expose('json', generic=True)
     def jobs(self, *args, **kwargs):

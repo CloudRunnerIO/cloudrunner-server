@@ -10,7 +10,9 @@ class DbHook(PecanHook):
         state.request.db = Session
 
     def after(self, state):
-        state.request.db.commit()
+        if hasattr(state.request, 'db'):
+            state.request.db.commit()
 
     def on_error(self, state, exc):
-        state.request.db.rollback()
+        if hasattr(state.request, 'db'):
+            state.request.db.rollback()

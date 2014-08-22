@@ -16,6 +16,7 @@ from cloudrunner_server.api import VERSION
 from cloudrunner_server.api.client import redis_client as r
 from cloudrunner_server.api.util import (REDIS_AUTH_USER,
                                          REDIS_AUTH_TOKEN,
+                                         REDIS_AUTH_PERMS,
                                          Wrap)
 
 
@@ -33,10 +34,12 @@ class RestApi(object):
                 return False
 
             user_info = r.hgetall(REDIS_AUTH_USER % username)
+            permissions = r.smembers(REDIS_AUTH_PERMS % username)
             request.user = Wrap(id=user_info['uid'],
                                 username=username,
                                 org=user_info['org'],
-                                token=token)
+                                token=token,
+                                permissions=permissions)
             return True
         return False
 

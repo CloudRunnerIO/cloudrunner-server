@@ -8,6 +8,7 @@ from sqlalchemy.orm import exc
 from sqlalchemy import func
 from cloudrunner_server.api.hooks.error_hook import ErrorHook
 from cloudrunner_server.api.hooks.db_hook import DbHook
+from cloudrunner_server.api.hooks.perm_hook import PermHook
 from cloudrunner_server.api.hooks.redis_hook import RedisHook
 from cloudrunner_server.api.model import (Log, Step, User,
                                           Tag, Org, LOG_STATUS)
@@ -20,7 +21,8 @@ PAGE_SIZE = 50
 
 class Logs(HookController):
 
-    __hooks__ = [ErrorHook(), DbHook(), RedisHook()]
+    __hooks__ = [ErrorHook(), DbHook(), RedisHook(),
+                 PermHook(dont_have={'is_super_admin'})]
 
     @expose('json')
     def all(self, start=None, end=None, tags=None):

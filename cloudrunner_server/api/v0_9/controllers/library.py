@@ -8,6 +8,7 @@ from sqlalchemy.exc import IntegrityError
 
 from cloudrunner_server.api.hooks.error_hook import ErrorHook
 from cloudrunner_server.api.hooks.db_hook import DbHook
+from cloudrunner_server.api.hooks.perm_hook import PermHook
 from cloudrunner_server.api.hooks.signal_hook import SignalHook, signal
 from cloudrunner_server.api.util import JsonOutput as O
 from cloudrunner_server.api.model import (Library as Lib, Script, User, Folder,
@@ -18,7 +19,8 @@ LOG = logging.getLogger()
 
 class Library(HookController):
 
-    __hooks__ = [DbHook(), ErrorHook(), SignalHook()]
+    __hooks__ = [DbHook(), ErrorHook(), SignalHook(),
+                 PermHook(dont_have={'is_super_admin'})]
 
     @expose('json', generic=True)
     def repo(self, *args, **kwargs):

@@ -43,18 +43,16 @@ class LibraryRenderer(object):
 
     def render(self, template_path, res):
         try:
-            inl = request.db.query(Script).join(User, Org).filter(
-                Org.name == request.user.org,
-                Script.name == template_path,
-                or_(Script.private == None,  # noqa
-                    Script.private == False,  # noqa
-                    User.id == request.user.id)).one()
-        except exc.NoResultFound, ex:
+            script = Script.find(template_path).first()
+            if not script:
+                return ("Template %s not found in the inline library" %
+                        template_path)
+        except Exception, ex:
             LOG.error(ex)
             request.db.rollback()
             return ("Template %s not found in the inline library" %
                     template_path)
 
-        template = Template(inl.content)
+        template = Template(script.content)
 
         return template.render(**res)
