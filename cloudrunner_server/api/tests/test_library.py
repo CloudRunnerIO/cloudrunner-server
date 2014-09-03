@@ -20,7 +20,7 @@ from cloudrunner_server.api.tests import base
 class TestLibrary(base.BaseRESTTestCase):
 
     def test_list_repos(self):
-        cr_data = {'libraries': [
+        cr_data = {'repositories': [
             {'owner': 'testuser',
              'is_link': None,
              'name': 'cloudrunner',
@@ -59,9 +59,7 @@ class TestLibrary(base.BaseRESTTestCase):
         self.assertEqual(resp.status_int, 200, resp.status_int)
         resp_json = json.loads(resp.body)
 
-        self.assertEqual(resp_json,
-                         {'error': 'Repo with this name already exists'},
-                         resp_json)
+        self.assertEqual(resp_json['error']['reason'], 'duplicate', resp_json)
 
     def test_delete_repo(self):
         resp = self.app.delete('/rest/library/repo/empty_repo',
@@ -109,8 +107,9 @@ class TestLibrary(base.BaseRESTTestCase):
         self.assertEqual(resp.status_int, 200, resp.status_int)
         resp_json = json.loads(resp.body)
 
-        self.assertEqual(resp_json,
-                         {'error': 'Cannot add folder, check name'}, resp_json)
+        self.assertEqual(resp_json['error'],
+                         {'msg': 'Duplicate entry into database. '
+                          'Check data', 'reason': 'duplicate'})
 
     def test_delete_folder(self):
         resp = self.app.delete(
@@ -145,9 +144,7 @@ class TestLibrary(base.BaseRESTTestCase):
     def test_show_script(self):
         resp = self.app.get(
             '/rest/library/script/cloudrunner/folder1/folder11/test2',
-            headers={
-            'Cr-Token': 'PREDEFINED_TOKEN',
-            'Cr-User': 'testuser'})
+            headers={'Cr-Token': 'PREDEFINED_TOKEN', 'Cr-User': 'testuser'})
         self.assertEqual(resp.status_int, 200, resp.status_int)
         resp_json = json.loads(resp.body)
 
@@ -170,8 +167,8 @@ class TestLibrary(base.BaseRESTTestCase):
 
         self.assertEqual(resp_json, {"success": {"status": "ok"}},
                          resp.body)
-        self.assertRedisInc('library.scripts')
-        self.assertRedisPub('library.scripts', 'add')
+        self.assertRedisInc('scripts:create')
+        self.assertRedisPub('scripts:create', 5)
 
     def test_create_fail_script(self):
         resp = self.app.post('/rest/library/script',
@@ -203,8 +200,8 @@ class TestLibrary(base.BaseRESTTestCase):
         self.assertEqual(resp_json, {"success": {"status": "ok"}},
                          resp.body)
 
-        self.assertRedisInc('library.scripts')
-        self.assertRedisPub('library.scripts', 'update')
+        self.assertRedisInc('scripts:modify')
+        self.assertRedisPub('scripts:modify', 1)
 
     def test_delete_script(self):
         resp = self.app.delete(
@@ -218,8 +215,8 @@ class TestLibrary(base.BaseRESTTestCase):
         self.assertEqual(resp_json, {"success": {"status": "ok"}},
                          resp.body)
 
-        self.assertRedisInc('library.scripts')
-        self.assertRedisPub('library.scripts', 'delete')
+        self.assertRedisInc('scripts:delete')
+        self.assertRedisPub('scripts:delete', 1)
 
     def test_delete_fail_script(self):
         resp = self.app.delete(

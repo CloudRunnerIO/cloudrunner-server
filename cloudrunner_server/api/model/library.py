@@ -1,3 +1,17 @@
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+# vim: tabstop=4 shiftwidth=4 softtabstop=4
+
+# /*******************************************************
+#  * Copyright (C) 2013-2014 CloudRunner.io <info@cloudrunner.io>
+#  *
+#  * Proprietary and confidential
+#  * This file is part of CloudRunner Server.
+#  *
+#  * CloudRunner Server can not be copied and/or distributed
+#  * without the express permission of CloudRunner.io
+#  *******************************************************/
+
 from sqlalchemy.sql.expression import func
 from sqlalchemy import (Column, Integer, String, DateTime, Boolean, Text,
                         ForeignKey, UniqueConstraint,
@@ -7,10 +21,10 @@ from .base import TableBase
 from .users import User, Org
 
 
-class Library(TableBase):
-    __tablename__ = 'libraries'
+class Repository(TableBase):
+    __tablename__ = 'repositories'
     __table_args__ = (
-        UniqueConstraint("name", 'org_id'),
+        UniqueConstraint("name", 'org_id', name="name__org_id"),
     )
 
     id = Column(Integer, primary_key=True)
@@ -25,15 +39,15 @@ class Library(TableBase):
 
     @staticmethod
     def visible(ctx):
-        return ctx.db.query(Library).join(User, Org).filter(
+        return ctx.db.query(Repository).join(User, Org).filter(
             Org.name == ctx.user.org,
-            or_(Library.owner_id == ctx.user.id,
-                Library.private != True)
+            or_(Repository.owner_id == ctx.user.id,
+                Repository.private != True)  # noqa
         )
 
 
-class LibraryCreds(TableBase):
-    __tablename__ = 'library_creds'
+class RepositoryCreds(TableBase):
+    __tablename__ = 'repository_creds'
 
     id = Column(Integer, primary_key=True)
     provider = Column(String(500))
@@ -41,24 +55,25 @@ class LibraryCreds(TableBase):
     auth_user = Column(String(500))
     auth_pass = Column(String(500))
     auth_args = Column(String(500))
-    library_id = Column(Integer, ForeignKey(Library.id))
+    repository_id = Column(Integer, ForeignKey(Repository.id))
 
-    library = relationship(Library)
+    repository = relationship(Repository)
 
 
 class Folder(TableBase):
     __tablename__ = 'folders'
 
     __table_args__ = (
-        UniqueConstraint("name", "parent_id"),
-        UniqueConstraint("full_name", 'library_id'),
+        UniqueConstraint("name", "parent_id", name="name__parent_id"),
+        UniqueConstraint("full_name", 'repository_id',
+                         name="name__repository_id"),
     )
 
     id = Column(Integer, primary_key=True)
     name = Column(String(255))
     full_name = Column(String(500))
     parent_id = Column(Integer, ForeignKey('folders.id'))
-    library_id = Column(Integer, ForeignKey(Library.id))
+    repository_id = Column(Integer, ForeignKey(Repository.id))
     owner_id = Column(Integer, ForeignKey(User.id))
 
     owner = relationship(User)
@@ -66,30 +81,30 @@ class Folder(TableBase):
                           remote_side=[id],
                           backref=backref('subfolders'))
     scripts = relationship('Script')
-    library = relationship(Library, backref=backref('folders'))
+    repository = relationship(Repository, backref=backref('folders'))
 
     @staticmethod
-    def visible(ctx, library, parent=None):
+    def visible(ctx, repository, parent=None):
         q = ctx.db.query(Folder).join(
-            Library, User, Org).filter(
+            Repository, User, Org).filter(
                 Org.name == ctx.user.org,
-                Library.name == library,
-                or_(Library.owner_id == ctx.user.id,
-                    Library.private != True)
+                Repository.name == repository,
+                or_(Repository.owner_id == ctx.user.id,
+                    Repository.private != True)  # noqa
             )
         q = q.join(Folder.parent,
                    aliased=True).filter(Folder.full_name == parent)
         return q
 
     @staticmethod
-    def editable(ctx, library, folder_path):
+    def editable(ctx, repository, folder_path):
         q = ctx.db.query(Folder).join(
-            Library, User, Org).filter(
+            Repository, User, Org).filter(
                 Folder.full_name == folder_path,
                 Org.name == ctx.user.org,
-                Library.name == library,
-                or_(Library.owner_id == ctx.user.id,
-                    Library.private != True)
+                Repository.name == repository,
+                or_(Repository.owner_id == ctx.user.id,
+                    Repository.private != True)  # noqa
             )
         return q
 
@@ -97,7 +112,7 @@ class Folder(TableBase):
 class Script(TableBase):
     __tablename__ = 'scripts'
     __table_args__ = (
-        UniqueConstraint("name", "folder_id"),
+        UniqueConstraint("name", "folder_id", name="name__folder_id"),
     )
 
     id = Column(Integer, primary_key=True)
@@ -112,23 +127,29 @@ class Script(TableBase):
     owner = relationship(User)
 
     @staticmethod
-    def visible(ctx, library, folder):
+    def visible(ctx, repository, folder):
         q = ctx.db.query(Script).join(
-            Folder, Library, User, Org).filter(
+            Folder, Repository, User, Org).filter(
                 Org.name == ctx.user.org,
-                Library.name == library,
-                or_(Library.owner_id == ctx.user.id,
-                    Library.private != True),
+                Repository.name == repository,
+                or_(Repository.owner_id == ctx.user.id,
+                    Repository.private != True),  # noqa
                 Folder.full_name == folder
             )
         return q
 
     @staticmethod
     def find(ctx, path):
-        library, _, path = path.partition("/")
+        repository, _, path = path.partition("/")
         folder, _, script = path.rpartition("/")
 
         folder = "/" + folder + "/"
-        q = Script.visible(ctx, library, folder).filter(Script.name == script)
+        q = Script.visible(ctx, repository, folder).filter(
+            Script.name == script)
 
         return q
+
+    def full_path(self):
+        return "%s%s%s" % (self.folder.repository.name,
+                           self.folder.full_name,
+                           self.name)

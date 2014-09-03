@@ -12,8 +12,6 @@
 #  * without the express permission of CloudRunner.io
 #  *******************************************************/
 
-# from mock import patch, MagicMock
-
 from cloudrunner_server.api.tests import base
 
 

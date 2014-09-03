@@ -6,3 +6,4 @@ Install it using 'pip install argcomplete'"
 
 eval "$(register-python-argcomplete cloudrunner-master)"
 eval "$(register-python-argcomplete cloudrunner-dsp)"
+eval "$(register-python-argcomplete cloudrunner-trigger)"

@@ -17,7 +17,6 @@ try:
 except ImportError:
     pass
 import argparse
-import json
 import logging
 import os
 import signal
@@ -39,29 +38,24 @@ else:
                       LOG_LOCATION)
 
 from cloudrunner.core.exceptions import ConnectionError
-from cloudrunner.core import message
-from cloudrunner.core.message import StatusCodes
 from cloudrunner.core import parser
+from cloudrunner.core.message import (M, Dispatch, GetNodes, Nodes,
+                                      Error, Queued)
 from cloudrunner.util.daemon import Daemon
-from cloudrunner.util.loader import load_plugins
-from cloudrunner.util.loader import local_plugin_loader
+from cloudrunner.util.loader import load_plugins, local_plugin_loader
 from cloudrunner.util.shell import colors
 
-from cloudrunner_server.dispatcher import SCHEDULER_URI_TEMPLATE
-from cloudrunner_server.dispatcher import PluginContext
-from cloudrunner_server.dispatcher import Promise
+from cloudrunner_server.dispatcher import (PluginContext,
+                                           Promise)
 from cloudrunner_server.dispatcher.admin import Admin
 from cloudrunner_server.dispatcher.manager import SessionManager
-from cloudrunner_server.master.functions import CertController
 from cloudrunner_server.plugins import PLUGIN_BASES
-from cloudrunner_server.plugins.args_provider import ArgsProvider
-from cloudrunner_server.plugins.args_provider import ManagedPlugin
-from cloudrunner_server.plugins.auth.base import AuthPluginBase
+from cloudrunner_server.plugins.args_provider import (ArgsProvider,
+                                                      ManagedPlugin)
 from cloudrunner_server.plugins.logs.base import LoggerPluginBase
 from cloudrunner_server.plugins.jobs.base import JobInOutProcessorPluginBase
 from cloudrunner_server.plugins.libs.base import IncludeLibPluginBase
 
-SCHEDULER_URI = SCHEDULER_URI_TEMPLATE % CONFIG
 
 LOG = logging.getLogger("Dispatcher")
 
@@ -114,7 +108,6 @@ class Dispatcher(Daemon):
             CONFIG = Config(self.args.config)
 
     def init_libs(self):
-        self.scheduler_uri = SCHEDULER_URI
 
         # instantiate dispatcher implementation
         self.transport_class = local_plugin_loader(CONFIG.transport)
@@ -150,22 +143,6 @@ class Dispatcher(Daemon):
                     except Exception, ex:
                         LOG.error('Plugin error(%s):  %r' % (plugin, ex))
 
-        self.scheduler_class = None
-        if CONFIG.scheduler:
-            self.scheduler_class = local_plugin_loader(CONFIG.scheduler)
-            LOG.info('Loaded scheduler class: %s' %
-                     self.scheduler_class.__name__)
-        else:
-            LOG.warn('Cannot find scheduler class. Set it in config file.')
-
-        if AuthPluginBase.__subclasses__():
-            self.auth_klass = AuthPluginBase.__subclasses__()[0]
-        else:
-            if not CONFIG.auth:
-                LOG.warn('No Auth plugin found')
-            else:
-                self.auth_klass = local_plugin_loader(CONFIG.auth)
-
         self.logger_klass = None
         if LoggerPluginBase.__subclasses__():
             self.logger_klass = LoggerPluginBase.__subclasses__()[0]
@@ -176,11 +153,6 @@ class Dispatcher(Daemon):
                 self.logger_klass = local_plugin_loader(CONFIG.logger)
 
         self.config = CONFIG
-        self.auth = self.auth_klass(self.config)
-        self.auth.set_context_from_config()
-        LOG.info("Using %s.%s for Auth backend" % (
-            self.auth_klass.__module__,
-            self.auth_klass.__name__))
 
         self.logger = None
         if self.logger_klass:
@@ -190,7 +162,7 @@ class Dispatcher(Daemon):
                 self.logger_klass.__module__,
                 self.logger_klass.__name__))
 
-        self.plugin_context = PluginContext(self.auth)
+        self.plugin_context = PluginContext(None)
 
         self.plugin_context.args_plugins = args_plugins
         if JobInOutProcessorPluginBase.__subclasses__():
@@ -209,110 +181,15 @@ class Dispatcher(Daemon):
             lib_plugins = []
         self.plugin_context.lib_plugins = lib_plugins
 
-    def _login(self, auth_type=1):
-        self.auth_type = auth_type
-        LOG.debug("[Login][%s]: %s" % (auth_type, self.user_id))
-
-        if auth_type == 1:
-            # Password
-            return self.auth.authenticate(self.user_id, self.user_token)
-        else:
-            # Token
-            return self.auth.validate(self.user_id, self.user_token)
-
-    # Actions
-    def check_login(self, user, remote_user_map, **kwargs):
-        return (True, remote_user_map.org)  # Already logged, return org
-
-    def get_api_token(self, *args, **kwargs):
-        if self.auth_type == 2:
-            is_token = True
-        else:
-            is_token = False
-        (user, token, org) = self.auth.create_token(self.user_id,
-                                                    self.user_token,
-                                                    is_token=is_token,
-                                                    **kwargs)
-        if token:
-            return ["TOKEN", token, org]
-        else:
-            return ["FAILURE"]
-
-    def unset_api_token(self, *args, **kwargs):
-        if self.auth_type != 2:
-            return [False, "NO TOKEN PASSED"]
-
-        return self.auth.delete_token(self.user_id, self.user_token)
-
-    def plugins(self, payload, remote_user_map, **kwargs):
-        plug = [(args, [c.__module__ for c in p])
-                for (args, p) in sorted(self.plugin_register.items(),
-                                        key=lambda x: (x[1], x[0]))]
-
-        return [plug]
-
-    def __plugin(self, payload, remote_user_map, **kwargs):
-        resp = []
-        plugin_name = kwargs.pop('plugin')
-        plugin_action = kwargs.pop('action')
-        plugin_return_type = kwargs.get('return_type')
-        plugin = self.plugin_cli_register.get(plugin_name)
-        if not plugin:
-            return [(False, 'Plugin %s not found' % plugin_name)]
-
-        user_org = (self.user_id, remote_user_map.org)
-        try:
-            args = None
-            try:
-                args = plugin.parse(plugin_action, plugin_return_type,
-                                    **kwargs.get('args', {}))
-            except Exception, ex:
-                LOG.error('%r' % ex)
-                resp.append((False, str(ex)))
-            if args:
-                ret = plugin.plugin.call(
-                    user_org,
-                    self.plugin_context.instance(
-                        self.user_id, self.user_token,
-                        auth_type=self.auth_type),
-                    args)
-                if ret:
-                    resp.append(ret)
-        except ValueError, verr:
-            resp.append((False, str(verr)))
-        except Exception, ex:
-            LOG.exception(ex)
-            resp.append((False, plugin.help()))
-
-        return resp
-
-    def list_nodes(self, payload, remote_user_map, **kwargs):
-        cert = CertController(CONFIG)
-        org = remote_user_map.org if self.config.security.use_org else None
-        nodes = cert.get_approved_nodes(org)
-        all_nodes = self.list_active_nodes(payload, remote_user_map,
-                                           **kwargs)[1]
-        active_nodes = [a[0] for a in all_nodes]
-        for node in nodes:
-            if node not in active_nodes:
-                all_nodes.append((node, None))
-        return (True, all_nodes)
-
-    def list_pending_nodes(self, payload, remote_user_map, **kwargs):
-        cert = CertController(CONFIG)
-        org = remote_user_map.org if self.config.security.use_org else None
-        nodes = cert.list_pending(org)
-        return (True, [node[0] for node in nodes])
-
-    def list_active_nodes(self, payload, remote_user_map, **kwargs):
+    def list_active_nodes(self, org):
+        msg = Nodes()
         if hasattr(self, 'backend'):
-            tenant = self.backend.tenants.get(remote_user_map.org, [])
-            nodes = []
+            tenant = self.backend.tenants.get(org, None)
             if tenant:
-                nodes = [(n.name, int(n.last_seen))
-                         for n in tenant.active_nodes()]
-            return (True, nodes)
-        return (True, [])
+                msg.nodes = [dict(name=n.name, last_seen=int(n.last_seen))
+                             for n in tenant.active_nodes()]
+            return msg
+        return msg
 
     def attach(self, payload, remote_user_map, **kwargs):
         """
@@ -363,7 +240,7 @@ class Dispatcher(Daemon):
         else:
             return [False, "Session not found"]
 
-    def dispatch(self, payload, remote_user_map, **kwargs):
+    def dispatch(self, user, payload, remote_user_map, **kwargs):
         """
         Dispatch script to targeted nodes
         """
@@ -371,8 +248,7 @@ class Dispatcher(Daemon):
         session_id = uuid.uuid4().hex
         promise = self.manager.prepare_session(
             self.user_id, session_id, payload, remote_user_map,
-            self.plugin_context.instance(self.user_id, self.user_token,
-                                         auth_type=self.auth_type),
+            self.plugin_context.instance(self.user_id, ""),
             **kwargs)
         promise.main = True
         return promise
@@ -382,7 +258,7 @@ class Dispatcher(Daemon):
 
         while not self.stopping.is_set():
             try:
-                frames = None
+                raw_frames = None
                 try:
                     raw_frames = job_queue.recv(timeout=500)
                     if not raw_frames:
@@ -396,52 +272,37 @@ class Dispatcher(Daemon):
                 # User -> queue
                 sender = ''
                 ident = raw_frames.pop(0)
-                data = json.loads(raw_frames[0])
-                if data[0] == 'QUIT':
+                pack = raw_frames.pop(0)
+                msg = M.build(pack)
+
+                if msg.control == 'QUIT':
                     # Node exited
                     continue
-                req = message.AgentReq.build(*data)
-                if not req:
-                    LOG.error("Invalid request %s" % frames)
-                    continue
-                if req.control.startswith('_'):
-                    LOG.error("Invalid request %s" % frames)
+                if not msg:
+                    LOG.error("Invalid request %s" % raw_frames)
                     continue
 
-                if not hasattr(self, req.control):
-                    # TODO: Check if a plugin supports command
-                    job_queue.send(
-                        sender, StatusCodes.FINISHED,
-                        json.dumps(
-                            ["ERROR: [%s] command not available on Master"
-                             % req.control]))
-                    continue
+                if isinstance(msg, Dispatch):
+                    self.user_id = msg.user
 
-                self.user_id = req.login
-                if req.auth_type == 1:
-                    # Password auth
-                    self.user_token = req.password
+                    remote_user_map = msg.roles
+                    LOG.info('user: %s/%s' % (msg.user,
+                                              remote_user_map['org']))
+                    response = self.dispatch(msg.user, msg.data,
+                                             remote_user_map,
+                                             env=getattr(msg, 'env', {}))
+
+                elif isinstance(msg, GetNodes):
+                    response = self.list_active_nodes(msg.org)
                 else:
-                    # Token auth
-                    self.user_token = req.password
-
-                auth_check = self._login(req.auth_type)
-                if not auth_check[0]:
-                    job_queue.send(ident, 'NOT AUTHORIZED')
+                    # TODO: Check if a plugin supports command
+                    job_queue.send(sender, Error(msg="Unknown command"))
                     continue
 
-                remote_user_map = auth_check[1]
-                LOG.info('action: %s, user: %s/%s' % (req.control,
-                                                      req.login,
-                                                      remote_user_map.org))
-                response = getattr(self, req.control)(req.data,
-                                                      remote_user_map,
-                                                      **req.kwargs)
                 if isinstance(response, Promise):
                     # Return job id
-                    job_queue.send(
-                        ident,
-                        json.dumps([True, response.session_id]))
+                    job_queue.send([ident,
+                                    Queued(job_id=response.session_id)._])
                     response.proxy = sender
                     response.peer = ident
                     if response.main:
@@ -460,79 +321,14 @@ class Dispatcher(Daemon):
                     else:
                         self.manager.subscriptions[
                             response.session_id].append(response)
-                elif response:
-                    data = [StatusCodes.FINISHED, list(response)]
-                    job_queue.send(ident, json.dumps(data))
+                elif isinstance(response, M):
+                    job_queue.send(ident, response._)
             except ConnectionError:
                 break
 
         job_queue.close()
 
         LOG.info('Server worker exited')
-
-    def sched_worker(self, *args):
-        task_queue = self.backend.consume_queue('scheduler')
-
-        while not self.stopping.is_set():
-            try:
-                try:
-                    frames = task_queue.recv(500)
-                    if not frames:
-                        continue
-                except ConnectionError:
-                    break
-
-                req = message.ScheduleReq.build(*frames)
-                if not req:
-                    LOG.error('Invalid request: %s' % frames)
-                    continue
-
-                LOG.info('action: %s, sched job: %s' %
-                         (req.control, req.job_id))
-
-                scheduler = self.scheduler_class()
-                job = scheduler.get(req.job_id)
-
-                if not job:
-                    LOG.error("No job found for id: %s" % req.job_id)
-                    continue
-                try:
-                    payload = open(job.file).read()
-                except Exception, ex:
-                    LOG.error("Cannot load schedule job %s" % job.name)
-                    LOG.exception(ex)
-                    continue
-
-                self.user_id = job.user
-                self.user_token = job.token  # Already hashed
-
-                auth_check = self._login(auth_type=2)
-
-                if not auth_check[0]:
-                    LOG.error('Job %s@%s - NOT AUTHORIZED' % (job.user,
-                                                              job.id))
-                    continue
-
-                remote_user_map = auth_check[1]
-
-                LOG.info('Starting scheduled job %s(%s)@%s' % (job.user,
-                                                               remote_user_map,
-                                                               job.name))
-                response = self.dispatch(payload, remote_user_map,
-                                         caller='Scheduler: %s' % job.name)
-                if isinstance(response, Promise):
-                    response.proxy = ''
-                    response.peer = ''
-                    response.resolve()
-
-            except ConnectionError:
-                break
-            except Exception, err:
-                LOG.exception(err)
-                continue
-
-        task_queue.close()
-        LOG.info('Scheduler worker exited')
 
     def logger_worker(self, *args):
         log_queue = self.backend.consume_queue('logger')
@@ -543,7 +339,7 @@ class Dispatcher(Daemon):
                 if not frames:
                     continue
                 try:
-                    self.logger.log(**json.loads(frames[0]))
+                    self.logger.log(M.build(frames[0]))
                 except Exception, err:
                     LOG.exception(err)
             except ConnectionError:
@@ -572,7 +368,6 @@ class Dispatcher(Daemon):
                                 "cannot be created")
 
         WORKER_COUNT = int(CONFIG.workers_count or 10)
-        SCHED_WORKER_COUNT = int(CONFIG.sched_worker_count or 3)
         LOG_WORKER_COUNT = int(CONFIG.log_worker_count or 3)
 
         self.stopping = threading.Event()
@@ -589,12 +384,6 @@ class Dispatcher(Daemon):
             thread = threading.Thread(target=self.worker, args=[])
             thread.start()
             self.threads.append(thread)
-
-        self.sched_threads = []
-        for i in range(SCHED_WORKER_COUNT):
-            thread = threading.Thread(target=self.sched_worker, args=[])
-            thread.start()
-            self.sched_threads.append(thread)
 
         self.logger_threads = []
         if self.logger:
@@ -618,8 +407,6 @@ class Dispatcher(Daemon):
 
         for thread in self.threads:
             thread.join()
-        for sched_thread in self.sched_threads:
-            sched_thread.join()
         for logger_thread in self.logger_threads:
             logger_thread.join()
 

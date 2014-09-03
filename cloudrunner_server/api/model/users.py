@@ -1,7 +1,22 @@
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+# vim: tabstop=4 shiftwidth=4 softtabstop=4
+
+# /*******************************************************
+#  * Copyright (C) 2013-2014 CloudRunner.io <info@cloudrunner.io>
+#  *
+#  * Proprietary and confidential
+#  * This file is part of CloudRunner Server.
+#  *
+#  * CloudRunner Server can not be copied and/or distributed
+#  * without the express permission of CloudRunner.io
+#  *******************************************************/
+
+from datetime import datetime, timedelta
 from sqlalchemy.sql.expression import func
 from sqlalchemy import (
     Table, Column, Boolean, Integer, String, Text, DateTime,
-    ForeignKey, UniqueConstraint)
+    ForeignKey, UniqueConstraint, Enum)
 from sqlalchemy.orm import relationship
 import uuid
 
@@ -18,7 +33,8 @@ class Org(TableBase):
 
     id = Column(Integer, primary_key=True)
     created_at = Column(DateTime, default=func.now())
-    uid = Column(String(100), default=lambda ctx: uuid.uuid4().hex)
+    uid = Column(String(100), unique=True,
+                 default=lambda ctx: uuid.uuid4().hex)
     name = Column(String(100), unique=True)
     cert_ca = Column(Text)
     cert_key = Column(Text)
@@ -43,7 +59,7 @@ class User(TableBase):
     org = relationship('Org')
     permissions = relationship('Permission')
     roles = relationship('Role')
-    tokens = relationship('Token')
+    tokens = relationship('Token', backref='user')
 
     def set_password(self, password):
         self.password = hash_token(password)
@@ -61,9 +77,28 @@ class User(TableBase):
             User.id == ctx.user.id
         )
 
+    @staticmethod
+    def create_token(ctx, user_id, days=None, minutes=None, scope=None):
+        if days:
+            expiry = datetime.now() + timedelta(days=days)
+        elif minutes:
+            expiry = datetime.now() + timedelta(minutes=minutes)
+        else:
+            expiry = datetime.now() + timedelta(minutes=30)
+        token = Token(user_id=user_id,
+                      expires_at=expiry,
+                      scope=scope,
+                      value=random_token())
+        ctx.db.add(token)
+        ctx.db.commit()
+        return token
+
 
 class Permission(TableBase):
     __tablename__ = 'permissions'
+    __table_args__ = (
+        UniqueConstraint("name", 'user_id', name="name__user_id"),
+    )
 
     id = Column(Integer, primary_key=True)
     name = Column(String(100))
@@ -73,8 +108,10 @@ class Permission(TableBase):
 class Role(TableBase):
     __tablename__ = 'roles'
     __table_args__ = (
-        UniqueConstraint("as_user", 'servers', 'user_id'),
-        UniqueConstraint("as_user", 'servers', 'group_id'),
+        UniqueConstraint('user_id', "as_user", 'servers',
+                         name="user_id__as_user__servers"),
+        UniqueConstraint('group_id', "as_user", 'servers',
+                         name="group_id__as_user__servers"),
     )
 
     id = Column(Integer, primary_key=True)
@@ -94,7 +131,7 @@ user2group_rel = Table('user2group', TableBase.metadata,
 class Group(TableBase):
     __tablename__ = 'groups'
     __table_args__ = (
-        UniqueConstraint("name", 'org_id'),
+        UniqueConstraint("name", 'org_id', name="name__org_id"),
     )
 
     id = Column(Integer, primary_key=True)
@@ -113,8 +150,12 @@ class Group(TableBase):
 
 class Token(TableBase):
     __tablename__ = 'tokens'
+    __table_args__ = (
+        UniqueConstraint('user_id', 'value', name="user_id__value"),
+    )
 
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey('users.id'))
     expires_at = Column(DateTime)
     value = Column(String(TOKEN_LENGTH), default=random_token)
+    scope = Column(Enum('LOGIN', 'TRIGGER', 'EXECUTE'))

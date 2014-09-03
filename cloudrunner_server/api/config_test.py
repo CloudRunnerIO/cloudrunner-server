@@ -1,3 +1,17 @@
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+# vim: tabstop=4 shiftwidth=4 softtabstop=4
+
+# /*******************************************************
+#  * Copyright (C) 2013-2014 CloudRunner.io <info@cloudrunner.io>
+#  *
+#  * Proprietary and confidential
+#  * This file is part of CloudRunner Server.
+#  *
+#  * CloudRunner Server can not be copied and/or distributed
+#  * without the express permission of CloudRunner.io
+#  *******************************************************/
+
 from cloudrunner_server.tests.base import CONFIG
 from cloudrunner.util.loader import local_plugin_loader
 from cloudrunner.util.loader import load_plugins
@@ -6,8 +20,6 @@ from cloudrunner_server.api import VERSION
 from cloudrunner_server.api import model
 from pecan.hooks import TransactionHook
 from cloudrunner_server.api.base import SseRenderer
-from cloudrunner_server.plugins import PLUGIN_BASES
-from cloudrunner_server.plugins.signals import signal_handler
 
 DEBUG = False
 # DEBUG = True
@@ -37,15 +49,8 @@ app = {
         '__force_dict__': True
     }
 }
-auth_manager = local_plugin_loader(CONFIG.auth)(CONFIG)
 schedule_manager = local_plugin_loader(CONFIG.scheduler)()
 loaded_plugins = load_plugins(CONFIG)
-signal_manager = None
-
-for plugin_base in PLUGIN_BASES:
-    for plugin in plugin_base.__subclasses__():
-        if plugin == signal_handler.SignalHandlerPlugin:
-            signal_manager = plugin()
 
 redis = {
     'host': 'localhost',
@@ -58,7 +63,7 @@ zmq = {
 }
 
 sqlalchemy = {
-    'url': CONFIG.users.db,
+    'url': CONFIG.db,
     'encoding': 'utf-8'
 }
 

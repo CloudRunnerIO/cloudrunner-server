@@ -32,7 +32,6 @@ class TestSelectors(base.BaseTestCase):
     def test_dispatcher(self):
         disp = server.Dispatcher('run', config=base.CONFIG)
         disp.init_libs()
-        self.assertIsNotNone(disp.auth)
         self.assertIsNotNone(disp.transport_class)
         disp.user_id = 'some_user'
         disp.user_token = 'some_token'
@@ -72,8 +71,7 @@ whoami
         # disp.logger = Mock(send_multipart=Mock())
 
         env = {'KEY': 'VALUE'}
-        access_map = Mock()
-        access_map.org = "MyOrg"
+        access_map = {'org': 'DEFAULT', 'roles': {'*': '@'}}
         with nested(
             patch.multiple(parser,
                            parse_selectors=Mock(
@@ -88,7 +86,8 @@ whoami
                        hex='416728b252a411e3ae1600247e6dff02'))),
             patch('time.time', Mock(return_value=1385031137))
         ):
-            ret = disp.dispatch(script,
+            ret = disp.dispatch('user_id',
+                                script,
                                 access_map,
                                 timeout=200,
                                 tags='["TAG1", "TAG2"]',
@@ -223,7 +222,7 @@ whoami
                 self.config = Mock()
                 self.config.security = Mock(use_org=False)
 
-        remote_user_map = Mock(org="MyOrg")
+        remote_user_map = {'org': 'DEFAULT', 'roles': {'*': '@'}}
 
         class PluginCtx(object):
 

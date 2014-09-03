@@ -12,61 +12,64 @@
 #  * without the express permission of CloudRunner.io
 #  *******************************************************/
 
-import json
 import logging
 import os
-from pecan import conf
+from pecan import request
 from pecan.core import abort
 import zmq
 
-import cloudrunner
-from cloudrunner.core import message
+from cloudrunner import VAR_DIR
+from cloudrunner import CONFIG_LOCATION
+from cloudrunner.util.config import Config
+from cloudrunner.core.message import M, Dispatch, GetNodes
 from cloudrunner.util.logconfig import configure_loggers
 
-configure_loggers(logging.DEBUG,
-                  os.path.join(cloudrunner.VAR_DIR, 'log', 'cr-rest-api.log'))
+configure_loggers(logging.DEBUG, os.path.join(VAR_DIR,
+                                              'log',
+                                              'cr-rest-api.log'))
 LOG = logging.getLogger()
 
-
+CONFIG = Config(CONFIG_LOCATION)
 CONTEXT = None
 
 
 class Master(object):
 
-    def __init__(self, user, token, timeout=2):
+    def __init__(self, user, timeout=2):
         self.timeout = timeout
-        self.proxy_uri = conf.zmq['server_uri']
+        self.proxy_uri = CONFIG.listen_uri or 'tcp://0.0.0.0:5559'
+        if not self.proxy_uri.startswith('tcp://'):
+            self.proxy_uri = 'tcp://' + self.proxy_uri
         self.user = user
-        self.token = token
 
     def close(self):
         # cleaning up
         # self.socket.close()
         pass
 
-    def command(self, cmd, auth_type=2, **kwargs):
+    def command(self, cmd, **kwargs):
         global CONTEXT
         if not CONTEXT:
             CONTEXT = zmq.Context(1)
         socket = CONTEXT.socket(zmq.DEALER)
         socket.connect(self.proxy_uri)
-        _req = message.AgentReq(login=kwargs.get("auth_user", self.user),
-                                auth_type=auth_type,
-                                password=kwargs.get("auth_token", self.token),
-                                control=cmd)
-        _req.append(**kwargs)
+        kwargs["user"] = kwargs.pop('auth_user', self.user)
+        # kwargs["roles"] = # {'org': 'DEFAULT', 'roles': {'*': '@'}}
 
-        LOG.info("SEND %s" % _req)
+        if cmd == 'dispatch':
+            _req = Dispatch(**kwargs)
+        elif cmd == "list_active_nodes":
+            _req = GetNodes(org=request.user.org)
 
         def send(req):
-            LOG.info(req.pack())
+            LOG.info("SEND %r" % _req._)
             try:
-                socket.send_multipart([json.dumps(req.pack(extra=True))])
+                socket.send(req._)
                 if not socket.poll(self.timeout * 1000):
                     LOG.warning("Timeout of %s sec expired" % self.timeout)
                     return None
                 if socket.poll(1000):
-                    ret = socket.recv_multipart()
+                    ret = socket.recv()
                 else:
                     ret = None
                 LOG.info("RECV %s" % str(ret))
@@ -78,7 +81,7 @@ class Master(object):
         if not ret:
             return {}
         try:
-            return json.loads(ret[0])[1]
+            return M.build(ret)
         except Exception, ex:
             LOG.error(ret)
             LOG.exception(ex)

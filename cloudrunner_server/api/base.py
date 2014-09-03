@@ -1,10 +1,22 @@
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+# vim: tabstop=4 shiftwidth=4 softtabstop=4
+
+# /*******************************************************
+#  * Copyright (C) 2013-2014 CloudRunner.io <info@cloudrunner.io>
+#  *
+#  * Proprietary and confidential
+#  * This file is part of CloudRunner Server.
+#  *
+#  * CloudRunner Server can not be copied and/or distributed
+#  * without the express permission of CloudRunner.io
+#  *******************************************************/
+
 import logging
 from pecan import request, response
 from mako.template import Template
-from sqlalchemy import or_
-from sqlalchemy.orm import exc
 
-from cloudrunner_server.api.model import Script, User, Org
+from cloudrunner_server.api.model import Script
 from cloudrunner_server.api.hooks.zmq_hook import ZmqHook
 
 LOG = logging.getLogger()
@@ -43,14 +55,14 @@ class LibraryRenderer(object):
 
     def render(self, template_path, res):
         try:
-            script = Script.find(template_path).first()
+            script = Script.find(request, template_path).first()
             if not script:
-                return ("Template %s not found in the inline library" %
+                return ("Template %s not found in the library" %
                         template_path)
         except Exception, ex:
             LOG.error(ex)
             request.db.rollback()
-            return ("Template %s not found in the inline library" %
+            return ("Template %s not found in the library" %
                     template_path)
 
         template = Template(script.content)

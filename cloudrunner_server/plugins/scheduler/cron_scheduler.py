@@ -20,11 +20,7 @@ if __version__ < '1.7':
 
 import logging
 import os
-import tempfile
-import uuid
 import pwd
-
-from cloudrunner import LIB_DIR
 
 SEPARATOR = '\t'
 LOG = logging.getLogger("CronScheduler")
@@ -91,7 +87,7 @@ class CronScheduler(object):
 
             comment = Job._prepare_job_meta(user, name)
             cmd = kwargs.get("exec", "# CR Job scheduler: exec not passed")
-            cmd = cmd.replace('$', '\$')
+            cmd = 'curl %s' % cmd.replace('&', '\&').replace('$', '\$')
 
             cron = _cron.new(command=cmd, comment=comment)
             try:

@@ -1,23 +1,28 @@
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+# vim: tabstop=4 shiftwidth=4 softtabstop=4
+
+# /*******************************************************
+#  * Copyright (C) 2013-2014 CloudRunner.io <info@cloudrunner.io>
+#  *
+#  * Proprietary and confidential
+#  * This file is part of CloudRunner Server.
+#  *
+#  * CloudRunner Server can not be copied and/or distributed
+#  * without the express permission of CloudRunner.io
+#  *******************************************************/
+
 from cloudrunner import CONFIG_LOCATION
 from cloudrunner.util.config import Config
 from cloudrunner.util.loader import local_plugin_loader
-from cloudrunner.util.loader import load_plugins
 import cloudrunner_server.api
 from cloudrunner_server.api import VERSION
 from cloudrunner_server.api import model
 from pecan.hooks import RequestViewerHook, TransactionHook
 from cloudrunner_server.api.base import SseRenderer, LibraryRenderer
-from cloudrunner_server.plugins import PLUGIN_BASES
-from cloudrunner_server.plugins.signals import signal_handler
 
 DEBUG = False
 # DEBUG = True
-
-# Server Specific Configurations
-server = {
-    'port': '5558',
-    'host': '0.0.0.0'
-}
 
 REST_SERVER_URL = "http://dash:12000/rest/"
 
@@ -56,15 +61,7 @@ if DEBUG:
 
 cr_config = Config(CONFIG_LOCATION)
 
-auth_manager = local_plugin_loader(cr_config.auth)(cr_config)
 schedule_manager = local_plugin_loader(cr_config.scheduler)()
-loaded_plugins = load_plugins(cr_config)
-signal_manager = None
-
-for plugin_base in PLUGIN_BASES:
-    for plugin in plugin_base.__subclasses__():
-        if plugin == signal_handler.SignalHandlerPlugin:
-            signal_manager = plugin()
 
 redis = {
     'host': 'localhost',
@@ -72,13 +69,10 @@ redis = {
 }
 
 zmq = {
-    'server_uri': "ipc:///home/ttrifonov/.cloudrunner/"
-    "var/run/sock/cloudrunner//local-api.sock"
+    'server_uri': "tcp://0.0.0.0:5559"
 }
 
 sqlalchemy = {
-    'url': 'mysql+pymysql://root:5b3dffd42a738a7e6998@localhost/' +
-           'cloudrunner-server?charset=utf8&use_unicode=0',
     'echo': False,
     'echo_pool': False,
     'pool_recycle': 3600,

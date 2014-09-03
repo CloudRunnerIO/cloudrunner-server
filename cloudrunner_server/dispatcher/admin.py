@@ -16,7 +16,7 @@ import logging
 from threading import Thread
 
 from cloudrunner.core.exceptions import ConnectionError
-from cloudrunner.core.message import (ADMIN_TOWER, ControlReq)
+from cloudrunner.core.message import (ADMIN_TOWER, Control, Register)
 
 LOG = logging.getLogger('Control Tower')
 
@@ -41,22 +41,23 @@ class Admin(Thread):
         packets = []
         while True:
             try:
-                packet = self.admin_endp.recv(100)
-                if packet:
-                    req = ControlReq.build(*packet)
+                packed = self.admin_endp.recv(100)
+                if packed:
+                    req = Control.build(packed[0])
                     if not req:
                         LOG.warn("ADMIN_TOWER invalid packet recv: %s" %
-                                 packet)
+                                 packed)
                         continue
                     LOG.info("ADMIN_TOWER recv: %s" % req)
                     rep = self.process(req)
                     if not rep:
                         continue
-                    LOG.info("ADMIN_TOWER reply: %s" % (rep[:2],))
-                    packets.append([req.ident, req.node] + rep)
+                    LOG.info("ADMIN_TOWER reply: %s" % rep)
+                    rep.hdr.ident = req.hdr.ident
+                    packets.append(rep)
                 while packets:
-                    packet = packets.pop(0)
-                    self.node_reply_queue.send(*packet)
+                    msg = packets.pop(0)
+                    self.node_reply_queue.send(msg._)
             except ConnectionError:
                 break
             except KeyboardInterrupt:
@@ -67,31 +68,25 @@ class Admin(Thread):
         self.close()
         LOG.info("Exiting Admin thread")
 
-    def process(self, rq):
-        LOG.info("Received admin req: %s %s" % (rq.control, rq.node))
+    def process(self, req):
+        LOG.info("Received admin req: %s %s" % (req.control, req.node))
 
-        if rq.control == 'ECHO':
-            return [rq.node, rq.data or 'ECHO']
-        try:
-            if rq.control == 'REGISTER':
-                try:
-                    success, approval = self.backend.verify_node_request(
-                        rq.node,
-                        rq.data)
-                    if success:
-                        return [rq.node, 'APPROVED', approval]
-                    else:
-                        return [rq.node, 'REJECTED', approval]
-                except Exception, ex:
-                    LOG.exception(ex)
-                    return [rq.node, 'REJECTED', "APPR_FAIL"]
+        if req.action == 'ECHO':
+            return [req.node, req.data or 'ECHO']
+        if req.action == 'REGISTER':
+            try:
+                success, approval = self.backend.verify_node_request(
+                    req.node,
+                    req.data)
+                if success:
+                    return Register(req.node, 'APPROVED', approval)
+                else:
+                    return Register(req.node, 'REJECTED', approval)
+            except Exception, ex:
+                LOG.exception(ex)
+                return Register(req.node, 'REJECTED', 'APPR_FAIL')
 
-            return [rq.node, 'UNKNOWN']
-        except Exception, ex:
-            LOG.exception(ex)
-            return ['', 'UNKNOWN']
-
-        return ['', 'UNKNOWN']
+        return None
 
     def close(self, *args):
         LOG.info("Stopping Admin Process")

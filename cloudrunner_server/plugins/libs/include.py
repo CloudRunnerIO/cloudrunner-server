@@ -40,7 +40,7 @@ class LibIncludePlugin(IncludeLibPluginBase, ArgsProvider, ManagedPlugin):
     @classmethod
     def start(cls, config):
         LOG.info("Starting Library Plugin")
-        engine = create_engine(config.users.db)
+        engine = create_engine(config.db)
         session = scoped_session(sessionmaker(bind=engine,
                                               autocommit=True))
         metadata.bind = session.bind

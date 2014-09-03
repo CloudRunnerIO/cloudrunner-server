@@ -1,3 +1,17 @@
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+# vim: tabstop=4 shiftwidth=4 softtabstop=4
+
+# /*******************************************************
+#  * Copyright (C) 2013-2014 CloudRunner.io <info@cloudrunner.io>
+#  *
+#  * Proprietary and confidential
+#  * This file is part of CloudRunner Server.
+#  *
+#  * CloudRunner Server can not be copied and/or distributed
+#  * without the express permission of CloudRunner.io
+#  *******************************************************/
+
 from datetime import datetime, timedelta
 from mock import call, Mock, patch
 import os
@@ -33,7 +47,8 @@ class BaseRESTTestCase(BaseTestCase):
 
         self.redis.zrangebyscore.return_value = ['PREDEFINED_TOKEN']
         self.redis.hgetall.return_value = dict(uid=1, org='MyOrg')
-        self.redis.smembers.return_value = {'role1', 'is_test_user'}
+        self.redis.smembers.return_value = {'role1', 'is_test_user',
+                                            'is_admin'}
         self.redis.get.return_value = "10"
         self.populate()
         global engine
@@ -62,6 +77,9 @@ class BaseRESTTestCase(BaseTestCase):
         org2 = Org(name='MyOrg2', active=False)
         Session.add(org2)
 
+        p1 = Permission(name='is_admin')
+        Session.add(p1)
+
         user = User(username='testuser', email='email',
                     created_at=datetime(2014, 8, 1),
                     password=hash_token('testpassword'), org=org,
@@ -69,6 +87,8 @@ class BaseRESTTestCase(BaseTestCase):
                     position="Sr engineer")
         Session.add(user)
         Session.commit()
+
+        user.permissions.append(p1)
 
         user2 = User(username='testuser2', email='email',
                      created_at=datetime(2014, 8, 2),
@@ -85,7 +105,8 @@ class BaseRESTTestCase(BaseTestCase):
 
         token = Token(value="PREDEFINED_TOKEN",
                       expires_at=datetime.now() + timedelta(minutes=60),
-                      user_id=user.id)
+                      user_id=user.id,
+                      scope='LOGIN')
         Session.add(token)
         Session.commit()
 
@@ -110,30 +131,30 @@ class BaseRESTTestCase(BaseTestCase):
 
         Session.commit()
 
-        # Library data
-        repo1 = Library(name='cloudrunner', owner=user)
+        # Repository data
+        repo1 = Repository(name='cloudrunner', owner=user)
         Session.add(repo1)
-        repo11 = Library(name='empty_repo', owner=user)
+        repo11 = Repository(name='empty_repo', owner=user)
         Session.add(repo11)
-        repo2 = Library(name='private', owner=user2, private=True)
+        repo2 = Repository(name='private', owner=user2, private=True)
         Session.add(repo2)
-        root1 = Folder(name="/", full_name="/", library=repo1, owner=user)
+        root1 = Folder(name="/", full_name="/", repository=repo1, owner=user)
         Session.add(root1)
-        root11 = Folder(name="/", full_name="/", library=repo11, owner=user)
+        root11 = Folder(name="/", full_name="/", repository=repo11, owner=user)
         Session.add(root11)
-        root2 = Folder(name="/", full_name="/", library=repo2, owner=user)
+        root2 = Folder(name="/", full_name="/", repository=repo2, owner=user)
         Session.add(root2)
         folder1 = Folder(name="/folder1", full_name="/folder1/",
-                         library=repo1, owner=user, parent=root1)
+                         repository=repo1, owner=user, parent=root1)
         Session.add(folder1)
         folder11 = Folder(name="/folder11", full_name="/folder1/folder11/",
-                          library=repo1, owner=user, parent=folder1)
+                          repository=repo1, owner=user, parent=folder1)
         Session.add(folder11)
         folder2 = Folder(name="/folder2", full_name="/folder2/",
-                         library=repo2, owner=user, parent=root2)
+                         repository=repo2, owner=user, parent=root2)
         Session.add(folder2)
         folder21 = Folder(name="/folder11", full_name="/folder1/folder11/",
-                          library=repo2, owner=user, parent=folder2)
+                          repository=repo2, owner=user, parent=folder2)
         Session.add(folder21)
         Session.commit()
 

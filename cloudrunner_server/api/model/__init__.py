@@ -1,9 +1,24 @@
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+# vim: tabstop=4 shiftwidth=4 softtabstop=4
+
+# /*******************************************************
+#  * Copyright (C) 2013-2014 CloudRunner.io <info@cloudrunner.io>
+#  *
+#  * Proprietary and confidential
+#  * This file is part of CloudRunner Server.
+#  *
+#  * CloudRunner Server can not be copied and/or distributed
+#  * without the express permission of CloudRunner.io
+#  *******************************************************/
+
 from pecan import conf  # noqa
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import scoped_session, sessionmaker
 
 from .base import metadata
 from .log import *  # noqa
+from .nodes import *  # noqa
 from .users import *  # noqa
 from .library import *  # noqa
 from .triggers import *  # noqa
@@ -13,16 +28,12 @@ from cloudrunner_server.util.db import checkout_listener
 Session = scoped_session(sessionmaker())
 
 
-def _engine_from_config(configuration):
-    configuration = dict(configuration)
-    url = configuration.pop('url')
-    return create_engine(url, **configuration)
-
-
 def init_model():
     if 'engine' not in vars(conf.sqlalchemy)['__values__']:
-        conf.sqlalchemy.engine = _engine_from_config(conf.sqlalchemy)
-        if 'mysql+pymysql://' in conf.sqlalchemy:
+        url = conf.cr_config.db
+        config = dict(conf.sqlalchemy)
+        conf.sqlalchemy.engine = create_engine(url, **config)
+        if 'mysql+pymysql://' in url:
             event.listen(conf.sqlalchemy.engine,
                          'checkout',
                          checkout_listener)
@@ -86,50 +97,52 @@ def populate(session):
     session.commit()
 
     from datetime import datetime, timedelta
-    token = Token(expires_at=datetime.now() + timedelta(minutes=60))
+    token = Token(expires_at=datetime.now() + timedelta(minutes=60),
+                  scope='LOGIN')
     session.add(token)
     session.commit()
     demo.tokens.append(token)
 
-    r1 = Right(name='admin')
+    r1 = Permission(name='is_admin')
     session.add(r1)
     session.commit()
 
-    demo.rights.append(r1)
+    demo.permissions.append(r1)
     session.commit()
 
-    role1 = Role(name='default', servers='*', as_user='@')
+    role1 = Role(servers='*', as_user='@')
     session.add(role1)
     session.commit()
 
-    role11 = Role(name='win', servers='*win*', as_user='Administrator')
+    role11 = Role(servers='*win*', as_user='Administrator')
     session.add(role11)
     session.commit()
 
     demo.roles.append(role1)
     session.commit()
 
-    role2 = Role(name='root', servers='*', as_user='root')
+    role2 = Role(servers='*', as_user='root')
     session.add(role2)
     group1.roles.append(role2)
     group1.roles.append(role11)
-    role3 = Role(name='dev', servers='*-stg*', as_user='developer')
+    role3 = Role(servers='*-stg*', as_user='developer')
     session.add(role3)
     group2.roles.append(role3)
     session.commit()
 
-    public = Library(name="public", owner=demo, org=org)
-    private = Library(name="private", owner=demo, private=True, org=org)
+    public = Repository(name="public", owner=demo, org=org)
+    private = Repository(name="private", owner=demo, private=True, org=org)
 
-    public_root = Folder(name="/", owner=cloudr, library=public, full_name="/")
+    public_root = Folder(
+        name="/", owner=cloudr, repository=public, full_name="/")
     private_root = Folder(
-        name="/", owner=cloudr, library=private, full_name="/")
+        name="/", owner=cloudr, repository=private, full_name="/")
 
-    folder1 = Folder(name="folder", owner=cloudr, library=public,
+    folder1 = Folder(name="folder", owner=cloudr, repository=public,
                      parent=public_root, full_name="/folder/")
-    folder11 = Folder(name="sub folder", owner=cloudr, library=public,
+    folder11 = Folder(name="sub folder", owner=cloudr, repository=public,
                       full_name="/folder/sub folder/", parent=folder1)
-    folder2 = Folder(name="my folder", owner=demo, library=private,
+    folder2 = Folder(name="my folder", owner=demo, repository=private,
                      parent=private_root, full_name="/my folder/")
     session.add(public)
     session.add(private)

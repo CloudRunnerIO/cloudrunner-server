@@ -13,7 +13,6 @@
 #  *******************************************************/
 
 import httplib
-import json
 import logging
 import M2Crypto as m
 import os
@@ -109,7 +108,8 @@ class NodeTransport(TransportBackend):
                                         self.buses['jobs'][0],
                                         self.endpoints['ssl-proxy'],
                                         self.ssl_thread_event,
-                                        route_packets=True,
+                                        route_packets=False,
+                                        bind_socket=False,
                                         *args, **kwargs)
         ssl_socket.start()
 
@@ -149,6 +149,11 @@ class NodeTransport(TransportBackend):
                       'with "configure" option first.')
             exit(1)
 
+        # Run worker threads
+        LOGC.info('Running client in server mode')
+        listener = Thread(target=self.listener_device)
+        listener.start()
+
         if not os.path.exists(self.node_cert):
             csreq = self.node_csr
             if not csreq:
@@ -166,14 +171,10 @@ class NodeTransport(TransportBackend):
             if not self._register():
                 LOGC.error("Cannot register node at master")
                 return False
-
-        # Run worker threads
-        LOGC.info('Running client in server mode')
-        listener = Thread(target=self.listener_device)
-        listener.start()
+            else:
+                return True  # SSL already started
 
         self.ssl_start()
-        time.sleep(.5)  # wait for sockets to start
 
         return True
 
@@ -213,12 +214,11 @@ class NodeTransport(TransportBackend):
 
     def listener_device(self):
         self.sub = []
-        dispatcher = self.context.socket(zmq.DEALER)
+        dispatcher = self.context.socket(zmq.ROUTER)
         dispatcher.bind(self.buses['requests'][1])
 
-        ssl_proxy = self.context.socket(zmq.DEALER)
-        ssl_proxy.setsockopt(zmq.IDENTITY, 'SUB_LOC')
-        ssl_proxy.connect(self.endpoints['ssl-proxy'])
+        ssl_proxy = self.context.socket(zmq.ROUTER)
+        ssl_proxy.bind(self.endpoints['ssl-proxy'])
 
         master_sub = self.context.socket(zmq.SUB)
         master_sub.setsockopt(zmq.SUBSCRIBE, uuid.uuid4().hex)
@@ -228,43 +228,68 @@ class NodeTransport(TransportBackend):
         poller.register(master_sub, zmq.POLLIN)
         poller.register(ssl_proxy, zmq.POLLIN)
         # Sindicate requests from two endpoints and forward to 'requests'
+        ssl_proxy.send_multipart(['SSL_PROXY', HBR(self.node_id)._])
         while not self.stopped.is_set():
             try:
                 ready = dict(poller.poll(1000))
                 if master_sub in ready:
-                    _, message = master_sub.recv_multipart()
-                    if message:
-                        if message == StatusCodes.WELCOME or \
-                                message == StatusCodes.RELOAD:
-                            ssl_proxy.send_multipart([HEARTBEAT,
-                                                      'IDENT'])
-                        elif message == StatusCodes.HB:
-                            # Heartbeat
-                            ssl_proxy.send_multipart([HEARTBEAT,
-                                                      self.node_id])
-                        else:
-                            # decrypt
+                    _, m = master_sub.recv_multipart()
+                    try:
+                        message = M.build(m)
+                    except Exception, ex:
+                        LOGC.error(ex)
+                        LOGC.warn(m)
+                        continue
+
+                    if isinstance(message, Welcome) or \
+                            isinstance(message, Reload):
+                        ssl_proxy.send_multipart(['SSL_PROXY', Ident()._])
+                    elif isinstance(message, HB):
+                        # Heartbeat
+                        ssl_proxy.send(HBR(self.node_id)._)
+                    elif isinstance(message, Crypto):
+                        # decrypt
+                        try:
+                            msg = self.decrypt(message.message)
+                            dispatcher.send_multipart(['DISPATCHER', msg])
+                        except Exception, ex:
+                            LOGC.error(
+                                "Cannot decrypt frames%r" % ex)
+                if ssl_proxy in ready:
+                    src, packed = ssl_proxy.recv_multipart()
+                    if src == "SSL_PROXY":
+                        # SSL proxy -> Session
+                        msg = M.build(packed)
+                        if isinstance(msg, Init):
+                            # ToDo: better command handler
+                            sub_loc = msg.org_id
+                            if sub_loc not in self.sub:
+                                self.sub.append(sub_loc)
+                                master_sub.setsockopt(zmq.SUBSCRIBE, sub_loc)
+                                LOGC.info("Listening to %s" % msg.org_name)
+                            LOGC.info("Resetting crypter keys")
+                            self.decrypter = Crypter(msg.session_key,
+                                                     msg.session_iv)
+                        elif isinstance(msg, Job):
                             try:
-                                msg = json.loads(self.decrypt(message))
-                                dispatcher.send_multipart(
-                                    [str(m) for m in msg])
+                                LOGC.info(vars(msg))
+                                # FWD to Session
+                                ssl_proxy.send_multipart(
+                                    [msg.hdr.dest, msg._])
                             except Exception, ex:
                                 LOGC.error(
-                                    "Cannot decrypt frames from [%s]: %r" %
-                                    (_, ex))
-                if ssl_proxy in ready:
-                    frames = ssl_proxy.recv_multipart()
-                    if len(frames) == 3:
-                        # ToDo: better command handler
-                        sub_loc = frames[0]
-                        if sub_loc not in self.sub:
-                            self.sub.append(sub_loc)
-                            master_sub.setsockopt(zmq.SUBSCRIBE, sub_loc)
-                            LOGC.info("Listening to %s" % frames[1])
-                        LOGC.info("Resetting crypter keys")
-                        self.decrypter = Crypter(*json.loads(frames[2]))
+                                    "Cannot decrypt frames %r" % ex)
+                        if isinstance(msg, Register):
+                            ssl_proxy.send_multipart(["REGISTER", msg._])
+                    elif src == "REGISTER":
+                        msg = M.build(packed)
+                        if isinstance(msg, Control):
+                            ssl_proxy.send_multipart(['SSL_PROXY', msg._])
+                        elif isinstance(msg, Reload):
+                            ssl_proxy.send_multipart(['SSL_PROXY', Ident()._])
                     else:
-                        dispatcher.send_multipart(frames)
+                        # Session -> SSL proxy
+                        ssl_proxy.send_multipart(['SSL_PROXY', packed])
             except KeyboardInterrupt:
                 LOGC.info('Exiting node listener thread')
                 break
@@ -274,7 +299,8 @@ class NodeTransport(TransportBackend):
                     break
                 LOGC.exception(zerr)
             except Exception, ex:
-                LOGC.error("Node listener thread: exception %s" % ex)
+                LOGC.error("Node listener thread: exception")
+                LOGC.exception(ex)
 
         ssl_proxy.close()
 
@@ -286,7 +312,7 @@ class NodeTransport(TransportBackend):
 
     def _register(self):
 
-        LOGC.info(colors.grey('Registering on Master...'))
+        LOGC.info(colors.red('Registering on Master...'))
         csreq = self.node_csr
         _config = Config(CONFIG_NODE_LOCATION)
         try:
@@ -313,15 +339,19 @@ class NodeTransport(TransportBackend):
         def _next(reply):
             if not reply:
                 # First call? Send CSR
-                return [ADMIN_TOWER, 'REGISTER', node_id, csreq_data]
+                return Control('REGISTER', node_id, csreq_data)
 
-            rp = RegisterRep(reply)
+            msg = Register.build(reply)
+            if not msg:
+                print "FALSE", reply
+                return -1
 
-            if rp.reply == "APPROVED":
+            print vars(msg).keys()
+            if msg.status == "APPROVED":
                 # Load certificates from chain
                 (node_crt_string,
                  ca_crt_string,
-                 server_crt_string) = rp.data.split(
+                 server_crt_string) = msg.message.split(
                      TOKEN_SEPARATOR)
 
                 node_cert = m.X509.load_cert_string(
@@ -377,30 +407,31 @@ class NodeTransport(TransportBackend):
 
                 LOGC.info('Master approved the node. Starting service')
                 return 0
-            elif rp.reply == "REJECTED":
-                if rp.data == 'SEND_CSR':
-                    return [ADMIN_TOWER, 'REGISTER', node_id, csreq_data]
-                if rp.data == 'PENDING':
+            elif msg.status == "REJECTED":
+                if msg.message == 'SEND_CSR':
+                    # resend
+                    return Control('REGISTER', node_id, csreq_data)
+                if msg.message == 'PENDING':
                     LOGC.info("Master says: Request queued for approval.")
                     if time.time() < start_reg + int(self.wait_for_approval):
                         time.sleep(10)  # wait 10 sec before next try
-                        return [ADMIN_TOWER, 'REGISTER', node_id, csreq_data]
+                        return Control('REGISTER', node_id, csreq_data)
                     else:
                         return -1
-                elif rp.data == 'ERR_CRT_EXISTS':
+                elif msg.message == 'ERR_CRT_EXISTS':
                     LOGC.info(
                         'Master says: "There is already an issued certificate'
                         ' for this node. Remove the certificate'
                         ' from master first"')
                     return -1
-                elif rp.data == 'ERR_CN_FAIL':
+                elif msg.message == 'ERR_CN_FAIL':
                     LOGC.info(
                         'Master says: "Node Id doesn\'t match the request CN"')
                     return -1
-                elif rp.data == 'INV_CSR':
+                elif msg.message == 'INV_CSR':
                     LOGC.info('Master says: "Invalid CSR file"')
                     return -1
-                elif rp.data == 'ERR_NAME_FORBD':
+                elif msg.message == 'ERR_NAME_FORBD':
                     csr = m.X509.load_request_string(csreq_data)
                     LOGC.info(
                         'Master says: "The chosen node name(CN) - [%s] is '
@@ -408,7 +439,7 @@ class NodeTransport(TransportBackend):
                         csr.get_subject().CN)
                     del csr
                     return -1
-                elif rp.data == 'APPR_FAIL':
+                elif msg.message == 'APPR_FAIL':
                     LOGC.info('Master says: "Certificate approval failed"')
                     return -1
                 else:
@@ -422,7 +453,7 @@ class NodeTransport(TransportBackend):
         self.ssl_start()
 
         reg_sock = self.context.socket(zmq.DEALER)
-        reg_sock.setsockopt(zmq.IDENTITY, self.node_id)
+        reg_sock.setsockopt(zmq.IDENTITY, "REGISTER")
         reg_sock.connect(self.endpoints['ssl-proxy'])
 
         while not self.stopped.is_set():
@@ -433,16 +464,24 @@ class NodeTransport(TransportBackend):
                 if next_rq == 0:
                     # We're done, go ahead
                     approved = True
+                    self.restart()
+                    time.sleep(.5)  # wait for sockets to start
+                    reg_sock.send(Reload()._)
                     break
                 else:
                     end_wait = \
                         start_reg + int(self.wait_for_approval) - time.time()
-                    reg_sock.send_multipart(next_rq)
+
+                    reg_sock.send(next_rq._)
                     if not reg_sock.poll(end_wait * 1000):
                         LOGC.error("Timeout waiting for register response")
                         break
-                    reply = reg_sock.recv_multipart()
-            except ConnectionException:
+                    reply = reg_sock.recv()
+            except zmq.ZMQError, zerr:
+                if zerr.errno == zmq.ETERM or zerr.errno == zmq.ENOTSUP \
+                        or zerr.errno == zmq.ENOTSOCK:
+                    break
+                LOGC.exception(zerr)
                 LOGC.error("Rebuilding ssl connection %s" % reply)
                 self.restart()
                 reply = next_rq
@@ -450,7 +489,6 @@ class NodeTransport(TransportBackend):
                 LOGC.error(ex)
                 break
 
-        self.ssl_stop()
         reg_sock.close(0)
         return approved
 
@@ -458,6 +496,7 @@ class NodeTransport(TransportBackend):
         self.ssl_thread = Thread(target=self._ssl_socket_device,
                                  args=[self.context])
         self.ssl_thread.start()
+        time.sleep(.5)  # wait for sockets to start
 
     def ssl_stop(self):
         self.ssl_thread_event.set()

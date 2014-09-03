@@ -13,10 +13,8 @@
 #  *******************************************************/
 
 from cloudrunner.plugins import PLUGIN_BASES as _BASES
-from cloudrunner_server.plugins.auth.base import AuthPluginBase
 from cloudrunner_server.plugins.jobs.base import JobInOutProcessorPluginBase
 from cloudrunner_server.plugins.libs.base import IncludeLibPluginBase
 
-PLUGIN_BASES = tuple(list(_BASES) + [AuthPluginBase,
-                                     JobInOutProcessorPluginBase,
+PLUGIN_BASES = tuple(list(_BASES) + [JobInOutProcessorPluginBase,
                                      IncludeLibPluginBase])

@@ -1,5 +1,19 @@
-import json
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+# vim: tabstop=4 shiftwidth=4 softtabstop=4
+
+# /*******************************************************
+#  * Copyright (C) 2013-2014 CloudRunner.io <info@cloudrunner.io>
+#  *
+#  * Proprietary and confidential
+#  * This file is part of CloudRunner Server.
+#  *
+#  * CloudRunner Server can not be copied and/or distributed
+#  * without the express permission of CloudRunner.io
+#  *******************************************************/
+
 import logging
+import msgpack
 from pecan import expose, request
 from pecan.core import override_template
 from pecan.hooks import HookController
@@ -22,7 +36,7 @@ PAGE_SIZE = 50
 class Logs(HookController):
 
     __hooks__ = [ErrorHook(), DbHook(), RedisHook(),
-                 PermHook(dont_have={'is_super_admin'})]
+                 PermHook(dont_have=set(['is_super_admin']))]
 
     @expose('json')
     def all(self, start=None, end=None, tags=None):
@@ -113,7 +127,7 @@ class Logs(HookController):
 
         try:
             q = request.db.query(Log).join(
-                User, Tag, Org, Step).filter(
+                User, Org, Step).outerjoin(Tag).filter(
                     Org.name == request.user.org)
             if tags:
                 tag_names = [tag.strip() for tag in re.split('[\s,;]', tags)
@@ -127,6 +141,7 @@ class Logs(HookController):
                 q = q.order_by(Log.created_at.asc())
             else:
                 q = q.order_by(Log.created_at.desc())
+            print q
             logs = q.all()  # [start:end]
         except Exception, ex:
             LOG.exception(ex)
@@ -134,6 +149,7 @@ class Logs(HookController):
             return O.error(msg="Error loading logs")
         uuids = [l.uuid for l in logs if l.uuid]
 
+        print ">??", uuids, logs
         outputs = []
         with cache.reader(request.user.org, *uuids) as c:
             try:
@@ -175,7 +191,7 @@ class Logs(HookController):
                         frame.header.pop('src')
                     elif frame.frame_type == "S":
                         # Summary
-                        step.update(json.loads(frame.body[0]))
+                        step.update(msgpack.unpackb(frame.body[0]))
                         step.pop('user')
 
                     step.update(frame.header)

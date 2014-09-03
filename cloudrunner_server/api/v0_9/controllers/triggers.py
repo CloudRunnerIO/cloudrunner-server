@@ -1,24 +1,36 @@
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+# vim: tabstop=4 shiftwidth=4 softtabstop=4
+
+# /*******************************************************
+#  * Copyright (C) 2013-2014 CloudRunner.io <info@cloudrunner.io>
+#  *
+#  * Proprietary and confidential
+#  * This file is part of CloudRunner Server.
+#  *
+#  * CloudRunner Server can not be copied and/or distributed
+#  * without the express permission of CloudRunner.io
+#  *******************************************************/
+
+import json
 import logging
-from httplib2 import urllib
+from httplib2 import Http, urllib, urlparse
 from pecan import conf, expose, request
 from pecan.hooks import HookController
 from sqlalchemy.orm import exc
 
+from cloudrunner_server.api.decorators import wrap_command
 from cloudrunner_server.api.hooks.error_hook import ErrorHook
 from cloudrunner_server.api.hooks.db_hook import DbHook
 from cloudrunner_server.api.hooks.perm_hook import PermHook
-from cloudrunner_server.api.hooks.signal_hook import SignalHook, signal
-from cloudrunner_server.api.hooks.user_hook import UserHook
-from cloudrunner_server.api.hooks.zmq_hook import ZmqHook
+from cloudrunner_server.api.hooks.signal_hook import SignalHook
 from cloudrunner_server.api.model import (Job, User, Script, Permission,
-                                          Org, SOURCE_TYPE)
-from cloudrunner_server.api.v0_9.controllers.dispatch import Dispatch
+                                          SOURCE_TYPE)
 from cloudrunner_server.api.util import (JsonOutput as O,
                                          Wrap)
+from cloudrunner_server.triggers.manager import TriggerManager
 
-sig_manager = conf.signal_manager
 schedule_manager = conf.schedule_manager
-user_manager = conf.auth_manager
 
 JOB_FIELDS = ('name', 'target', 'arguments', 'enabled', 'private')
 LOG = logging.getLogger()
@@ -26,70 +38,56 @@ LOG = logging.getLogger()
 
 class TriggerSwitch(HookController):
 
-    __hooks__ = [ZmqHook(), UserHook(), SignalHook(), ErrorHook(), DbHook(),
-                 PermHook(dont_have={'is_super_admin'})]
+    __hooks__ = [SignalHook(), ErrorHook(), DbHook()]
 
-    @expose('json', generic=True)
+    @expose('json')
     def index(self, user=None, token=None, trigger=None, key=None, **kwargs):
-        if not user:
-            return O.error(msg="Unauthorized request")
+        LOG.info("Received trigger event(trigger: %s) from: %s" % (
+            trigger, request.client_addr))
 
-        LOG.info("Received trigger event(user: %s, trigger: %s) from: %s" % (
-            user, trigger, request.client_addr))
+        q = request.db.query(Job).join(User, Permission).filter(
+            Job.name == trigger,
+            Job.key == key,
+            Job.source == SOURCE_TYPE.EXTERNAL)
 
-        if not token:
-            # Check for external job
-            j = request.db.query(Job).join(User).filter(
-                Job.name == trigger,
-                Job.source == SOURCE_TYPE.EXTERNAL,
-                User.username == user,
-                Job.arguments == key).first()
-            if not j:
-                return O.error("Invalid request")
-
-            (token, expires) = user_manager.create_token(
-                user, "", expiry=30)
-
-        user_id, access_map = user_manager.validate(
-            user, token)
-
-        if not user_id or not access_map:
-            return O.error(msg="Unauthorized request")
-
-        permissions = [p.name for p in request.db.query(Permission).filter_by(
-            user_id=user_id).all()]
-        request.user = Wrap(id=user_id,
-                            username=user,
-                            org=access_map.org,
-                            permissions=permissions,
-                            token=token)
-
-        q = Job.active(request).filter(
-            Job.name == trigger)
-        d = Dispatch()
-        request.reset_zmq(user, token)
+        man = TriggerManager()
         results = []
         for trig in q.all():
-            if (trig.source == SOURCE_TYPE.EXTERNAL
-                and trig.arguments == key) or (trig.key == key):
+            if not trig.target:
+                LOG.warning("Empty trigger: %s" % trig.name)
+                continue
 
-                    results.append(dict(id=trig.id,
-                                        name=trig.name,
-                                        result=d.execute(
-                                        data=trig.target.content,
-                                        source=trig.target.name,
-                                        source_type=2,
-                                        **kwargs)))
+            u = trig.owner
+            permissions = [p.name for p in u.permissions]
+
+            request.user = Wrap(id=u.id,
+                                username=u.username,
+                                org=u.org.name,
+                                permissions=permissions)
+
+            hook = PermHook(dont_have=set(['is_super_admin']))
+            hook.before(None)
+
+            env = urlparse.parse_qs(trig.arguments)
+            env.update(kwargs)
+            res = man.execute(user_id=u.id,
+                              script_name=trig.target.full_path(),
+                              source_type=2,
+                              env=env, **kwargs)
+            results.append(dict(id=trig.id,
+                                name=trig.name,
+                                result=res))
 
         return O.result(runs=results, trigger=trigger)
 
 
 class Triggers(HookController):
 
-    __hooks__ = [UserHook(), SignalHook(), ErrorHook(), DbHook(),
-                 PermHook(dont_have={'is_super_admin'})]
+    __hooks__ = [SignalHook(), ErrorHook(), DbHook(),
+                 PermHook(dont_have=set(['is_super_admin']))]
 
     @expose('json', generic=True)
+    @wrap_command(Job, model_name="trigger")
     def jobs(self, *args, **kwargs):
         if not args:
             triggers = []
@@ -98,7 +96,7 @@ class Triggers(HookController):
                 skip=['owner_id', 'target_id'],
                 rel=[('owner.username', 'owner'),
                      ('target.name', 'script'),
-                     ('target.folder.library.name', 'library'),
+                     ('target.folder.repository.name', 'repository'),
                      ('target.folder.full_name', 'path')])
                 for t in query.all()]
             return O.triggers(_list=sorted(triggers,
@@ -111,7 +109,7 @@ class Triggers(HookController):
                     skip=['key', 'owner_id', 'target_id'],
                     rel=[('owner.username', 'owner'),
                          ('target.name', 'script'),
-                         ('target.folder.library.name', 'library'),
+                         ('target.folder.repository.name', 'repository'),
                          ('target.folder.full_name', 'path')]))
             except exc.NoResultFound, ex:
                 LOG.error(ex)
@@ -120,78 +118,77 @@ class Triggers(HookController):
         return O.error("Invalid request")
 
     @jobs.when(method='POST', template='json')
-    @signal('triggers.jobs', 'create',
-            when=lambda x: x.get("success", {}).get("status") == "ok")
+    @jobs.wrap_create()
     def create(self, name=None, **kwargs):
+        name = name or kwargs['name']
+        source = kwargs['source']
+        target = kwargs['target']
+        if target:
+            target = target.lstrip('/')
+        args = kwargs['arguments']
+        tags = kwargs.get('tags') or []
+
         try:
-            name = name or kwargs['name']
-            source = kwargs['source']
-            target = kwargs['target']
-            if target:
-                target = target.lstrip('/')
-            args = kwargs['arguments']
-            tags = kwargs.get('tags') or []
+            source = int(source)
+            SOURCE_TYPE.from_value(source)
+        except:
+            return O.error(msg="Invalid source: %s" % source)
+        job = Job(name=name, owner_id=request.user.id, enabled=True,
+                  source=source,
+                  arguments=args)
 
+        script = Script.find(request, target).first()
+        if script:
+            job.target = script
+
+        request.db.add(job)
+        request.db.commit()
+        request._model_id = job.id
+        # Post-create
+        url = ('%(rest)sfire/?trigger='
+               '%(trigger)s&key=%(key)s&tags=%(tags)s&%(args)s ')
+        kw = dict(rest=conf.REST_SERVER_URL,
+                  trigger=urllib.quote(job.name),
+                  key=urllib.quote(job.key))
+        if source == SOURCE_TYPE.CRON:
+            # CRON
             tags.extend(["Scheduler", name])
-
+            kw['tags'] = ",".join([urllib.quote(t) for t in tags])
+            success, res = schedule_manager.add(
+                request.user.username,
+                name=name,
+                period=args,
+                url=url % kw)
+        elif source == SOURCE_TYPE.ENV:
+            # ENV
+            # Regiter at publisher
+            pass
+        elif source == SOURCE_TYPE.LOG_CONTENT:
+            # LOG
+            # Regiter at publisher
+            pass
+        elif source == SOURCE_TYPE.EXTERNAL:
+            # EXTERNAL
+            tags.extend(["External", "Trigger", name])
+            kw['tags'] = ",".join([urllib.quote(t) for t in tags])
+            safe_args = urllib.urlencode(urlparse.parse_qsl(job.arguments))
+            kw['args'] = safe_args
+            headers = {'Content-type': 'application/x-www-form-urlencoded'}
             try:
-                source = int(source)
-                SOURCE_TYPE.from_value(source)
-            except:
-                return O.error(msg="Invalid source: %s" % source)
-            job = Job(name=name, owner_id=request.user.id, enabled=True,
-                      source=kwargs['source'],
-                      arguments=args)
-
-            script = Script.find(request, target).first()
-            if script:
-                job.target = script
-
+                header, body = None, None
+                header, body = Http().request(
+                    'http://crun.me', 'POST',
+                    body=urllib.urlencode({'url': url % kw}),
+                    headers=headers)
+                job.share_url = json.loads(body)['url']
+            except Exception, ex:
+                LOG.exception(ex)
+                LOG.warn("Shortening service is not reachable: %s" % body)
+                job.share_url = url % kw
             request.db.add(job)
-            request.db.commit()
-            # Post-create
-            if source == SOURCE_TYPE.CRON:
-                # CRON
-                (token, expires) = user_manager.create_token(
-                    request.user.username, "", expiry=99999999)
-                exec_ = {"exec": 'curl '
-                         '%sfire/?user=%s\&token=%s\&'
-                         'trigger=%s\&key=%s\&tags=%s '
-                         % (conf.REST_SERVER_URL,
-                            urllib.quote(request.user.username),
-                            token,
-                            urllib.quote(job.name),
-                            urllib.quote(job.key),
-                            ",".join(urllib.quote(t) for t in tags))}
-                success, res = schedule_manager.add(
-                    request.user.username,
-                    name=name,
-                    period=args,
-                    auth_token=token,
-                    **exec_)
-            elif source == SOURCE_TYPE.ENV:
-                # ENV
-                # Regiter at publisher
-                pass
-            elif source == SOURCE_TYPE.LOG_CONTENT:
-                # LOG
-                # Regiter at publisher
-                pass
-            elif source == SOURCE_TYPE.EXTERNAL:
-                # EXTERNAL
-                pass
-            return O.success(status='ok')
-        except KeyError, kex:
-            request.db.rollback()
-            return O.error(msg='Value not present: %s' % kex)
-        except Exception, ex:
-            LOG.exception(ex)
-            request.db.rollback()
-            return O.error(msg='%r' % ex)
 
     @jobs.when(method='PATCH', template='json')
-    @signal('triggers.jobs', 'update',
-            when=lambda x: x.get("success", {}).get("status") == "ok")
+    @jobs.wrap_update()
     def patch(self, name=None, **kw):
         try:
             kwargs = kw or request.json
@@ -216,12 +213,12 @@ class Triggers(HookController):
                 else:
                     return O.error(msg="Invalid target", field='target')
 
+            changes = []
             for k, v in kwargs.items():
                 if k in JOB_FIELDS and v is not None and hasattr(job, k):
-                    setattr(job, k, v)
-
-            request.db.add(job)
-            request.db.commit()
+                    if getattr(job, k) != v:
+                        setattr(job, k, v)
+                        changes.append(k)
 
             if job.source == SOURCE_TYPE.CRON:
                 # CRON
@@ -229,6 +226,35 @@ class Triggers(HookController):
                     request.user.username,
                     name=job.name,
                     period=job.arguments)
+            elif job.source == SOURCE_TYPE.EXTERNAL:
+                # EXTERNAL
+                url = ('%(rest)sfire/?trigger='
+                       '%(trigger)s&key=%(key)s&tags=%(tags)s&%(args)s ')
+                tags = ["External", "Trigger", job.name]
+                kw = dict(rest=conf.REST_SERVER_URL,
+                          trigger=urllib.quote(job.name),
+                          key=urllib.quote(job.key),
+                          args="")
+                kw['tags'] = ",".join([urllib.quote(t) for t in tags])
+                arguments = kwargs.pop('arguments')
+                if 'arguments' in changes:
+                    safe_args = urllib.urlencode(urlparse.parse_qsl(arguments))
+                    kw['args'] = safe_args
+                headers = {'Content-type': 'application/x-www-form-urlencoded'}
+                try:
+                    header, body = None, None
+                    header, body = Http().request(
+                        'http://crun.me', 'POST',
+                        body=urllib.urlencode({'url': url % kw}),
+                        headers=headers)
+                    job.share_url = json.loads(body)['url']
+                except Exception, ex:
+                    LOG.exception(ex)
+                    LOG.warn("Shortening service is not reachable: %s" % body)
+                    job.share_url = url % kw
+
+            request.db.add(job)
+
             return O.success(status='ok')
         except KeyError, kex:
             request.db.rollback()
@@ -239,8 +265,6 @@ class Triggers(HookController):
             return O.error(msg='%r' % ex)
 
     @jobs.when(method='PUT', template='json')
-    @signal('triggers.jobs', 'update',
-            when=lambda x: x.get("success", {}).get("status") == "ok")
     def update(self, **kw):
         kwargs = kw or request.json
         try:
@@ -254,8 +278,7 @@ class Triggers(HookController):
                            field=str(kerr))
 
     @jobs.when(method='DELETE', template='json')
-    @signal('triggers.jobs', 'delete',
-            when=lambda x: x.get("success", {}).get("status") == "ok")
+    @jobs.wrap_delete()
     def delete(self, job_id, **kwargs):
         try:
             job = Job.own(request).filter(

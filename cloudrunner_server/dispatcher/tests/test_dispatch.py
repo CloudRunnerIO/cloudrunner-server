@@ -67,7 +67,7 @@ whoami
                 self.config = Mock()
                 self.config.security = Mock(use_org=False)
 
-        remote_user_map = Mock(org="MyOrg")
+        remote_user_map = {'org': 'DEFAULT', 'roles': {'*': '@'}}
 
         class PluginCtx(object):
 

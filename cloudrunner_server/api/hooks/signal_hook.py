@@ -1,5 +1,18 @@
-from functools import wraps
-from pecan import conf, request, response  # noqa
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+# vim: tabstop=4 shiftwidth=4 softtabstop=4
+
+# /*******************************************************
+#  * Copyright (C) 2013-2014 CloudRunner.io <info@cloudrunner.io>
+#  *
+#  * Proprietary and confidential
+#  * This file is part of CloudRunner Server.
+#  *
+#  * CloudRunner Server can not be copied and/or distributed
+#  * without the express permission of CloudRunner.io
+#  *******************************************************/
+
+from pecan import conf, request
 
 from cloudrunner_server.api.hooks.redis_hook import RedisHook
 
@@ -14,17 +27,4 @@ class SignalHook(RedisHook):
             if conf.app.debug:
                 state.response.headers['X-Pecan-Fire-Signal'] = sig
             request.redis.incr(sig)
-            request.redis.publish(sig, state.response.fire_up_action)
-
-
-def signal(event, action, when=None):
-    def decorator(f):
-        @wraps(f)
-        def wrapper(*args, **kwargs):
-            ret = f(*args, **kwargs)
-            if not callable(when) or when(ret):
-                response.fire_up_event = event
-                response.fire_up_action = action
-            return ret
-        return wrapper
-    return decorator
+            request.redis.publish(sig, state.response.fire_up_id)

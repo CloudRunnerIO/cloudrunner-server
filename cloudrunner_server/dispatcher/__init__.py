@@ -44,10 +44,6 @@ class PluginContext(object):
             setattr(ctx, name, prop)
         return ctx
 
-    def create_auth_token(self, expiry):
-        return self.auth.create_token(self.user_id, self.password,
-                                      expiry=expiry, is_token=self.is_token)[1]
-
 
 class Promise(object):
 

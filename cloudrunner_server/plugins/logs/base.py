@@ -13,7 +13,7 @@
 #  *******************************************************/
 
 import abc
-import json
+import msgpack
 
 
 class LoggerPluginBase(object):
@@ -29,7 +29,7 @@ class LoggerPluginBase(object):
         pass
 
     @abc.abstractmethod
-    def log(self, **kwargs):
+    def log(self, msg):
         pass
 
 
@@ -41,8 +41,8 @@ class FrameBase(object):
         self.seq_no = 0
 
     @classmethod
-    def create(cls, **kwargs):
-        _type = kwargs.pop('type')
+    def create(cls, msg):
+        _type = msg.type
         frame = None
         if _type == "INITIAL":
             frame = InitialFrame()
@@ -52,7 +52,7 @@ class FrameBase(object):
             frame = SummaryFrame()
         else:
             return None
-        frame.push(**kwargs)
+        frame.push(**msg.values())
         return frame
 
     @classmethod
@@ -82,11 +82,13 @@ class FrameBase(object):
 class InitialFrame(FrameBase):
     frame_type = "I"
 
-    def push(self, ts=None, seq_no=None, job_id=None, step_id=None, **kwargs):
-        self.body = [json.dumps(kwargs)]
+    def push(self, ts=None, seq_no=None, job_id=None, step_id=None,
+             session_id=None, **kwargs):
+        self.body = [msgpack.packb(kwargs)]
         self.seq_no = seq_no
         self.ts = int(ts or 0)
         self.header['job_id'] = job_id
+        self.header['session_id'] = session_id
         self.header['step_id'] = step_id
 
 
@@ -94,7 +96,7 @@ class BodyFrame(FrameBase):
     frame_type = "B"
 
     def push(self, ts=None, seq_no=None, node=None, step_id=None,
-             stdout=None, stderr=None, **kwargs):
+             session_id=None, stdout=None, stderr=None, **kwargs):
         if stdout:
             self.body = stdout.splitlines()
             self.header['src'] = 'O'
@@ -105,14 +107,17 @@ class BodyFrame(FrameBase):
         self.ts = int(ts or 0)
         self.header['node'] = node
         self.header['step_id'] = step_id
+        self.header['session_id'] = session_id
 
 
 class SummaryFrame(FrameBase):
     frame_type = "S"
 
-    def push(self, ts=None, seq_no=None, job_id=None, step_id=None, **kwargs):
-        self.body = [json.dumps(kwargs)]
+    def push(self, ts=None, seq_no=None, job_id=None, step_id=None,
+             session_id=None, **kwargs):
+        self.body = [msgpack.packb(kwargs)]
         self.seq_no = seq_no
         self.ts = int(ts or 0)
         self.header['job_id'] = job_id
         self.header['step_id'] = step_id
+        self.header['session_id'] = session_id

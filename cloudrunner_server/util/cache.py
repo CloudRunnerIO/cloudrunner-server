@@ -1,3 +1,17 @@
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+# vim: tabstop=4 shiftwidth=4 softtabstop=4
+
+# /*******************************************************
+#  * Copyright (C) 2013-2014 CloudRunner.io <info@cloudrunner.io>
+#  *
+#  * Proprietary and confidential
+#  * This file is part of CloudRunner Server.
+#  *
+#  * CloudRunner Server can not be copied and/or distributed
+#  * without the express permission of CloudRunner.io
+#  *******************************************************/
+
 from collections import Iterable
 from functools import partial
 import logging
@@ -7,7 +21,7 @@ import re
 
 from cloudrunner_server.plugins.logs.base import FrameBase, BodyFrame
 
-LOG = logging.getLogger()
+LOG = logging.getLogger('REDIS CACHE')
 REL_MAP_KEY = "MAPKEYS"
 
 
@@ -16,9 +30,9 @@ class CacheRegistry(object):
     def __init__(self, config=None, redis=None):
         if config:
             self.r_host, self.r_port = '127.0.0.1', 6379
-            if config.has_section("Logging"):
-                self.r_host = config.logging.server_url or self.r_host
-                self.r_port = int(config.logging.port or self.r_port)
+            if config.redis:
+                self.r_host, self.r_port = config.redis.split(":", 1)
+                self.r_port = int(self.r_port)
             self.redis = r.Redis(host=self.r_host, port=self.r_port, db=0)
         elif redis:
             self.redis = redis
@@ -41,7 +55,7 @@ class CacheRegistry(object):
                 if not arr:
                     continue
                 pipe.get(RegBase._get_rel_id(arr))
-        ids = pipe.execute()
+        ids = [i for i in pipe.execute() if i]
         if ids:
             return max(ids, key=int)
         return 0
@@ -109,7 +123,7 @@ class RegBase(object):
 class RegWriter(RegBase):
 
     def store(self, frame):
-        LOG.debug("Storing frame %s" % vars(frame))
+        LOG.info("Storing frame %s" % vars(frame))
         seq_no = self.redis.incr("___INCR___")
         data_key = self._get_rel_id(self.key, **frame.header)
         if frame.body:
@@ -148,6 +162,7 @@ class RegReader(RegBase):
 
         new_score = 1
         output = {}
+        print "1", self.keys
         for fid, key in enumerate(self.keys):
             frames = []
             self.redis.zrangebyscore(key, min_score, max_score,

@@ -1,3 +1,17 @@
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+# vim: tabstop=4 shiftwidth=4 softtabstop=4
+
+# /*******************************************************
+#  * Copyright (C) 2013-2014 CloudRunner.io <info@cloudrunner.io>
+#  *
+#  * Proprietary and confidential
+#  * This file is part of CloudRunner Server.
+#  *
+#  * CloudRunner Server can not be copied and/or distributed
+#  * without the express permission of CloudRunner.io
+#  *******************************************************/
+
 from random import SystemRandom
 import string
 
@@ -5,7 +19,7 @@ REDIS_AUTH_USER = 'X-Auth-Cached-User__%s'
 REDIS_AUTH_TOKEN = 'X-Auth-Cached-Token__%s'
 REDIS_AUTH_PERMS = 'X-Auth-Cached-Permissions__%s'
 
-TOKEN_CHARS = string.letters + string.digits + '~^_$-'
+TOKEN_CHARS = string.letters + string.digits + '~_-'
 
 
 class AttrGetterMeta(type):

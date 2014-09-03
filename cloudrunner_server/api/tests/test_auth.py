@@ -15,17 +15,14 @@
 import json
 from dateutil import parser
 from datetime import datetime, timedelta
-from mock import Mock
-from mock import patch
 import webtest
 
 from cloudrunner_server.api.tests import base
+from cloudrunner_server.api.util import TOKEN_CHARS
 
 
 class TestAuthentication(base.BaseRESTTestCase):
 
-    @patch('cloudrunner_server.plugins.auth.user_db.random_token',
-           Mock(return_value="A_SECRET_TOKEN"))
     def test_login(self):
         now = datetime.now()
         resp = self.app.get('/rest/auth/login/testuser/testpassword')
@@ -36,20 +33,20 @@ class TestAuthentication(base.BaseRESTTestCase):
 
         exact_exp = now + timedelta(minutes=1440)
         self.assertEqual(resp_json['user'], 'testuser')
-        self.assertEqual(len(resp_json['token']), len("A_SECRET_TOKEN"))
+        self.assertEqual(len(resp_json['token']), 64)
         self.assertEqual(abs((exact_exp - resp_json['expire']).seconds), 0)
-        self.assertEqual(resp_json['token'], 'A_SECRET_TOKEN')
+        self.assertTrue(set(resp_json['token']).issubset(set(TOKEN_CHARS)))
 
     def test_fake_login(self):
         resp = self.app.get('/rest/auth/login/testuser/wrong_password')
         self.assertEqual(resp.status_int, 200, resp.status_int)
-        resp_json = json.loads(resp.body)['login']
+        resp_json = json.loads(resp.body)
 
-        self.assertEqual(resp_json, dict(error="Cannot login"))
+        self.assertEqual(resp_json, {u'error': {u'msg': u'Cannot login'}})
 
     def test_unauthorized_call(self):
         self.assertRaises(webtest.app.AppError,
-                          self.app.get, '/rest/library/workflows',
+                          self.app.get, '/rest/library/browse',
                           headers={'Cr-Token': 'NON_EXISTING_TOKEN',
                                    'Cr-User': 'testuser'})
 
@@ -60,7 +57,7 @@ class TestAuthentication(base.BaseRESTTestCase):
         self.assertEqual(resp.status_int, 200, resp.status_int)
         resp_json = json.loads(resp.body)
         self.assertEqual(resp_json,
-                         {'status': 'ok'},
+                         {'success': {'status': 'ok'}},
                          resp_json)
 
     def test_fake_logout(self):
@@ -68,4 +65,4 @@ class TestAuthentication(base.BaseRESTTestCase):
                             headers={'Cr-Token': 'PREDEFINED_TOKEN'})
         self.assertEqual(resp.status_int, 200, resp.status_int)
         resp_json = json.loads(resp.body)
-        self.assertEqual(resp_json, {'error': 'Cannot logout'}, resp_json)
+        self.assertEqual(resp_json, {'error': {'msg': 'Cannot logout'}})

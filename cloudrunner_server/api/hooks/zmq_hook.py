@@ -1,5 +1,18 @@
-from pecan.hooks import PecanHook
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+# vim: tabstop=4 shiftwidth=4 softtabstop=4
 
+# /*******************************************************
+#  * Copyright (C) 2013-2014 CloudRunner.io <info@cloudrunner.io>
+#  *
+#  * Proprietary and confidential
+#  * This file is part of CloudRunner Server.
+#  *
+#  * CloudRunner Server can not be copied and/or distributed
+#  * without the express permission of CloudRunner.io
+#  *******************************************************/
+
+from pecan.hooks import PecanHook
 from cloudrunner_server.api.server import Master
 
 
@@ -8,27 +21,20 @@ class ZmqHook(PecanHook):
     priority = 101
 
     def before(self, state):
-        user = state.request.headers.get('Cr-User')
-        token = state.request.headers.get('Cr-Token')
-
-        def zmq(user, token):
+        def zmq(user):
             def wrapper(*args, **kwargs):
-                return Master(user, token).command(*args, **kwargs)
+                return Master(user).command(*args, **kwargs)
             return wrapper
 
-        state.request.zmq = zmq(user, token)
+        state.request.zmq = zmq(state.request.user.username)
 
-        def reset(user, token):
-            state.request.zmq = zmq(user, token)
+        def reset(user):
+            state.request.zmq = zmq(user)
 
         state.request.reset_zmq = reset
 
     def after(self, state):
         return
-        if hasattr(state.request, 'zmq'):
-            state.request.zmq.close()
 
     def on_error(self, state, exc):
         return
-        if hasattr(state.request, 'zmq'):
-            state.request.zmq.close()

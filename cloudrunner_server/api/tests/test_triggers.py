@@ -12,12 +12,10 @@
 #  * without the express permission of CloudRunner.io
 #  *******************************************************/
 
-from datetime import datetime
 import json
-from mock import call, patch, Mock
+from mock import call, patch
 
 from cloudrunner_server.api.tests import base
-from cloudrunner_server.api.model.triggers import random_token
 
 
 class TestTriggers(base.BaseRESTTestCase):
@@ -32,8 +30,9 @@ class TestTriggers(base.BaseRESTTestCase):
              'arguments': '* * * * *',
              'owner': 'testuser',
              'path': '/folder1/',
+             'share_url': None,
              'id': 1,
-             'library': 'cloudrunner'},
+             'repository': 'cloudrunner'},
             {'name': 'trigger2',
              'script': 'test1',
              'enabled': True,
@@ -42,8 +41,9 @@ class TestTriggers(base.BaseRESTTestCase):
              'arguments': 'JOB',
              'owner': 'testuser2',
              'path': '/folder2/',
+             'share_url': None,
              'id': 2,
-             'library': 'private'}
+             'repository': 'private'}
         ]
 
         resp = self.app.get('/rest/triggers/jobs',
@@ -73,20 +73,20 @@ class TestTriggers(base.BaseRESTTestCase):
                                             "source": 1,
                                             "arguments": "* * * * *",
                                             "owner": "testuser",
+                                            "share_url": None,
                                             "path": "/folder1/",
                                             "id": 1,
-                                            "library": "cloudrunner"},
+                                            "repository": "cloudrunner"},
                          resp.body)
 
     @patch('cloudrunner_server.api.v0_9.controllers.'
-           'triggers.user_manager')
-    @patch('cloudrunner_server.api.v0_9.controllers.'
            'triggers.schedule_manager')
+    @patch('cloudrunner_server.api.model.users.random_token')
     @patch('cloudrunner_server.api.model.triggers.random_token')
-    def test_create(self, rand, scheduler, auth):
-        rand.return_value = '111111111'
+    def test_create(self, t_rand, u_rand, scheduler):
+        t_rand.return_value = '222222222'
+        u_rand.return_value = '111111111'
         scheduler.add.return_value = (True, None)
-        auth.create_token.return_value = ("JOB_TOKEN", datetime(2020, 10, 1))
         resp = self.app.post('/rest/triggers/jobs',
                              "name=trigger_new&arguments=* 0 * * *&target=/folder1/scr1"  # noqa
                              "&source=1",
@@ -96,19 +96,18 @@ class TestTriggers(base.BaseRESTTestCase):
         self.assertEqual(resp.status_int, 200, resp.status_int)
         resp_json = json.loads(resp.body)
 
-        kw = {'exec': 'curl https://localhost/rest/fire/?user=testuser\\&token=JOB_TOKEN'  # noqa
-        '\\&trigger=trigger_new\\&key=111111111\\&tags=Scheduler,trigger_new '}  # noqa
+        url = 'https://localhost/rest/fire/?trigger=trigger_new' \
+        '&key=222222222&tags=Scheduler,trigger_new '  # noqa
 
-        self.assertEqual(resp_json,  {"success": {"status": "ok"}},
+        self.assertEqual(resp_json, {"success": {"status": "ok"}},
                          resp.body)
         self.assertEqual(scheduler.add.call_args_list,
                          [call('testuser',
-                               auth_token='JOB_TOKEN',
                                period='* 0 * * *',
                                name='trigger_new',
-                               **kw)])
-        self.assertRedisInc('triggers.jobs')
-        self.assertRedisPub('triggers.jobs', 'create')
+                               url=url)])
+        self.assertRedisInc('jobs:create')
+        self.assertRedisPub('jobs:create', 3)
 
     @patch('cloudrunner_server.api.v0_9.controllers.'
            'triggers.schedule_manager')
@@ -129,8 +128,8 @@ class TestTriggers(base.BaseRESTTestCase):
                                name='trigger1',
                                period='* 1 2 3 *')])
 
-        self.assertRedisInc('triggers.jobs')
-        self.assertRedisPub('triggers.jobs', 'update')
+        self.assertRedisInc('jobs:update')
+        self.assertRedisPub('jobs:update', 1)
 
     @patch('cloudrunner_server.api.v0_9.controllers.'
            'triggers.schedule_manager')
@@ -150,9 +149,10 @@ class TestTriggers(base.BaseRESTTestCase):
         self.assertRedisInc(None)
         self.assertRedisPub(None, None)
 
-        self.assertEqual(resp_json,
-                         {"error": {"msg": "Value not present: ''source''",
-                         "field": "'source'"}},
+        self.assertEqual(resp_json, {"error":
+                         {"msg": "Value not present: ''source''",
+                          "field": "'source'"
+                          }},
                          resp.body)
 
     @patch('cloudrunner_server.api.v0_9.controllers.'
@@ -171,5 +171,5 @@ class TestTriggers(base.BaseRESTTestCase):
         #                 [call('testuser', name='job1')])
 
         self.assertEqual(resp_json, {"success": {"status": "ok"}}, resp.body)
-        self.assertRedisInc('triggers.jobs')
-        self.assertRedisPub('triggers.jobs', 'delete')
+        self.assertRedisInc('jobs:delete')
+        self.assertRedisPub('jobs:delete', 1)

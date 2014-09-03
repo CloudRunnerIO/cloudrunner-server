@@ -49,6 +49,7 @@ setup(
         "console_scripts": [
             "cloudrunner-master = cloudrunner_server.master.cli:main",
             "cloudrunner-dsp = cloudrunner_server.dispatcher.server:main",
+            "cloudrunner-trigger = cloudrunner_server.triggers.manager:main",
             "cloudrunner-plugins-openstack-master = "
             "cloudrunner_server.plugins.bin.plugins_openstack_master:install",
             "cloudrunner-plugins-keystone = "

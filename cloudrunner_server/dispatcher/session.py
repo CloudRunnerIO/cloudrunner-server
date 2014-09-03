@@ -12,8 +12,8 @@
 #  * without the express permission of CloudRunner.io
 #  *******************************************************/
 
-import json
 import logging
+import re
 from sys import maxint as MAX_INT
 from threading import (Thread, Event)
 import time
@@ -23,8 +23,8 @@ from cloudrunner.core import parser
 from cloudrunner.core.exceptions import (ConnectionError,
                                          InterruptStep,
                                          InterruptExecution)
-from cloudrunner.core.message import JobInput
-from cloudrunner.core.message import JobRep
+from cloudrunner.core.message import (M, Ready, StdOut, StdErr,
+                                      Finished, Events, Job, Term, JobTarget)
 from cloudrunner.core.message import (InitialMessage,
                                       PipeMessage,
                                       FinishedMessage)
@@ -61,7 +61,7 @@ class JobSession(Thread):
     def _reply(self, message):
         message.seq_no = self.seq
         self.seq += 1
-        self.job_done.send(json.dumps(message.pack()))
+        self.job_done.send(message._)
         """
         for sub in self.manager.subscriptions.get(message.session_id, []):
             try:
@@ -109,7 +109,16 @@ class JobSession(Thread):
             LOG.warn("Request without executable sections")
 
     def run(self):
+        try:
+            self._run()
+        except Exception, ex:
+            LOG.exception(ex)
+
+    def _run(self):
         env = self.kwargs.pop('env', {})
+        if not isinstance(env, dict):
+            LOG.warn("Invalid ENV passed: %s" % env)
+            env = {}
         self.parse_script(env)
 
         self.job_done = self.manager.backend.publish_queue('logger')
@@ -140,8 +149,7 @@ class JobSession(Thread):
             LOG.info("Persistent Session started(%s)" % self.session_id)
             timeout = MAX_INT
 
-        user_org = (self.user, self.remote_user_map.org)
-
+        user_org = (self.user, self.remote_user_map['org'])
         # Clean up
         self.kwargs.pop('user_org', None)
         self.kwargs.pop('section', None)
@@ -172,6 +180,7 @@ class JobSession(Thread):
             msg_ret = []
 
             try:
+                """
                 for plugin in self.plugin_context.job_plugins:
                     try:
                         # Save passed env for job
@@ -208,7 +217,7 @@ class JobSession(Thread):
                             libs.append(lib)
                     except Exception, ex:
                         LOG.error('Plugin error(%s):  %r' % (plugin, ex))
-
+                """
                 if section.args and section.args.timeout:
                     try:
                         timeout = int(section.args.timeout)
@@ -238,12 +247,13 @@ class JobSession(Thread):
                         message = PipeMessage(session_id=self.session_id,
                                               step_id=step_id,
                                               user=self.user,
-                                              org=self.remote_user_map.org,
+                                              org=self.remote_user_map['org'],
                                               ts=ts,
                                               **dict(zip(names, _reply[1:])))
                         self._reply(message)
                     else:
                         job_id, msg_ret = _reply
+                        break
 
                 new_env = {}
                 for _ret in msg_ret:
@@ -260,6 +270,7 @@ class JobSession(Thread):
                             new_env[k] = v
 
                 env.update(new_env)
+                """
                 for plugin in self.plugin_context.job_plugins:
                     try:
                         # Save passed env for job
@@ -276,7 +287,7 @@ class JobSession(Thread):
                         raise
                     except Exception, ex:
                         LOG.error('Plugin error(%s):  %r' % (plugin, ex))
-
+                """
                 ret.append(dict(targets=section.targets,
                                 jobid=job_id,
                                 args=section.args_string,
@@ -299,8 +310,9 @@ class JobSession(Thread):
                                           ts=ts,
                                           user=self.user,
                                           step_id=step_id,
-                                          org=self.remote_user_map.org,
-                                          result=exec_result)
+                                          org=self.remote_user_map['org'],
+                                          result=exec_result,
+                                          env=env)
                 self._reply(message)
 
         self.session_event.set()
@@ -341,8 +353,11 @@ class JobSession(Thread):
         discovery_period = time.time() + self.manager.discovery_timeout
         total_wait = time.time() + (timeout or self.manager.wait_timeout)
 
-        self.manager.publisher.send(
-            remote_user_map.org, job_id, str(targets))
+        target = JobTarget(job_id, str(targets))
+        target.hdr.org = remote_user_map['org']
+        self.manager.publisher.send(target._)
+
+        user_map = UserMap(remote_user_map['roles'], self.user)
 
         try:
             while not self.session_event.is_set() and not job_event.is_set():
@@ -352,6 +367,7 @@ class JobSession(Thread):
                     frames = user_input_queue.recv()
 
                     # input from user -> node
+                    """
                     input_req = JobInput.build(*frames)
                     if not input_req:
                         LOG.warn("Invalid request %s" % frames)
@@ -361,8 +377,12 @@ class JobSession(Thread):
                         if input_req.cmd == 'INPUT' and \
                             (input_req.targets == '*' or
                                 node in input_req.targets):
-                            job_reply.send(data['router_id'], node, job_id,
-                                           input_req.cmd, input_req.data)
+                            job_reply.send(
+                                R(data['router_id'],
+                                  Input.build(job_id,
+                                              input_req.cmd,
+                                              input_req.data)._)._)
+                    """
                     continue
 
                 frames = None
@@ -390,7 +410,7 @@ class JobSession(Thread):
 
                     continue
 
-                job_rep = JobRep.build(*frames)
+                job_rep = M.build(frames[0])
 
                 if not job_rep:
                     LOG.error("Invalid reply from node: %s" % frames)
@@ -398,79 +418,79 @@ class JobSession(Thread):
 
                 # Assert we have rep from the same organization
                 if (self.manager.config.security.use_org and
-                        job_rep.org != remote_user_map.org):
+                        job_rep.hdr.org != remote_user_map['org']):
                     continue
 
                 state = node_map.setdefault(
-                    job_rep.peer, dict(status=StatusCodes.STARTED,
-                                       data={},
-                                       stdout='',
-                                       stderr=''))
+                    job_rep.hdr.peer, dict(status=StatusCodes.STARTED,
+                                           data={},
+                                           stdout='',
+                                           stderr=''))
 
-                node_map[job_rep.peer]['router_id'] = job_rep.ident
-                if job_rep.control == StatusCodes.READY:
-                    remote_user = remote_user_map.select(job_rep.peer)
+                node_map[job_rep.hdr.peer]['router_id'] = job_rep.hdr.ident
+                if isinstance(job_rep, Ready):
+                    remote_user = user_map.select(job_rep.hdr.peer)
                     if not remote_user:
                         LOG.info("Node %s not allowed for user %s" % (
-                            job_rep.peer,
-                            remote_user_map.owner))
-                        node_map.pop(job_rep.peer)
+                            job_rep.hdr.peer,
+                            self.user))
+                        node_map.pop(job_rep.hdr.peer)
                         continue
                     # Send task to attached node
-                    node_map[job_rep.peer]['remote_user'] = remote_user
-                    LOG.info("Sending job to %s" % job_rep.peer)
-                    job_reply.send(job_rep.ident, job_rep.peer, job_id, 'JOB',
-                                   json.dumps((remote_user, request)))
+                    node_map[job_rep.hdr.peer]['remote_user'] = remote_user
+                    LOG.info("Sending job to %s" % job_rep.hdr.peer)
+                    job_msg = Job(job_id, remote_user, request)
+                    job_msg.hdr.ident = job_rep.hdr.ident
+                    job_msg.hdr.dest = job_id
+                    job_reply.send(job_msg._)
                     continue
 
-                if not job_rep.data:
-                    continue
-                state['data'].update(job_rep.data)
                 state['status'] = job_rep.control
-                if job_rep.control == StatusCodes.FINISHED:
-                    state['data']['stdout'] = state['stdout'] + \
-                        state['data']['stdout']
-                    state['data']['stderr'] = job_rep.data.pop('stderr')
-                    if state['data']['stdout'] and state['data']['stderr']:
+
+                if isinstance(job_rep, Finished):
+                    state['data']['ret_code'] = job_rep.result['ret_code']
+                    state['data']['env'] = job_rep.result['env']
+                    if job_rep.result['stdout'] or job_rep.result['stderr']:
                         yield ('PIPE', job_id,
-                               job_rep.run_as,
-                               job_rep.peer,
-                               state['data']['stdout'],
-                               state['data']['stderr'])
-                elif job_rep.control == StatusCodes.STDOUT:
+                               '',
+                               job_rep.hdr.peer,
+                               job_rep.result['stdout'],
+                               job_rep.result['stderr'])
+                elif isinstance(job_rep, StdOut):
                     yield ('PIPE', job_id,
                            job_rep.run_as,
-                           job_rep.peer,
-                           job_rep.data['stdout'], '')
-                elif job_rep.control == StatusCodes.STDERR:
+                           job_rep.hdr.peer,
+                           job_rep.output, '')
+                elif isinstance(job_rep, StdErr):
                     yield ('PIPE', job_id,
                            job_rep.run_as,
-                           job_rep.peer,
-                           '', job_rep.data['stderr'])
-                elif job_rep.control == StatusCodes.EVENTS:
+                           job_rep.hdr.peer,
+                           '', job_rep.output)
+                elif isinstance(job_rep, Events):
                     LOG.info("Polling events for %s" % job_id)
                 # else:
                 #    job_reply.send(job_rep.ident, job_rep.peer, job_id,
                 #    'UNKNOWN')
 
-                LOG.debug('Resp[%s]:: [%s][%s][%s]\n' % (job_id,
-                                                         job_rep.peer,
-                                                         job_rep.control,
-                                                         job_rep.data))
+                LOG.debug('Resp[%s]:: [%s][%s]' % (job_id,
+                                                   job_rep.hdr.peer,
+                                                   job_rep.control))
         except ConnectionError:
             # Transport died
             self.session_event.set()
         except Exception, ex:
             LOG.exception(ex)
         finally:
+            # LOG.warning(node_map)
             if self.session_event.is_set() or job_event.is_set():
                 # Forced stop ?
                 # ToDo: check arg flag to keep task running
                 for name, node in node_map.items():
                     try:
-                        job_reply.send(
-                            node['router_id'], name, job_id,
-                            'TERM', self.stop_reason)
+                        job_msg = Term(job_id, self.stop_reason)
+                        job_msg.hdr.ident = node['router_id']
+                        job_msg.hdr.dest = job_id
+                        job_reply.send(job_msg._)
                     except:
                         continue
 
@@ -482,7 +502,10 @@ class JobSession(Thread):
                         node['stderr'] = \
                             node['data'].setdefault('stderr', '') + \
                             '\nJob execution stopped: [%s]' % self.stop_reason
-                        yield ('PIPE', job_id, job_rep.run_as, name,
+
+                        node['stdout'] = str(node)
+
+                        yield ('PIPE', job_id, '', name,
                                node['stdout'], node['stderr'])
 
             job_event.set()
@@ -522,3 +545,32 @@ class Section(object):
                         repl_params = sel + param_val
                     self.targets = self.targets.replace(
                         sel + param, repl_params)
+
+
+class UserMap(object):
+
+    def __init__(self, role_map, user):
+        self.rules = {}
+        self.default = None
+        self.user = user
+        for k, v in role_map.items():
+            if k == '*':
+                self.default = v
+            else:
+                try:
+                    self.rules[v] = re.compile(k)
+                except:
+                    pass
+
+    def select(self, node):
+        for role, rule in self.rules.items():
+            if rule.match(node):
+                LOG.info("Rule %s applied for user %s" % (node, self.user))
+                return role
+
+        if self.default:
+            LOG.info("Default rule for %s applied for user %s" % (node,
+                                                                  self.user))
+            return self.default
+
+        return None

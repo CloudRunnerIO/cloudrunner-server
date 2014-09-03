@@ -1,5 +1,6 @@
 from functools import wraps
 import logging
+import redis
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import scoped_session, sessionmaker
 
@@ -9,15 +10,15 @@ from cloudrunner_server.plugins.logs.base import (LoggerPluginBase,
 from cloudrunner_server.util.cache import CacheRegistry
 from cloudrunner_server.util.db import checkout_listener
 
-LOG = logging.getLogger()
+LOG = logging.getLogger('DB LOGGER')
 
 
 def wrap_error(f):
     @wraps(f)
-    def wrapper(*args, **kwargs):
+    def wrapper(*args):
         try:
             self = args[0]
-            res = f(*args, **kwargs)
+            res = f(*args)
             self.db.commit()
             return res
         except Exception, ex:
@@ -29,8 +30,11 @@ def wrap_error(f):
 class DbLogger(LoggerPluginBase):
 
     def __init__(self, config):
-        self.db_path = config.logging.db
+        self.db_path = config.db
         self.cache = CacheRegistry(config=config)
+        redis_host = config.redis or '127.0.0.1:6379'
+        host, port = redis_host.split(':')
+        self.r = redis.Redis(host=host, port=port, db=0)
 
     def set_context_from_config(self, recreate=None, **configuration):
         session = scoped_session(sessionmaker())
@@ -45,7 +49,7 @@ class DbLogger(LoggerPluginBase):
         self.db = session
 
     def _finalize(self, user=None, org=None, session_id=None,
-                  result=None, step_id=None, **kwargs):
+                  result=None, step_id=None):
         try:
             log = self.db.query(Log).join(Step, User, Org).filter(
                 Log.uuid == session_id,
@@ -61,16 +65,30 @@ class DbLogger(LoggerPluginBase):
                 log.exit_code = 1
             self.db.add(log)
             self.db.commit()
-        except:
+        except Exception, ex:
+            LOG.exception(ex)
             self.db.rollback()
 
     @wrap_error
-    def log(self, **kwargs):
-        org = kwargs.pop('org')
-        _id = kwargs.pop('session_id')
-        frame = FrameBase.create(**kwargs)
-        with self.cache.writer(org, _id) as cache:
+    def log(self, msg):
+        frame = FrameBase.create(msg)
+        LOG.debug(frame)
+        with self.cache.writer(msg.org, msg.session_id) as cache:
             cache.store(frame)
             if frame.frame_type == "S":
-                self._finalize(session_id=_id, org=org, **kwargs)
+                self._finalize(user=msg.user, session_id=msg.session_id,
+                               org=msg.org, result=msg.result,
+                               step_id=msg.step_id)
                 cache.notify("logs")
+
+        if frame.frame_type == "S":
+            if msg.env:
+                for k in msg.env.keys():
+                    self.r.publish('env:%s' % k, msg.session_id)
+        elif frame.frame_type == "B":
+            if msg.stdout:
+                self.r.publish('output:%s' %
+                               msg.stdout, msg.session_id)
+            if msg.stderr:
+                self.r.publish('output:%s' %
+                               msg.stderr, msg.session_id)
