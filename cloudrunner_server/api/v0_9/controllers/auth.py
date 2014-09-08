@@ -43,6 +43,10 @@ class Auth(HookController):
         if not user:
             return O.error(msg='Cannot login')
 
+        try:
+            expire = int(expire)
+        except:
+            expire = DEFAULT_EXP
         token = User.create_token(request, user.id,
                                   minutes=expire,
                                   scope='LOGIN')

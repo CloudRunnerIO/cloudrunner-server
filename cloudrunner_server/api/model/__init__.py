@@ -17,10 +17,10 @@ from sqlalchemy import create_engine, event
 from sqlalchemy.orm import scoped_session, sessionmaker
 
 from .base import metadata
-from .log import *  # noqa
 from .nodes import *  # noqa
 from .users import *  # noqa
 from .library import *  # noqa
+from .tasks import *  # noqa
 from .triggers import *  # noqa
 
 from cloudrunner_server.util.db import checkout_listener
@@ -152,40 +152,78 @@ def populate(session):
     session.commit()
 
     scr0 = Script(name='script somewhere', owner=demo, folder=folder11,
-                  content="#! switch [*]\nhostname")
+                  )
     session.add(scr0)
+    session.commit()
 
-    scr00 = Script(name='script where', owner=demo, folder=folder1,
-                   content="#! switch [*]\nhostname")
+    r = Revision(content="#! switch [*]\nhostname", script=scr0)
+    session.add(r)
+    session.commit()
+
+    scr00 = Script(name='script where', owner=demo, folder=folder1)
     session.add(scr00)
+    session.commit()
 
-    scr1 = Script(name='scr1', folder=folder1, owner=demo,
-                  content="#! switch [*]\nhostname")
+    r1 = Revision(content="#! switch [*]\nhostname", script=scr00)
+    session.add(r1)
+    session.commit()
+
+    scr1 = Script(name='scr1', folder=folder1, owner=demo)
     session.add(scr1)
+    session.commit()
 
-    scr2 = Script(name='scr2', folder=folder1, owner=demo,
-                  content="#! switch [*]\ncloudrunner-node details")
+    r2 = Revision(content="#! switch [*]\nhostname", script=scr1)
+    session.add(r2)
+    session.commit()
+
+    scr2 = Script(name='scr2', folder=folder1, owner=demo)
     session.add(scr2)
+    session.commit()
 
-    scr3 = Script(name='scr3', folder=folder1, owner=cloudr,
-                  content="#! switch [*]\ncloudrunner-node details")
+    r3 = Revision(content="#! switch [*]\ncloudrunner-node details",
+                  script=scr2)
+    session.add(r3)
+    session.commit()
+
+    scr3 = Script(name='scr3', folder=folder1, owner=cloudr)
     session.add(scr3)
+    session.commit()
 
-    scr4 = Script(name='scr4', folder=folder2, owner=demo,
-                  content="#! switch [*]\ncloudrunner-node details")
+    r4 = Revision(content="#! switch [*]\ncloudrunner-node details",
+                  script=scr3)
+    session.add(r4)
+
+    scr4 = Script(name='scr4', folder=folder2, owner=demo)
     session.add(scr4)
+    session.commit()
 
-    scr5 = Script(name='scr5', folder=folder2, owner=demo,
-                  content="#! switch [*]\ncloudrunner-node details")
+    r5 = Revision(content="#! switch [*]\ncloudrunner-node details",
+                  script=scr4)
+    session.add(r5)
+
+    scr5 = Script(name='scr5', folder=folder2, owner=demo)
     session.add(scr5)
+    session.commit()
 
-    scr6 = Script(name='scr6', folder=folder11, owner=cloudr,
-                  content="#! switch [*]\ncloudrunner-node details")
+    r6 = Revision(content="#! switch [*]\ncloudrunner-node details",
+                  script=scr5)
+    session.add(r6)
+
+    scr6 = Script(name='scr6', folder=folder11, owner=cloudr)
     session.add(scr6)
+    session.commit()
 
-    scr7 = Script(name='scr7', folder=folder11, owner=demo,
-                  content="#! switch [*]\ncloudrunner-node details")
+    r7 = Revision(content="#! switch [*]\ncloudrunner-node details",
+                  script=scr6)
+    session.add(r7)
+
+    scr7 = Script(name='scr7', folder=folder11, owner=demo)
     session.add(scr7)
+    session.commit()
+
+    r8 = Revision(content="#! switch [*]\ncloudrunner-node details",
+                  script=scr7)
+    session.add(r8)
 
     job1 = Job(name="Daily Build", enabled=True, source=SOURCE_TYPE.CRON,
                arguments="0 * * * *", owner=demo, target=scr2)

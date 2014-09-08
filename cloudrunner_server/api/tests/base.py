@@ -159,49 +159,74 @@ class BaseRESTTestCase(BaseTestCase):
         Session.commit()
 
         wf1 = Script(name='test1', folder=folder1, owner=user,
-                     created_at=datetime(2014, 1, 10, 0, 0, 0),
-                     content="hostname")
+                     created_at=datetime(2014, 1, 10, 0, 0, 0))
         Session.add(wf1)
 
         wf2 = Script(name='test2', folder=folder11, owner=user,
                      created_at=datetime(2014, 1, 20, 0, 0, 0),
                      mime_type="text/workflow",
-                     content="#! switch [*]\ncloudrunner-node details")
+                     )
         Session.add(wf2)
 
         wf3 = Script(name='test1', folder=folder2, owner=user2,
                      created_at=datetime(2014, 1, 30, 0, 0, 0),
-                     content="cloudrunner-node details")
+                     )
         Session.add(wf3)
 
         wf4 = Script(name='test2', folder=folder21, owner=user2,
                      created_at=datetime(2014, 1, 30, 0, 0, 0),
                      mime_type="text/template",
-                     content="template 123")
+                     )
         Session.add(wf4)
+
+        r1_1 = Revision(draft=False, content="Version 6",
+                        script=wf1)
+        Session.add(r1_1)
+
+        r1_2 = Revision(draft=False, content="Version 7",
+                        script=wf1)
+        Session.add(r1_2)
+
+        r1_2draft = Revision(version='2.abc', draft=True,
+                             content="Version 7 draft", script=wf1)
+        Session.add(r1_2draft)
+
+        r2_1 = Revision(draft=False, content="Version 1", script=wf2)
+        Session.add(r2_1)
+
+        r2_2 = Revision(draft=False, content="Version 2", script=wf2)
+        Session.add(r2_2)
+
+        r2_3 = Revision(draft=False, content="Version 3", script=wf2)
+        Session.add(r2_3)
+
+        r2_3draft = Revision(version='3.cde', draft=True,
+                             content="Version 3 Draft", script=wf2)
+        Session.add(r2_3draft)
+
+        r2_4 = Revision(draft=False, content="Version 4 Final",
+                        script=wf2)
+        Session.add(r2_4)
 
         Session.commit()
 
-        log1 = Log(uuid='1111111111', owner=user, status=1,
-                   created_at=datetime(2014, 8, 1), exit_code=-99)
+        log1 = Log(status=1, exit_code=-99)
         Session.add(log1)
 
-        log2 = Log(uuid='2222222222', owner=user, status=2,
-                   created_at=datetime(2014, 8, 2), exit_code=0)
+        log2 = Log(status=2, exit_code=0)
 
         Session.add(log2)
-        log2.tags.append(Tag(name="tag1"))
-        log2.tags.append(Tag(name="tag2"))
+        # log2.tags.append(Tag(name="tag1"))
+        # log2.tags.append(Tag(name="tag2"))
 
-        log3 = Log(uuid='3333333333', owner=user, status=2,
-                   created_at=datetime(2014, 8, 3), exit_code=-1)
+        log3 = Log(status=2, exit_code=-1)
 
         Session.add(log3)
         step1 = Step(target="*", timeout=90, script="script")
-        log3.steps.append(step1)
+        # log3.steps.append(step1)
 
         step2 = Step(target="nodeX nodeY", timeout=90, script="script")
-        log3.steps.append(step2)
+        # log3.steps.append(step2)
 
         Session.commit()
 

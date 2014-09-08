@@ -12,6 +12,7 @@
 #  * without the express permission of CloudRunner.io
 #  *******************************************************/
 
+from collections import defaultdict
 import logging
 import msgpack
 from pecan import expose, request
@@ -24,7 +25,7 @@ from cloudrunner_server.api.hooks.error_hook import ErrorHook
 from cloudrunner_server.api.hooks.db_hook import DbHook
 from cloudrunner_server.api.hooks.perm_hook import PermHook
 from cloudrunner_server.api.hooks.redis_hook import RedisHook
-from cloudrunner_server.api.model import (Log, Step, User,
+from cloudrunner_server.api.model import (Step, User, Task,
                                           Tag, Org, LOG_STATUS)
 from cloudrunner_server.api.util import JsonOutput as O
 from cloudrunner_server.util.cache import CacheRegistry
@@ -45,31 +46,49 @@ class Logs(HookController):
         if end - start > 100:
             return O.error(msg="Page size cannot be bigger than 100")
 
-        logs_query = request.db.query(Log).join(User, Org).filter(
-            Org.name == request.user.org).order_by(
-                Log.created_at.desc())
+        tasks = Task.visible(request).order_by(Task.id)
 
         if tags:
             tag_names = [tag.strip() for tag in re.split('[\s,;]', tags)
                          if tag.strip()]
-            logs_query = logs_query.filter(Tag.name.in_(tag_names)).group_by(
-                Log.id).having(func.count(Log.id) == len(tag_names))
-        logs = logs_query.all()[start:end]
-        return O.logs(_list=[log.serialize(skip=['id', 'status', 'owner_id'],
-                                           rel=[('owner.username', 'user'),
-                                           ('steps.target', 'targets'),
-                                           ('tags.name', 'tags'),
-                                           ])
-                             for log in logs])
+            tasks = tasks.filter(Tag.name.in_(tag_names)).group_by(
+                Task.id).having(func.count(Task.id) == len(tag_names))
+        tasks = tasks.all()[start:end]
+        task_list = []
+        task_map = {}
+
+        def walk(task):
+            ser = t.serialize(
+                skip=['taskgroup_id', 'id', 'owner_id', 'revision_id',
+                      'started_by_id'],
+                rel=[('script_content.script.full_path', 'name'),
+                     ('script_content.version', 'revision'),
+                     ('started_by.name', 'job'),
+                     ('owner.username', 'owner')])
+            task_map[t.id] = ser
+            if not t.parent_id:
+                task_list.append(ser)
+                task_map[t.id] = ser
+            else:
+                parent = task_map.get(t.parent_id)
+
+                if parent:
+                    parent.setdefault("subtasks", []).append(ser)
+
+        for t in tasks:
+            walk(t)
+
+        return O.tasks(_list=sorted(task_list, key=lambda t: t['created_at'],
+                                    reverse=True))
 
     @expose('json')
     def get(self, log_uuid=None):
         if not log_uuid:
             return O.error(msg="Selector not provided")
         try:
-            log = request.db.query(Log).outerjoin(Step).filter(
-                Log.owner_id == request.user.id,
-                Log.uuid == log_uuid).one()
+            log = request.db.query(Task).outerjoin(Step).filter(
+                Task.owner_id == request.user.id,
+                Task.uuid == log_uuid).one()
             steps = []
             if log.steps:
                 for i, step in enumerate(sorted(log.steps,
@@ -126,21 +145,21 @@ class Logs(HookController):
         """
 
         try:
-            q = request.db.query(Log).join(
+            q = request.db.query(Task).join(
                 User, Org, Step).outerjoin(Tag).filter(
                     Org.name == request.user.org)
             if tags:
                 tag_names = [tag.strip() for tag in re.split('[\s,;]', tags)
                              if tag.strip()]
                 q = q.filter(Tag.name.in_(tag_names)).group_by(
-                    Log.id).having(func.count(Log.id) == len(tag_names))
+                    Task.id).having(func.count(Task.id) == len(tag_names))
             else:
-                q = q.filter(Log.uuid == log_uuid)
+                q = q.filter(Task.uuid == log_uuid)
 
             if order_by == 'asc':
-                q = q.order_by(Log.created_at.asc())
+                q = q.order_by(Task.created_at.asc())
             else:
-                q = q.order_by(Log.created_at.desc())
+                q = q.order_by(Task.created_at.desc())
             print q
             logs = q.all()  # [start:end]
         except Exception, ex:
@@ -214,9 +233,9 @@ class Logs(HookController):
 
     @expose('json')
     def active(self):
-        logs = request.db.query(Log).join(User, Org).filter(
+        logs = request.db.query(Task).join(User, Org).filter(
             Org.name == request.user.org,
-            Log.status == 1).all()
+            Task.status == 1).all()
 
         res = [l.serialize(skip=['id', 'status', 'owner_id']) for l in logs]
         return O.active(_list=res)

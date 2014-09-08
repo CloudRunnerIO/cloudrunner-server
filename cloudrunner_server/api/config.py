@@ -84,6 +84,7 @@ logging = {
         'root': {'level': 'INFO', 'handlers': ['console']},
         'simpleapp': {'level': 'DEBUG', 'handlers': ['console']},
         'pecan.commands.serve': {'level': 'DEBUG', 'handlers': ['console']},
+        'sqlalchemy.engine': {'level': 'WARN', 'handlers': ['db']},
         'py.warnings': {'handlers': ['console']},
         '__force_dict__': True
     },
@@ -92,6 +93,11 @@ logging = {
             'level': 'DEBUG',
             'class': 'logging.StreamHandler',
             'formatter': 'color'
+        },
+        'db': {
+            'level': 'DEBUG',
+            'class': 'logging.StreamHandler',
+            'formatter': 'simple'
         }
     },
     'formatters': {

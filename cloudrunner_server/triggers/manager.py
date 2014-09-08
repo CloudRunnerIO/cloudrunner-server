@@ -17,7 +17,7 @@ import json
 import logging
 import re
 import redis
-from sqlalchemy.orm import scoped_session, sessionmaker
+from sqlalchemy.orm import scoped_session, sessionmaker, joinedload
 try:
     import argcomplete
 except ImportError:
@@ -107,7 +107,7 @@ class TriggerManager(Daemon):
                              bold=1)
             exit(1)
 
-    def _create_db(self, recreate=False):
+    def _prepare_db(self, recreate=False):
         if hasattr(self, 'db'):
             return
         db_path = CONFIG.db
@@ -131,8 +131,8 @@ class TriggerManager(Daemon):
         getattr(self, action)(**kwargs)
 
     def execute(self, user_id=None, script_name=None,
-                source_type=None, **kwargs):
-        self._create_db()
+                parent_uuid=None, job=None, **kwargs):
+        self._prepare_db()
         self.db.begin()
         try:
             tags = kwargs.get('tags', [])
@@ -149,17 +149,44 @@ class TriggerManager(Daemon):
             if env and not isinstance(env, dict):
                 kwargs['env'] = env = json.loads(env)
 
-            log = Log(exit_code=-99,
-                      status=LOG_STATUS.Running,
-                      timeout=timeout,
-                      source=script.full_path(),
-                      source_type=source_type,
-                      owner_id=user.id)
+            parent = None
+            parent_id = None
+            if parent_uuid:
+                parent = self.db.query(Task).filter(
+                    Task.uuid == parent_uuid).options(joinedload(
+                        Task.group)).first()
+            if parent:
+                parent_id = parent.id
+                group = parent.group
+            else:
+                group = TaskGroup()
+                self.db.add(group)
+
+            script = script.contents(self)
+            if script:
+                script_content = script.content
+            else:
+                LOG.warn("Empty script")
+                return
+            started_by_id = None
+            if job:
+                if isinstance(job, int):
+                    started_by_id = job
+                else:
+                    started_by_id = job.id
+
+            task = Task(status=LOG_STATUS.Running,
+                        group=group,
+                        started_by_id=started_by_id,
+                        parent_id=parent_id,
+                        owner_id=user.id,
+                        revision_id=script.id)
             if tags:
                 tags = sorted(re.split(r'[\s,;]', tags))
                 for tag in tags:
-                    log.tags.append(Tag(name=tag))
-            sections = parser.parse_sections(script.content)
+                    task.tags.append(Tag(name=tag))
+
+            sections = parser.parse_sections(script_content)
             for section in sections:
                 timeout = section.args.get('timeout', timeout)
 
@@ -167,11 +194,11 @@ class TriggerManager(Daemon):
                             target=section.target,
                             script=section.script,
                             env_in=json.dumps(kwargs.get('env')),
-                            log=log)
+                            task=task)
                 self.db.add(step)
 
             kwargs['roles'] = {'org': user.org.name, 'roles': {'*': '@'}}
-            kwargs['data'] = script.content
+            kwargs['data'] = script_content
             msg = Master(user.username).command('dispatch', **kwargs)
             if not isinstance(msg, Queued):
                 return
@@ -180,10 +207,12 @@ class TriggerManager(Daemon):
             for tag in tags:
                 cache.associate(user.org.name, tag, msg.job_id)
             # Update
-            log.uuid = msg.job_id
-            self.db.add(log)
+            task.uuid = msg.job_id
+            step.job_id = msg.job_id
+            self.db.add(task)
+            self.db.add(step)
             self.db.commit()
-            LOG.info("JOB UUID: %s" % log.uuid)
+            LOG.info("JOB UUID: %s" % task.uuid)
             return msg.job_id
 
         except Exception, ex:
@@ -193,7 +222,7 @@ class TriggerManager(Daemon):
         return ''
 
     def run(self, **kwargs):
-        self._create_db()
+        self._prepare_db()
         LOG.info('Listening for events')
 
         pubsub = self.redis.pubsub()
@@ -270,7 +299,7 @@ class TriggerManager(Daemon):
             target, action, uuid, job_ids))
 
         try:
-            log = self.db.query(Log).filter(Log.uuid == uuid).one()
+            log = self.db.query(Task).filter(Task.uuid == uuid).one()
             jobs = self.db.query(Job).filter(Job.id.in_(job_ids)).all()
             for job in jobs:
                 kwargs = {}
@@ -279,7 +308,7 @@ class TriggerManager(Daemon):
                     kwargs['env'] = {'env': 'yes'}
                 job_uuid = self.execute(
                     user_id=log.owner_id, script_name=job.target.full_path(),
-                    source_type=1, **kwargs)
+                    parent_uuid=uuid, job=job, **kwargs)
                 LOG.info("Executed %s" % job_uuid)
         except Exception, ex:
             LOG.exception(ex)

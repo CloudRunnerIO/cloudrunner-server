@@ -51,19 +51,20 @@ class DbLogger(LoggerPluginBase):
     def _finalize(self, user=None, org=None, session_id=None,
                   result=None, step_id=None):
         try:
-            log = self.db.query(Log).join(Step, User, Org).filter(
-                Log.uuid == session_id,
+            task = self.db.query(Task).join(Step, User, Org).filter(
+                Task.uuid == session_id,
                 Org.name == org).one()
-            if step_id + 1 == len(log.steps):
-                log.status = LOG_STATUS.Finished
+            if step_id + 1 == len(task.steps):
+                task.status = LOG_STATUS.Finished
+
             success = True
             for node in result:
                 success = success and (str(node['ret_code']) == '0')
             if success:
-                log.exit_code = 0
+                task.exit_code = 0
             else:
-                log.exit_code = 1
-            self.db.add(log)
+                task.exit_code = 1
+            self.db.add(task)
             self.db.commit()
         except Exception, ex:
             LOG.exception(ex)

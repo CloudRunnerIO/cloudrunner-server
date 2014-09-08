@@ -148,12 +148,27 @@ class TestLibrary(base.BaseRESTTestCase):
         self.assertEqual(resp.status_int, 200, resp.status_int)
         resp_json = json.loads(resp.body)
 
-        result = {u"content": u"#! switch [*]\ncloudrunner-node details",
-                  u"owner": u"testuser",
-                  u"mime": u"text/workflow",
+        result = {"script": {
+                  "content": "Version 4 Final",
+                  "owner": "testuser",
+                  "mime": "text/workflow",
                   'created_at': '2014-01-20 00:00:00',
-                  u"name": u"test2"}
-        self.assertEqual(resp_json['script'], result)
+                  "name": "test2"}}
+        self.assertEqual(resp_json, result)
+
+        resp = self.app.get(
+            '/rest/library/script/cloudrunner/folder1/test1',
+            headers={'Cr-Token': 'PREDEFINED_TOKEN', 'Cr-User': 'testuser'})
+        self.assertEqual(resp.status_int, 200, resp.status_int)
+        resp_json = json.loads(resp.body)
+
+        result = {"script": {
+                  "content": "Version 7",
+                  "owner": "testuser",
+                  "mime": "text/plain",
+                  'created_at': '2014-01-10 00:00:00',
+                  "name": "test1"}}
+        self.assertEqual(resp_json, result)
 
     def test_create_script(self):
         resp = self.app.post('/rest/library/script',
@@ -169,6 +184,20 @@ class TestLibrary(base.BaseRESTTestCase):
                          resp.body)
         self.assertRedisInc('scripts:create')
         self.assertRedisPub('scripts:create', 5)
+
+        resp = self.app.get(
+            '/rest/library/script/cloudrunner/folder1/scr1',
+            headers={'Cr-Token': 'PREDEFINED_TOKEN', 'Cr-User': 'testuser'})
+        self.assertEqual(resp.status_int, 200, resp.status_int)
+        resp_json = json.loads(resp.body)
+
+        resp_json['script'].pop('created_at')
+        result = {"script": {
+                  "content": "some content",
+                  "owner": "testuser",
+                  "mime": "text/plain",
+                  "name": "scr1"}}
+        self.assertEqual(resp_json, result)
 
     def test_create_fail_script(self):
         resp = self.app.post('/rest/library/script',

@@ -15,7 +15,7 @@
 from sqlalchemy.sql.expression import func
 from sqlalchemy import (Column, Integer, String, DateTime, Boolean, Text,
                         ForeignKey, UniqueConstraint,
-                        or_)
+                        or_, not_, event, select)
 from sqlalchemy.orm import relationship, backref
 from .base import TableBase
 from .users import User, Org
@@ -109,6 +109,42 @@ class Folder(TableBase):
         return q
 
 
+class Revision(TableBase):
+    __tablename__ = 'revisions'
+    __table_args__ = (
+        UniqueConstraint("script_id", "version", name="script_id__version"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    created_at = Column(DateTime, default=func.now())
+    version = Column(String(20))
+    draft = Column(Boolean)
+    content = Column(Text)
+    ext_source = Column(String(500))
+
+    script_id = Column(Integer, ForeignKey('scripts.id'))
+
+    script = relationship('Script', backref=backref('history'))
+
+
+@event.listens_for(Revision, 'before_insert')
+def revision_before_insert(mapper, connection, target):
+    if target.script_id:
+        scr_id = target.script_id
+    elif target.script:
+        scr_id = target.script.id
+    else:
+        scr_id = None
+    if scr_id and not target.version and not target.draft:
+
+        q = select(
+            [func.coalesce(select(
+                           [func.max(Revision.version) + 1]).where(
+                           Revision.script_id == scr_id).group_by(
+                           Revision.script_id).as_scalar(), 1)])
+        target.version = connection.scalar(q)
+
+
 class Script(TableBase):
     __tablename__ = 'scripts'
     __table_args__ = (
@@ -119,12 +155,26 @@ class Script(TableBase):
     name = Column(String(255))
     folder_id = Column(Integer, ForeignKey(Folder.id))
     created_at = Column(DateTime, default=func.now())
-    content = Column(Text)
     mime_type = Column(String(255), default="text/plain")
     owner_id = Column(Integer, ForeignKey(User.id))
 
     folder = relationship(Folder)
     owner = relationship(User)
+
+    def contents(self, ctx, ver=None, **kwargs):
+        if ver:
+            rev = ctx.db.query(Revision).filter(
+                Revision.script_id == self.id,
+                Revision.version == ver).first()
+        else:
+            rev = ctx.db.query(Revision).filter(
+                Revision.script_id == self.id,
+                func.coalesce(Revision.draft, 0) != 1  # noqa
+                ).order_by(Revision.id.desc()).first()
+        if rev:
+            return rev
+        else:
+            return None
 
     @staticmethod
     def visible(ctx, repository, folder):

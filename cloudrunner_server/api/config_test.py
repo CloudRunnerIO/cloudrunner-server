@@ -49,6 +49,9 @@ app = {
         '__force_dict__': True
     }
 }
+
+cr_config = CONFIG
+
 schedule_manager = local_plugin_loader(CONFIG.scheduler)()
 loaded_plugins = load_plugins(CONFIG)
 
@@ -63,7 +66,9 @@ zmq = {
 }
 
 sqlalchemy = {
-    'url': CONFIG.db,
+    'echo': False,
+    'echo_pool': False,
+    'pool_recycle': 3600,
     'encoding': 'utf-8'
 }
 

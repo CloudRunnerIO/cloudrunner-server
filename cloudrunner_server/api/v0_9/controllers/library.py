@@ -23,7 +23,7 @@ from cloudrunner_server.api.hooks.db_hook import DbHook
 from cloudrunner_server.api.hooks.perm_hook import PermHook
 from cloudrunner_server.api.hooks.signal_hook import SignalHook
 from cloudrunner_server.api.util import JsonOutput as O
-from cloudrunner_server.api.model import (Repository, Script, Folder,
+from cloudrunner_server.api.model import (Repository, Script, Folder, Revision,
                                           Org)
 
 LOG = logging.getLogger()
@@ -111,6 +111,32 @@ class Library(HookController):
                          key=lambda s: (s['mime_type'], s['name']))
         return O.contents(folders=folders, scripts=scripts)
 
+    @expose('json')
+    @wrap_command(Script)
+    def revisions(self, repository, *args, **kwargs):
+        path = "/".join(args)
+        path.rstrip("/")
+        if not path.startswith("/"):
+            path = "/" + path
+
+        path, _, script = path.rpartition('/')
+        path = path + '/'
+
+        scr = Script.visible(request,
+                             repository,
+                             path).filter(Script.name == script).first()
+        if not scr:
+            return O.error(msg="Script not found")
+
+        return O.history(
+            script=scr.name,
+            owner=scr.owner.username,
+            revisions=[r.serialize(
+                       skip=['id', 'ext_source',
+                             'script_id', 'draft', 'content'])
+                       for r in scr.history
+                       if not r.draft])
+
     @expose('json', generic=True)
     @wrap_command(Script)
     def script(self, repository, *args, **kwargs):
@@ -127,10 +153,12 @@ class Library(HookController):
                              repository,
                              path).filter(Script.name == script).first()
         if scr:
+            rev = scr.contents(request, **kwargs)
             return O.script(name=scr.name,
                             created_at=scr.created_at,
                             owner=scr.owner.username,
-                            content=scr.content,
+                            content=rev.content,
+                            version=rev.version,
                             mime=scr.mime_type)
         else:
             return O.error("Not found")
@@ -151,11 +179,15 @@ class Library(HookController):
         folder = Folder.editable(request, repository, folder_path).first()
         if not folder:
             return O.error(msg="Folder %s is not accessible" % folder_name)
-        scr = Script(name=name, content=content,
+        scr = Script(name=name,
                      owner_id=request.user.id,
                      folder=folder,
                      mime_type=mime)
         request.db.add(scr)
+        request.db.commit()
+        request._model_id = scr.id
+        rev = Revision(content=content, script_id=scr.id)
+        request.db.add(rev)
 
     @script.when(method='PUT', template='json')
     @script.wrap_modify()
@@ -176,9 +208,13 @@ class Library(HookController):
         if not scr:
             return O.error(msg="Script '%s' not found" % name)
 
-        scr.content = content
         scr.mime_type = mime
         request.db.add(scr)
+        request.db.commit()
+
+        request._model_id = scr.id
+        rev = Revision(content=content, script_id=scr.id)
+        request.db.add(rev)
 
     @script.when(method='PATCH', template='json')
     def script_patch(self, name=None, **kwargs):
@@ -237,6 +273,10 @@ class Library(HookController):
         folder_path = "/" + folder_path
         if not folder_path.endswith('/'):
             folder_path += "/"
+
+        if folder_path == "/":
+            print O.error("Cannot delete root folder")
+            return O.error("Cannot delete root folder")
 
         folder = Folder.editable(request,
                                  repository,

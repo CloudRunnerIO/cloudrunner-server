@@ -149,7 +149,8 @@ class Triggers(HookController):
                '%(trigger)s&key=%(key)s&tags=%(tags)s&%(args)s ')
         kw = dict(rest=conf.REST_SERVER_URL,
                   trigger=urllib.quote(job.name),
-                  key=urllib.quote(job.key))
+                  key=urllib.quote(job.key),
+                  args='')
         if source == SOURCE_TYPE.CRON:
             # CRON
             tags.extend(["Scheduler", name])
@@ -176,7 +177,7 @@ class Triggers(HookController):
             headers = {'Content-type': 'application/x-www-form-urlencoded'}
             try:
                 header, body = None, None
-                header, body = Http().request(
+                header, body = Http(timeout=5).request(
                     'http://crun.me', 'POST',
                     body=urllib.urlencode({'url': url % kw}),
                     headers=headers)

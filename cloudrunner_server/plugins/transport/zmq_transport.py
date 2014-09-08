@@ -652,7 +652,7 @@ class ZmqTransport(ServerTransportBackend):
                                     break
                 if xsub_listener in socks:
                     packed = xsub_listener.recv()
-                    LOGPUB.debug("XSUB packet %s" % packet)
+                    LOGPUB.debug("XSUB packet %s" % packed)
 
                     msg = M.build(packed)
                     if isinstance(msg, JobTarget):

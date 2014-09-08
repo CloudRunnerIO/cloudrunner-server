@@ -1,25 +1,12 @@
 from __future__ import with_statement
-import imp
-import os
 
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 from logging.config import fileConfig
 
-CONF_PATH = os.environ.get('CONFIG_PATH')
-if CONF_PATH and os.path.exists(CONF_PATH):
-    import sys
-    directory, module_name = os.path.split(CONF_PATH)
-    mod_name = os.path.splitext(module_name)[0]
-    path = list(sys.path)
-    sys.path.insert(0, directory)
-    try:
-        _mod = __import__(mod_name)
-        sqla_config = vars(_mod)['sqlalchemy']
-    finally:
-        sys.path[:] = path  # restore
-else:
-    from cloudrunner_server.api.config import sqlalchemy as sqla_config
+from cloudrunner import CONFIG_LOCATION
+from cloudrunner.util.config import Config
+CONFIG = Config(CONFIG_LOCATION)
 
 from cloudrunner_server.api.model import *  # noqa
 
@@ -55,8 +42,8 @@ def run_migrations_offline():
     script output.
 
     """
-    #url = config.get_main_option("sqlalchemy.url")
-    url = sqla_config['url']
+    # url = config.get_main_option("sqlalchemy.url")
+    url = CONFIG.db
     context.configure(url=url, target_metadata=target_metadata)
 
     with context.begin_transaction():
@@ -70,13 +57,13 @@ def run_migrations_online():
     and associate a connection with the context.
 
     """
+    alembic_config = config.get_section(config.config_ini_section)
+    alembic_config['sqlalchemy.url'] = CONFIG.db
 
-    url = sqla_config['url']
     engine = engine_from_config(
-        url,
+        alembic_config,
         prefix='sqlalchemy.',
-        poolclass=pool.NullPool,
-        **dict(sqla_config))
+        poolclass=pool.NullPool)
 
     connection = engine.connect()
     context.configure(

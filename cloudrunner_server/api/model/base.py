@@ -37,7 +37,11 @@ def getattr_func(x, y):
     if isinstance(x, list):
         return [getattr(a, y) for a in x]
     else:
-        return getattr(x, y)
+        ret = getattr(x, y)
+        if callable(ret):
+            ret = ret()
+
+        return ret
 
 
 class TableBase(Base):

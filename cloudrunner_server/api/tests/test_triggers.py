@@ -97,7 +97,7 @@ class TestTriggers(base.BaseRESTTestCase):
         resp_json = json.loads(resp.body)
 
         url = 'https://localhost/rest/fire/?trigger=trigger_new' \
-        '&key=222222222&tags=Scheduler,trigger_new '  # noqa
+        '&key=222222222&tags=Scheduler,trigger_new& '  # noqa
 
         self.assertEqual(resp_json, {"success": {"status": "ok"}},
                          resp.body)
