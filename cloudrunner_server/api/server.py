@@ -62,7 +62,7 @@ class Master(object):
             _req = GetNodes(org=request.user.org)
 
         def send(req):
-            LOG.info("SEND %r" % _req._)
+            LOG.debug("SEND %r" % _req._)
             try:
                 socket.send(req._)
                 if not socket.poll(self.timeout * 1000):
@@ -72,7 +72,7 @@ class Master(object):
                     ret = socket.recv()
                 else:
                     ret = None
-                LOG.info("RECV %s" % str(ret))
+                LOG.debug("RECV %s" % str(ret))
                 return ret
             except Exception, ex:
                 return False, "Cannot connect to Master %r" % ex

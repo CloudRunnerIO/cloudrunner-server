@@ -138,10 +138,13 @@ def revision_before_insert(mapper, connection, target):
     if scr_id and not target.version and not target.draft:
 
         q = select(
-            [func.coalesce(select(
-                           [func.max(Revision.version) + 1]).where(
-                           Revision.script_id == scr_id).group_by(
-                           Revision.script_id).as_scalar(), 1)])
+            [func.coalesce(
+                select([Revision.version + 1], limit=1).
+                where(Revision.script_id == scr_id).
+                group_by(Revision.id).
+             having(Revision.id == func.max(Revision.id)).
+             order_by(Revision.id.desc()).
+             as_scalar(), 1)])
         target.version = connection.scalar(q)
 
 

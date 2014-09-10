@@ -43,6 +43,11 @@ class Task(TableBase):
     status = Column(Integer)
     timeout = Column(Integer)
     exit_code = Column(Integer)
+    target = Column(Text)
+    lang = Column(String(100))
+    env_in = Column(Text)
+    env_out = Column(Text)
+
     owner_id = Column(Integer, ForeignKey('users.id'))
     taskgroup_id = Column(Integer, ForeignKey(TaskGroup.id))
     parent_id = Column(Integer, ForeignKey('tasks.id'))
@@ -67,23 +72,6 @@ class Task(TableBase):
                 joinedload(Folder.repository),
                 joinedload(Task.started_by)).filter(
                     Org.name == ctx.user.org)
-
-
-class Step(TableBase):
-    __tablename__ = 'steps'
-
-    id = Column(Integer, primary_key=True)
-    job_id = Column(String(40), index=True, unique=True)
-    target = Column(Text)
-    timeout = Column(Integer)
-    lang = Column(String(100))
-    script = Column(Text)
-    env_in = Column(Text)
-    env_out = Column(Text)
-
-    task_id = Column(Integer, ForeignKey('tasks.id'))
-
-    task = relationship('Task', backref='steps')
 
 
 class Tag(TableBase):

@@ -21,7 +21,6 @@ import logging
 import os
 import signal
 import threading
-import uuid
 
 from cloudrunner import CONFIG_LOCATION
 from cloudrunner import LOG_LOCATION
@@ -38,15 +37,13 @@ else:
                       LOG_LOCATION)
 
 from cloudrunner.core.exceptions import ConnectionError
-from cloudrunner.core import parser
 from cloudrunner.core.message import (M, Dispatch, GetNodes, Nodes,
                                       Error, Queued)
 from cloudrunner.util.daemon import Daemon
 from cloudrunner.util.loader import load_plugins, local_plugin_loader
 from cloudrunner.util.shell import colors
 
-from cloudrunner_server.dispatcher import (PluginContext,
-                                           Promise)
+from cloudrunner_server.dispatcher import (PluginContext, TaskQueue)
 from cloudrunner_server.dispatcher.admin import Admin
 from cloudrunner_server.dispatcher.manager import SessionManager
 from cloudrunner_server.plugins import PLUGIN_BASES
@@ -191,23 +188,25 @@ class Dispatcher(Daemon):
             return msg
         return msg
 
+    """
     def attach(self, payload, remote_user_map, **kwargs):
-        """
+        '''
         Attach to an existing pre-defined session
         or create it if not started yet
-        """
+        '''
         (targets, req_args) = parser.parse_selectors(payload)
-        promise = Promise(kwargs.get('session_id'))
-        promise.targets = targets
-        return promise
+        queue = TaskQueue()
+        queue.targets = targets
+        return queue
 
     def detach(self, payload, remote_user_map, **kwargs):
-        """
+        '''
         Detach from an existing pre-defined session
-        """
-        promise = Promise(kwargs.get('session_id'))
-        promise.remove = True
-        return promise
+        '''
+        queue = TaskQueue()
+        queue.remove = True
+        return queue
+    """
 
     def notify(self, payload, remote_user_map, **kwargs):
         session_id = str(kwargs.pop('session_id'))
@@ -240,18 +239,15 @@ class Dispatcher(Daemon):
         else:
             return [False, "Session not found"]
 
-    def dispatch(self, user, payload, remote_user_map, **kwargs):
+    def dispatch(self, user, tasks, remote_user_map):
         """
         Dispatch script to targeted nodes
         """
 
-        session_id = uuid.uuid4().hex
-        promise = self.manager.prepare_session(
-            self.user_id, session_id, payload, remote_user_map,
-            self.plugin_context.instance(self.user_id, ""),
-            **kwargs)
-        promise.main = True
-        return promise
+        queue = self.manager.prepare_session(
+            self.user_id, tasks, remote_user_map,
+            self.plugin_context.instance(self.user_id, ""))
+        return queue
 
     def worker(self, *args):
         job_queue = self.backend.consume_queue('requests')
@@ -288,9 +284,7 @@ class Dispatcher(Daemon):
                     remote_user_map = msg.roles
                     LOG.info('user: %s/%s' % (msg.user,
                                               remote_user_map['org']))
-                    response = self.dispatch(msg.user, msg.data,
-                                             remote_user_map,
-                                             env=getattr(msg, 'env', {}))
+                    response = self.dispatch(msg.user, msg.tasks, msg.roles)
 
                 elif isinstance(msg, GetNodes):
                     response = self.list_active_nodes(msg.org)
@@ -299,28 +293,11 @@ class Dispatcher(Daemon):
                     job_queue.send(sender, Error(msg="Unknown command"))
                     continue
 
-                if isinstance(response, Promise):
+                if isinstance(response, TaskQueue):
                     # Return job id
                     job_queue.send([ident,
-                                    Queued(job_id=response.session_id)._])
-                    response.proxy = sender
-                    response.peer = ident
-                    if response.main:
-                        response.resolve()
-                    elif response.remove:
-                        # Detach
-                        try:
-                            for sub in self.manager.subscriptions[
-                                    response.session_id]:
-                                if sub.session_id == response.session_id:
-                                    self.manager.subscriptions[
-                                        response.session_id].remove(sub)
-                                    break
-                        except:
-                            pass
-                    else:
-                        self.manager.subscriptions[
-                            response.session_id].append(response)
+                                    Queued(task_ids=response.task_ids)._])
+                    response.process()
                 elif isinstance(response, M):
                     job_queue.send(ident, response._)
             except ConnectionError:

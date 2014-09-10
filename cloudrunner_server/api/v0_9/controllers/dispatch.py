@@ -48,11 +48,18 @@ class Dispatch(HookController):
                 except:
                     kw = kwargs
 
+            script_name = kwargs.get("script_name")
+            if not script_name:
+                return O.error(msg="Script not passed")
             source = kwargs.get('source')
             if not source:
                 now = datetime.now()
                 source = 'Anonymous exec: %s' % now.isoformat()[:19]
-            uuid = TriggerManager().execute(source=source, **kw)
+            kw.pop('user_id', '')
+            kw.pop('content', '')
+            kw.pop('script_name', '')
+            uuid = TriggerManager().execute(user_id=request.user.id,
+                                            script_name=script_name, **kw)
 
         except KeyError, kerr:
             return O.error(msg="Missing value: %s" % kerr)

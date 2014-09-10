@@ -11,15 +11,13 @@
 #  * CloudRunner Server can not be copied and/or distributed
 #  * without the express permission of CloudRunner.io
 #  *******************************************************/
-
+from __future__ import print_function
 from collections import Iterable
 from functools import partial
 import logging
 from contextlib import contextmanager
 import redis as r
 import re
-
-from cloudrunner_server.plugins.logs.base import FrameBase, BodyFrame
 
 LOG = logging.getLogger('REDIS CACHE')
 REL_MAP_KEY = "MAPKEYS"
@@ -29,15 +27,18 @@ class CacheRegistry(object):
 
     def __init__(self, config=None, redis=None):
         if config:
-            self.r_host, self.r_port = '127.0.0.1', 6379
             if config.redis:
                 self.r_host, self.r_port = config.redis.split(":", 1)
                 self.r_port = int(self.r_port)
+            else:
+                self.r_host, self.r_port = '127.0.0.1', 6379
             self.redis = r.Redis(host=self.r_host, port=self.r_port, db=0)
         elif redis:
             self.redis = redis
         else:
-            raise Exception("Provide either config or redis connection")
+            # default
+            self.r_host, self.r_port = '127.0.0.1', 6379
+            self.redis = r.Redis(host=self.r_host, port=self.r_port, db=0)
 
     def check(self, org, target):
         self.switch_db(org, self.redis)
@@ -106,7 +107,7 @@ class RegBase(object):
         if not map_id:
             map_id = self.redis.incr(REL_MAP_KEY)
             self.redis.set(map_key, map_id)
-        self.id = self._get_rel_id(_id)
+        self.id = _id
         self.key = map_id
 
     @staticmethod
@@ -115,27 +116,36 @@ class RegBase(object):
                         ["=".join([str(k), str(v)]) for k, v in kwargs.items()
                         if v is not None])
 
-    @staticmethod
-    def _parse_rel_id(rel_key):
-        return rel_key.split(":")
-
 
 class RegWriter(RegBase):
 
-    def store(self, frame):
-        LOG.info("Storing frame %s" % vars(frame))
-        seq_no = self.redis.incr("___INCR___")
-        data_key = self._get_rel_id(self.key, **frame.header)
-        if frame.body:
-            end = self.redis.rpush(data_key, *frame.body)
-            begin = end - len(frame.body)
-            rel_key = self._get_rel_id(data_key, begin, end, frame.ts)
-            self.redis.zadd(self.key,
-                            rel_key,
-                            seq_no)
+    def store_log(self, node, seq, ts, log, io='O'):
+        if not log:
+            return
+
+        s_rel_key = self._get_rel_id('S', self.key, node)
+        z_rel_key = self._get_rel_id('Z', self.key, node)
+        nodes_key = self._get_rel_id(self.key, 'nodes')
+        node_2_uuid_key = self._get_rel_id("N2U", node)
+        # Update nodes zlist
+        self.redis.sadd(nodes_key, node)
+        # Update uuid map
+        self.redis.zadd(node_2_uuid_key, self.id, ts)
+        # Store lines into list
+        lines = log.splitlines()
+        if io != 'O':
+            lines = ['\x00\x00' + l for l in lines]
+        end = self.redis.rpush(s_rel_key, *lines)
+        begin = end - len(lines)
+
+        # Store seq into zlist
+        line_range = "%s:%s" % (begin, end)
+        self.redis.zadd(z_rel_key,
+                        line_range,
+                        seq)
 
         self.redis.publish(self.id, 'update')
-        self.redis.set(self.id, seq_no)
+        self.redis.set(self.id, seq)
 
     def notify(self, what):
         self.redis.incr(what)
@@ -143,87 +153,115 @@ class RegWriter(RegBase):
 
 class RegReader(RegBase):
 
-    def __init__(self, redis, *_ids):
+    def __init__(self, redis):
         self.redis = redis.pipeline()
-        self.ids = []
-        self.keys = []
-        for _id in _ids:
-            self.redis.get(self._get_rel_id("_K", _id))
-            self.ids.append(_id)
-
-        for out in self.redis.execute():
-            map_id = out
-            self.keys.append(map_id)
-
         self.filters = {}
         self.body_filter = None
 
-    def load(self, min_score, max_score):
+    def dump(self, *job_ids):
+
+        for job_id in job_ids:
+
+            print("=" * 10)
+            print("Job ID: %s" % job_id)
+            print("=" * 10)
+
+            print("=" * 10)
+            print("Nodes")
+            print("=" * 10)
+
+            nodes = list(self.get_nodes(job_id))
+            map(print, nodes)
+
+            print("=" * 10)
+            print("Full log")
+            print("=" * 10)
+
+            map(lambda log: print(log[0], repr("\n".join(log[1]))),
+                self.get_node_log(job_id, nodes))
+
+            print("=" * 10)
+            print("Partial log(2-5 lines)")
+            print("=" * 10)
+
+            map(lambda log: print(log[0], "\n".join(log[1])),
+                self.get_node_log(job_id, nodes, begin=2, end=5))
+
+            print("=" * 10)
+            print("Scored full log")
+            print("=" * 10)
+
+            map(lambda log: print(log[0], "\n".join(log[1])),
+                self.get_node_log_by_score(job_id, nodes)[0])
+
+            print("=" * 10)
+            print("Scored partial log (score = 2:4)")
+            print("=" * 10)
+
+            map(lambda log: print(log[0], "\n".join(log[1])),
+                self.get_node_log_by_score(job_id, nodes,
+                                           min_score=2, max_score=4)[0])
+
+    def key(self, job_id):
+        if not hasattr(self, '_key'):
+            map_key = self._get_rel_id("_K", job_id)
+            self.redis.get(map_key)
+            self._key = self.redis.execute()[0]
+        return self._key
+
+    def get_nodes(self, job_id, nodes=None):
+        nodes_key = self._get_rel_id(self.key(job_id), 'nodes')
+        self.redis.smembers(nodes_key)
+        all_nodes = self.redis.execute()[0]
+        if nodes:
+            all_nodes = all_nodes.intersection(set(nodes))
+        return all_nodes
+
+    def get_node_log(self, job_id, nodes, begin=0, end=-1):
+        for node in nodes:
+            s_rel_key = self._get_rel_id('S', self.key(job_id), node)
+            self.redis.lrange(s_rel_key, begin, end)
+        return zip(nodes, self.redis.execute())
+
+    def get_node_log_by_score(self, job_id, nodes, min_score=0,
+                              max_score='inf'):
+        for node in nodes:
+            z_rel_key = self._get_rel_id('Z', self.key(job_id), node)
+            self.redis.zrangebyscore(z_rel_key, min_score, max_score,
+                                     withscores=True)
+        logs = zip(nodes, self.redis.execute())
+        found_nodes = {}
+        max_score = 0
+        for log in logs:
+            if log[1]:
+                for item in log[1]:
+                    node = log[0]
+                    range_, score = item
+                    max_score = max(score, max_score)
+                    begin, end = range_.split(":", 1)
+                    found_nodes.setdefault(node, dict(begin=begin))
+                    found_nodes[node]['end'] = int(end)
+        for node, range_ in found_nodes.items():
+            s_rel_key = self._get_rel_id('S', self.key(job_id), node)
+            self.redis.lrange(s_rel_key, range_['begin'], range_['end'] - 1)
+        return zip(found_nodes, self.redis.execute()), max_score
+
+    def load_log(self, min_score, max_score, nodes=None, uuids=None):
+        if not nodes and not uuids:
+            return 0, {}
 
         new_score = 1
         output = {}
-        print "1", self.keys
-        for fid, key in enumerate(self.keys):
-            frames = []
-            self.redis.zrangebyscore(key, min_score, max_score,
-                                     withscores=True)
-            rel_keys = self.redis.execute()[0]
+        for u in uuids:
+            log = output.setdefault(u, {})
 
-            if not rel_keys:
-                self.redis.zrevrange(key, 0, 1, withscores=True)
-                elem, new_score = self.redis.execute()[0]
-                return new_score, {}
+            nodes = self.get_nodes(u, nodes=nodes)
+            lines, new_score = self.get_node_log_by_score(u, nodes,
+                                                          min_score, max_score)
+            for item in lines:
+                node, content = item
+                log[node] = self.content_filter(content)
 
-            for rel in rel_keys:
-                if not rel:
-                    continue
-
-                key, score = rel
-                rel_key, beg, end, ts = key.rsplit(":", 3)
-                beg, end = int(beg), int(end)
-
-                meta = rel_key.split(":")
-                meta.pop(0)  # id
-
-                keys = {}
-                for _key in meta:
-                    k, v = _key.split('=', 1)
-                    keys[k] = v
-
-                frame_data = filter(lambda x: x[0] == rel_key and
-                                    x[1] == ts, frames)
-                if not frame_data:
-                    frame = FrameBase.restore(int(score), ts, ** keys)
-
-                    if isinstance(frame,
-                                  BodyFrame) and not self.is_match(keys):
-                        continue
-
-                    frames.append((rel_key, ts, frame))
-
-                    frame.begin = beg
-                    frame.end = end
-                else:
-                    frame = frame_data[0][2]
-                    frame.end = end
-                frame.seq_no = score
-                new_score = max(new_score, score)
-
-            for rel_key, _, frame in frames:
-                self.redis.lrange(rel_key, frame.begin, frame.end - 1)
-
-            data = self.redis.execute()
-            for i, tup in enumerate(frames):
-                _, ts, frame = tup
-                _data = data[i]
-                if isinstance(frame, BodyFrame):
-                    if self.is_match(keys):
-                        frame.body = self.content_filter(_data)
-                    else:
-                        frame.body = []
-                else:
-                    frame.body = _data
-            output[self.ids[fid]] = [f[2] for f in frames]
         return new_score, output
 
     def is_match(self, meta):

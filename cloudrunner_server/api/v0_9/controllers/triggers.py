@@ -72,7 +72,7 @@ class TriggerSwitch(HookController):
             env.update(kwargs)
             res = man.execute(user_id=u.id,
                               script_name=trig.target.full_path(),
-                              source_type=2,
+                              job=trig,
                               env=env, **kwargs)
             results.append(dict(id=trig.id,
                                 name=trig.name,

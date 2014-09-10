@@ -130,12 +130,16 @@ class TriggerManager(Daemon):
         action = kwargs.pop('action')
         getattr(self, action)(**kwargs)
 
-    def execute(self, user_id=None, script_name=None,
+    def execute(self, user_id=None, script_name=None, content=None,
                 parent_uuid=None, job=None, **kwargs):
         self._prepare_db()
         self.db.begin()
+        remote_tasks = []
+        local_tasks = []
         try:
             tags = kwargs.get('tags', [])
+            if tags:
+                tags = sorted(re.split(r'[\s,;]', tags))
             timeout = kwargs.get('timeout', 0)
 
             user = self.db.query(User).join(
@@ -143,8 +147,16 @@ class TriggerManager(Daemon):
             self.user = DictWrapper(id=user.id,
                                     name=user.username,
                                     org=user.org.name)
-            script = Script.find(self, script_name).one()
-
+            if not content:
+                script = Script.find(self, script_name).one()
+                script = script.contents(self)
+                if script:
+                    script_content = script.content
+                else:
+                    LOG.warn("Empty script")
+                    return
+            else:
+                script_content = content.content
             env = kwargs.get('env')
             if env and not isinstance(env, dict):
                 kwargs['env'] = env = json.loads(env)
@@ -162,12 +174,6 @@ class TriggerManager(Daemon):
                 group = TaskGroup()
                 self.db.add(group)
 
-            script = script.contents(self)
-            if script:
-                script_content = script.content
-            else:
-                LOG.warn("Empty script")
-                return
             started_by_id = None
             if job:
                 if isinstance(job, int):
@@ -175,45 +181,60 @@ class TriggerManager(Daemon):
                 else:
                     started_by_id = job.id
 
-            task = Task(status=LOG_STATUS.Running,
-                        group=group,
-                        started_by_id=started_by_id,
-                        parent_id=parent_id,
-                        owner_id=user.id,
-                        revision_id=script.id)
-            if tags:
-                tags = sorted(re.split(r'[\s,;]', tags))
-                for tag in tags:
-                    task.tags.append(Tag(name=tag))
-
             sections = parser.parse_sections(script_content)
-            for section in sections:
+            for i, section in enumerate(sections):
                 timeout = section.args.get('timeout', timeout)
 
-                step = Step(timeout=timeout, lang='bash',
-                            target=section.target,
-                            script=section.script,
-                            env_in=json.dumps(kwargs.get('env')),
-                            task=task)
-                self.db.add(step)
+                remote_task = {}
+                task = Task(status=LOG_STATUS.Running,
+                            group=group,
+                            started_by_id=started_by_id,
+                            parent_id=parent_id,
+                            owner_id=user.id,
+                            revision_id=script.id,
+                            lang=section.lang,
+                            target=section.target)
+                remote_task['script'] = "%s\n%s" % (section.header,
+                                                    section.body)
+                if i == 0:
+                    task.env_in = json.dumps(kwargs.get('env'))
 
-            kwargs['roles'] = {'org': user.org.name, 'roles': {'*': '@'}}
-            kwargs['data'] = script_content
-            msg = Master(user.username).command('dispatch', **kwargs)
+                for tag in tags:
+                    task.tags.append(Tag(name=tag))
+                self.db.add(task)
+                self.db.commit()
+                self.db.begin()
+                parent_id = task.id
+                remote_tasks.append(remote_task)
+                local_tasks.append(task)
+
+            if not remote_tasks:
+                self.db.rollback()
+                return
+
+            self.db.commit()
+            self.db.begin()
+
+            roles = {'org': user.org.name, 'roles': {'*': '@'}}
+            msg = Master(user.username).command('dispatch',
+                                                tasks=remote_tasks,
+                                                roles=roles,
+                                                includes=[],
+                                                attachments=[])
             if not isinstance(msg, Queued):
                 return
 
             cache = CacheRegistry(redis=self.redis)
-            for tag in tags:
-                cache.associate(user.org.name, tag, msg.job_id)
-            # Update
-            task.uuid = msg.job_id
-            step.job_id = msg.job_id
-            self.db.add(task)
-            self.db.add(step)
+            LOG.info("TASK UUIDs: %s" % msg.task_ids)
+            for i, job_id in enumerate(msg.task_ids):
+                for tag in tags:
+                    cache.associate(user.org.name, tag, job_id)
+                # Update
+                task = local_tasks[i]
+                task.uuid = job_id
+                self.db.add(task)
             self.db.commit()
-            LOG.info("JOB UUID: %s" % task.uuid)
-            return msg.job_id
+            return msg.task_ids
 
         except Exception, ex:
             LOG.exception(ex)
@@ -299,15 +320,21 @@ class TriggerManager(Daemon):
             target, action, uuid, job_ids))
 
         try:
-            log = self.db.query(Task).filter(Task.uuid == uuid).one()
+            task = self.db.query(Task).filter(Task.uuid == uuid).one()
+            group = task.group
             jobs = self.db.query(Job).filter(Job.id.in_(job_ids)).all()
+
             for job in jobs:
+                if filter(lambda t: t.started_by == job, group.tasks):
+                    LOG.warn("Curcular invocation of Trigger: %s" % job.name)
+                    # Job already invoked in this group
+                    continue
                 kwargs = {}
-                if log.owner_id == job.owner_id:
+                if task.owner_id == job.owner_id:
                     # Allow env passing
                     kwargs['env'] = {'env': 'yes'}
                 job_uuid = self.execute(
-                    user_id=log.owner_id, script_name=job.target.full_path(),
+                    user_id=task.owner_id, script_name=job.target.full_path(),
                     parent_uuid=uuid, job=job, **kwargs)
                 LOG.info("Executed %s" % job_uuid)
         except Exception, ex:

@@ -45,16 +45,21 @@ class PluginContext(object):
         return ctx
 
 
-class Promise(object):
+class TaskQueue(object):
 
-    def __init__(self, session_id):
-        self.session_id = session_id
-        self.main = False
-        self.targets = []
-        self.peer = None
-        self.release = lambda: None
+    def __init__(self):
+        self.tasks = []
         self.owner = None
-        self.remove = False
+
+    @property
+    def task_ids(self):
+        return [task.session_id for task in self.tasks]
+
+    def process(self):
+        if not self.tasks:
+            return
+        for task in self.tasks:
+            task.start()
 
     def __str__(self):
         return "[%s] (%s) /%s /%s" % (self.session_id, self.main,

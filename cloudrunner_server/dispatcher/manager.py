@@ -14,9 +14,10 @@
 
 import argparse
 import logging
-import threading
+from Queue import Queue
+import uuid
 
-from cloudrunner_server.dispatcher import Promise
+from cloudrunner_server.dispatcher import TaskQueue
 from cloudrunner_server.dispatcher.session import JobSession
 
 LOG = logging.getLogger('Publisher')
@@ -30,25 +31,34 @@ class SessionManager(object):
         self.discovery_timeout = int(self.config.discovery_timeout or 2)
         self.wait_timeout = int(self.config.wait_timeout or 300)
         self.sessions = {}
-        self.subscriptions = {}
+        self.subscriptions = []
 
         self.opt_parser = argparse.ArgumentParser(add_help=False)
         self.opt_parser.add_argument('-t', '--timeout')
 
         self.publisher = self.backend.create_fanout('publisher')
 
-    def prepare_session(self, user, session_id, payload,
+    def prepare_session(self, user, tasks,
                         remote_user_map, plugin_ctx, **kwargs):
-        promise = Promise(session_id)
-        promise.owner = user
-        sess_thread = JobSession(self, user, session_id, payload,
-                                 remote_user_map, threading.Event(),
-                                 plugin_ctx, **kwargs)
-        LOG.info("Creating new session %s" % session_id)
-        promise.resolve = lambda: sess_thread.start()
-        self.subscriptions[session_id] = [promise]
-        self.sessions[session_id] = sess_thread
-        return promise
+        queue = TaskQueue()
+        queue.owner = user
+        timeout = 0
+        env_in = Queue()
+        env_in.put(kwargs.get('env', {}))
+        env_out = Queue()
+        for task in tasks:
+            session_id = uuid.uuid4().hex
+            LOG.info("Enqueue new session %s" % session_id)
+            sess_thread = JobSession(self, user, session_id, task,
+                                     remote_user_map, plugin_ctx,
+                                     env_in, env_out, timeout, **kwargs)
+            timeout += sess_thread.timeout
+            env_in = env_out
+            env_out = Queue()
+            queue.tasks.append(sess_thread)
+            self.sessions[session_id] = sess_thread
+        self.subscriptions.append(queue)
+        return queue
 
     def register_session(self, session_id):
         self.backend.register_session(session_id)
@@ -76,5 +86,8 @@ class SessionManager(object):
             session.session_event.set()
         # self.transport.destroy_jobs()
         for session in self.sessions.values():
-            session.join(.2)
+            if session.is_alive():
+                session.session_event.set()
+                session.env_in.put({})
+                session.join(.2)
         LOG.info("Stopped Publisher")

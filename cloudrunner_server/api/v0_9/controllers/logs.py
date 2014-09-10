@@ -12,21 +12,21 @@
 #  * without the express permission of CloudRunner.io
 #  *******************************************************/
 
-from collections import defaultdict
 import logging
 import msgpack
 from pecan import expose, request
 from pecan.core import override_template
 from pecan.hooks import HookController
 import re
-from sqlalchemy.orm import exc
+from sqlalchemy.orm import exc, joinedload
 from sqlalchemy import func
+
 from cloudrunner_server.api.hooks.error_hook import ErrorHook
 from cloudrunner_server.api.hooks.db_hook import DbHook
 from cloudrunner_server.api.hooks.perm_hook import PermHook
 from cloudrunner_server.api.hooks.redis_hook import RedisHook
-from cloudrunner_server.api.model import (Step, User, Task,
-                                          Tag, Org, LOG_STATUS)
+from cloudrunner_server.api.model import (User, Task, Tag, Org,
+                                          LOG_STATUS, SOURCE_TYPE)
 from cloudrunner_server.api.util import JsonOutput as O
 from cloudrunner_server.util.cache import CacheRegistry
 
@@ -46,24 +46,28 @@ class Logs(HookController):
         if end - start > 100:
             return O.error(msg="Page size cannot be bigger than 100")
 
-        tasks = Task.visible(request).order_by(Task.id)
+        tasks = Task.visible(request).filter(
+            Task.parent_id == None).options(
+            joinedload(Task.children)).order_by(Task.id.desc())  # noqa
 
         if tags:
             tag_names = [tag.strip() for tag in re.split('[\s,;]', tags)
                          if tag.strip()]
             tasks = tasks.filter(Tag.name.in_(tag_names)).group_by(
                 Task.id).having(func.count(Task.id) == len(tag_names))
-        tasks = tasks.all()[start:end]
+        tasks = sorted(tasks.all()[start:end], key=lambda t: t.id)
         task_list = []
         task_map = {}
 
-        def walk(task):
+        def walk(t):
             ser = t.serialize(
                 skip=['taskgroup_id', 'id', 'owner_id', 'revision_id',
                       'started_by_id'],
                 rel=[('script_content.script.full_path', 'name'),
                      ('script_content.version', 'revision'),
                      ('started_by.name', 'job'),
+                     ('started_by.source', 'source',
+                      lambda x:SOURCE_TYPE.from_value(x) if x else ''),
                      ('owner.username', 'owner')])
             task_map[t.id] = ser
             if not t.parent_id:
@@ -74,6 +78,8 @@ class Logs(HookController):
 
                 if parent:
                     parent.setdefault("subtasks", []).append(ser)
+            for sub in t.children:
+                walk(sub)
 
         for t in tasks:
             walk(t)
@@ -86,26 +92,20 @@ class Logs(HookController):
         if not log_uuid:
             return O.error(msg="Selector not provided")
         try:
-            log = request.db.query(Task).outerjoin(Step).filter(
+            task = request.db.query(Task).filter(
                 Task.owner_id == request.user.id,
                 Task.uuid == log_uuid).one()
-            steps = []
-            if log.steps:
-                for i, step in enumerate(sorted(log.steps,
-                                                key=lambda s: s.id)):
-                    steps.append(dict(index=i + 1,
-                                      target=step.target,
-                                      script=step.script,
-                                      timeout=step.timeout,
-                                      env_in=step.env_in))
-            return O.log(
-                created_at=log.created_at,
-                timeout=log.timeout,
-                exit_code=log.exit_code,
-                uuid=log.uuid,
-                status=LOG_STATUS.from_value(log.status),
-                steps=steps,
-            )
+            data = dict(target=task.target,
+                        script=task.script_content.content,
+                        lang=task.lang,
+                        created_at=task.created_at,
+                        exit_code=task.exit_code,
+                        uuid=task.uuid,
+                        status=LOG_STATUS.from_value(task.status),
+                        timeout=task.timeout)
+            if task.owner_id == request.user.id:
+                data['env'] = task.env_in
+            return O.task(**data)
         except exc.NoResultFound, ex:
             LOG.error(ex)
             request.db.rollback()
@@ -145,9 +145,7 @@ class Logs(HookController):
         """
 
         try:
-            q = request.db.query(Task).join(
-                User, Org, Step).outerjoin(Tag).filter(
-                    Org.name == request.user.org)
+            q = Task.visible(request)
             if tags:
                 tag_names = [tag.strip() for tag in re.split('[\s,;]', tags)
                              if tag.strip()]
@@ -160,61 +158,34 @@ class Logs(HookController):
                 q = q.order_by(Task.created_at.asc())
             else:
                 q = q.order_by(Task.created_at.desc())
-            print q
-            logs = q.all()  # [start:end]
+            tasks = q.all()  # [start:end]
         except Exception, ex:
             LOG.exception(ex)
             request.db.rollback()
             return O.error(msg="Error loading logs")
-        uuids = [l.uuid for l in logs if l.uuid]
+        uuids = [t.uuid for t in tasks if t.uuid]
 
-        print ">??", uuids, logs
         outputs = []
-        with cache.reader(request.user.org, *uuids) as c:
+        with cache.reader(request.user.org) as c:
             try:
                 if nodes:
                     nodes = nodes.split(',')
-                if steps:
-                    steps = steps.split(',')
-                    steps = [str(int(s) - 1) for s in steps]
                 c.apply_filters(pattern=pattern, target=show,
-                                step_id=steps, node=nodes,
+                                node=nodes,
                                 before=kwargs.get('B'),
                                 after=kwargs.get('A'))
             except ValueError:
                 return O.error(msg="Wrong regex pattern")
 
-            score, frames_data = c.load(min_score, max_score)
+            score, logs = c.load_log(min_score, max_score, uuids=uuids)
 
             for uuid in uuids:
-                frame_data = frames_data.get(uuid, [])
-                if not frame_data:
+                log_data = logs.get(uuid, [])
+                if not log_data:
                     continue
-                steps = {}
-                log = [l for l in logs if l.uuid == uuid][0]
-                for frame in frame_data:
-                    step_id = int(frame.header['step_id']) + 1
-                    if step_id in steps:
-                        step = steps[step_id]
-                    else:
-                        step = {"step": step_id, "lines": []}
-                        steps[step_id] = step
+                print log_data
+                task = filter(lambda t: t.uuid == uuid, tasks)[0]
 
-                    if frame.frame_type == "I":
-                        # Initial
-                        pass
-                    elif frame.frame_type == "B":
-                        step['lines'].append(
-                            [frame.ts, frame.header.get('src', 'O')] +
-                            frame.body)
-                        frame.header.pop('src')
-                    elif frame.frame_type == "S":
-                        # Summary
-                        step.update(msgpack.unpackb(frame.body[0]))
-                        step.pop('user')
-
-                    step.update(frame.header)
-                    step.pop('step_id')
                 include = True
                 if pattern:
                     has_lines = any([s for s in steps.values() if s['lines']])
@@ -222,20 +193,11 @@ class Logs(HookController):
                         include = False
                 if include:
                     outputs.append(dict(
-                        steps=sorted(steps.values(), key=lambda x: x['step']),
-                        created_at=log.created_at,
-                        status='running' if log.status == LOG_STATUS.Running
+                        created_at=task.created_at,
+                        status='running' if task.status == LOG_STATUS.Running
                         else 'finished',
                         etag=int(score),
-                        uuid=uuid))
+                        uuid=uuid,
+                        lines=log_data))
 
         return O.outputs(_list=outputs)
-
-    @expose('json')
-    def active(self):
-        logs = request.db.query(Task).join(User, Org).filter(
-            Org.name == request.user.org,
-            Task.status == 1).all()
-
-        res = [l.serialize(skip=['id', 'status', 'owner_id']) for l in logs]
-        return O.active(_list=res)
