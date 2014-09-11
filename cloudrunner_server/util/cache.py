@@ -18,6 +18,7 @@ import logging
 from contextlib import contextmanager
 import redis as r
 import re
+import time
 
 LOG = logging.getLogger('REDIS CACHE')
 REL_MAP_KEY = "MAPKEYS"
@@ -119,6 +120,9 @@ class RegBase(object):
 
 class RegWriter(RegBase):
 
+    def prepare_log(self):
+        pass
+
     def store_log(self, node, seq, ts, log, io='O'):
         if not log:
             return
@@ -127,10 +131,13 @@ class RegWriter(RegBase):
         z_rel_key = self._get_rel_id('Z', self.key, node)
         nodes_key = self._get_rel_id(self.key, 'nodes')
         node_2_uuid_key = self._get_rel_id("N2U", node)
+        uuid_key = self._get_rel_id("UU")
         # Update nodes zlist
         self.redis.sadd(nodes_key, node)
         # Update uuid map
         self.redis.zadd(node_2_uuid_key, self.id, ts)
+        # Update uuid ts map
+        self.redis.zadd(uuid_key, self.id, ts)
         # Store lines into list
         lines = log.splitlines()
         if io != 'O':
@@ -147,8 +154,14 @@ class RegWriter(RegBase):
         self.redis.publish(self.id, 'update')
         self.redis.set(self.id, seq)
 
+    def store_meta(self, result):
+        for node in result:
+            rel_key = self._get_rel_id('M', self.key, node)
+            self.redis.hmset(rel_key, result[node])
+
     def notify(self, what):
-        self.redis.incr(what)
+        self.redis.set(what, time.mktime(time.gmtime()))
+        # self.redis.incr(what)
 
 
 class RegReader(RegBase):
@@ -158,56 +171,22 @@ class RegReader(RegBase):
         self.filters = {}
         self.body_filter = None
 
-    def dump(self, *job_ids):
-
-        for job_id in job_ids:
-
-            print("=" * 10)
-            print("Job ID: %s" % job_id)
-            print("=" * 10)
-
-            print("=" * 10)
-            print("Nodes")
-            print("=" * 10)
-
-            nodes = list(self.get_nodes(job_id))
-            map(print, nodes)
-
-            print("=" * 10)
-            print("Full log")
-            print("=" * 10)
-
-            map(lambda log: print(log[0], repr("\n".join(log[1]))),
-                self.get_node_log(job_id, nodes))
-
-            print("=" * 10)
-            print("Partial log(2-5 lines)")
-            print("=" * 10)
-
-            map(lambda log: print(log[0], "\n".join(log[1])),
-                self.get_node_log(job_id, nodes, begin=2, end=5))
-
-            print("=" * 10)
-            print("Scored full log")
-            print("=" * 10)
-
-            map(lambda log: print(log[0], "\n".join(log[1])),
-                self.get_node_log_by_score(job_id, nodes)[0])
-
-            print("=" * 10)
-            print("Scored partial log (score = 2:4)")
-            print("=" * 10)
-
-            map(lambda log: print(log[0], "\n".join(log[1])),
-                self.get_node_log_by_score(job_id, nodes,
-                                           min_score=2, max_score=4)[0])
-
     def key(self, job_id):
         if not hasattr(self, '_key'):
             map_key = self._get_rel_id("_K", job_id)
             self.redis.get(map_key)
             self._key = self.redis.execute()[0]
         return self._key
+
+    def get_uuid_by_score(self, min_score=0, max_score='inf'):
+        uuid_key = self._get_rel_id("UU")
+        self.redis.zrangebyscore(uuid_key, min_score, max_score,
+                                 withscores=True)
+        ret = zip(*self.redis.execute()[0])
+        if ret:
+            return ret[1][-1], ret[0]
+        else:
+            return 0, []
 
     def get_nodes(self, job_id, nodes=None):
         nodes_key = self._get_rel_id(self.key(job_id), 'nodes')
@@ -216,6 +195,13 @@ class RegReader(RegBase):
         if nodes:
             all_nodes = all_nodes.intersection(set(nodes))
         return all_nodes
+
+    def get_meta(self, job_id, nodes):
+        for node in nodes:
+            meta_key = self._get_rel_id("M", self.key(job_id), node)
+            self.redis.hgetall(meta_key)
+        meta = self.redis.execute()
+        return dict(zip(nodes, meta))
 
     def get_node_log(self, job_id, nodes, begin=0, end=-1):
         for node in nodes:
@@ -236,15 +222,33 @@ class RegReader(RegBase):
             if log[1]:
                 for item in log[1]:
                     node = log[0]
+                    queue = found_nodes.setdefault(node, [])
                     range_, score = item
                     max_score = max(score, max_score)
                     begin, end = range_.split(":", 1)
+                    begin = int(begin)
+                    end = int(end)
+
                     found_nodes.setdefault(node, dict(begin=begin))
-                    found_nodes[node]['end'] = int(end)
+
+                    if not queue:
+                        queue.append([begin, end])
+                    else:
+                        last = queue[-1]
+                        if last[1] == begin:
+                            last[1] = end
+                        else:
+                            # Need to swap elements
+                            queue.append([begin, end])
+        ret = []
         for node, range_ in found_nodes.items():
-            s_rel_key = self._get_rel_id('S', self.key(job_id), node)
-            self.redis.lrange(s_rel_key, range_['begin'], range_['end'] - 1)
-        return zip(found_nodes, self.redis.execute()), max_score
+            for r_ in range_:
+                s_rel_key = self._get_rel_id('S', self.key(job_id), node)
+                self.redis.lrange(s_rel_key, r_[0], r_[1] - 1)
+            l = self.redis.execute()
+            l = [item for sublist in l for item in sublist]
+            ret.append((node, l))
+        return ret, max_score
 
     def load_log(self, min_score, max_score, nodes=None, uuids=None):
         if not nodes and not uuids:
@@ -256,11 +260,14 @@ class RegReader(RegBase):
             log = output.setdefault(u, {})
 
             nodes = self.get_nodes(u, nodes=nodes)
+            meta = self.get_meta(u, nodes)
             lines, new_score = self.get_node_log_by_score(u, nodes,
                                                           min_score, max_score)
             for item in lines:
                 node, content = item
-                log[node] = self.content_filter(content)
+                log_info = log[node] = {}
+                log_info['result'] = meta.get(node)
+                log_info['lines'] = self.content_filter(content)
 
         return new_score, output
 
@@ -296,3 +303,54 @@ class RegReader(RegBase):
                     self.filters[k] = partial(str_check, v)
         if pattern:
             self.body_filter = re.compile(pattern)
+
+    def dump(self, *job_ids):
+
+        for job_id in job_ids:
+
+            print("=" * 10)
+            print("Job ID: %s" % job_id)
+            print("=" * 10)
+
+            print("=" * 10)
+            print("Nodes")
+            print("=" * 10)
+
+            nodes = list(self.get_nodes(job_id))
+            map(print, nodes)
+
+            print("=" * 10)
+            print("Meta")
+            print("=" * 10)
+
+            meta = self.get_meta(job_id, nodes)
+            print(meta)
+
+            print("=" * 10)
+            print("Full log")
+            print("=" * 10)
+
+            map(lambda log: print(log[0], repr("\n".join(log[1]))),
+                self.get_node_log(job_id, nodes))
+
+            print("=" * 10)
+            print("Partial log(2-5 lines)")
+            print("=" * 10)
+
+            map(lambda log: print(log[0], "\n".join(log[1])),
+                self.get_node_log(job_id, nodes, begin=2, end=5))
+
+            print("=" * 10)
+            print("Scored full log")
+            print("=" * 10)
+
+            map(lambda log: print(log[0], "\n".join(log[1])),
+                self.get_node_log_by_score(job_id, nodes)[0])
+
+            print("=" * 10)
+            print("Scored partial log (score = 2:4)")
+            print("=" * 10)
+
+            map(lambda log: print(log[0], "\n".join(log[1])),
+                self.get_node_log_by_score(job_id, nodes,
+                                           min_score=2, max_score=4)[0])

@@ -4,6 +4,7 @@ import redis
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import scoped_session, sessionmaker
 
+from cloudrunner.core.message import EnvBroadcast
 from cloudrunner_server.api.model import *  # noqa
 from cloudrunner_server.plugins.logs.base import LoggerPluginBase
 from cloudrunner_server.util.cache import CacheRegistry
@@ -47,8 +48,10 @@ class DbLogger(LoggerPluginBase):
             metadata.create_all(engine)
         self.db = session
 
-    def _finalize(self, user=None, org=None, session_id=None,
-                  result=None):
+    def _finalize(self, msg):
+        session_id = msg.session_id
+        org = msg.org
+        result = msg.result
         try:
             task = self.db.query(Task).join(User, Org).filter(
                 Task.uuid == session_id,
@@ -56,8 +59,8 @@ class DbLogger(LoggerPluginBase):
             task.status = LOG_STATUS.Finished
 
             success = True
-            for node in result:
-                success = success and (str(node['ret_code']) == '0')
+            for node, ret in result.items():
+                success = success and (str(ret['ret_code']) == '0')
             if success:
                 task.exit_code = 0
             else:
@@ -70,9 +73,7 @@ class DbLogger(LoggerPluginBase):
 
     @wrap_error
     def log(self, msg):
-        LOG.info(msg)
-        if msg.control == "INITIALMESSAGE":
-            return
+        LOG.debug(msg)
 
         if msg.control == "PIPEMESSAGE":
             if msg.stdout:
@@ -94,11 +95,17 @@ class DbLogger(LoggerPluginBase):
                                msg.stderr, msg.session_id)
 
         elif msg.control == "FINISHEDMESSAGE":
-            self._finalize(user=msg.user, session_id=msg.session_id,
-                           org=msg.org, result=msg.result)
+            self._finalize(msg)
             with self.cache.writer(msg.org, msg.session_id) as cache:
-                cache.notify("logs")
+                cache.store_meta(msg.result)
 
             if msg.env:
-                for k in msg.env.keys():
-                    self.r.publish('env:%s' % k, msg.session_id)
+                for k, v in msg.env.items():
+                    pub_msg = EnvBroadcast(msg.session_id, k, v)
+                    self.r.publish('env:%s' % k, pub_msg._)
+            cache.notify("logs")
+
+        elif msg.control == "INITIALMESSAGE":
+            with self.cache.writer(msg.org, msg.session_id) as cache:
+                cache.prepare_log()
+            cache.notify("logs")

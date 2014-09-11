@@ -25,7 +25,7 @@ except ImportError:
 
 from cloudrunner import CONFIG_LOCATION, LOG_LOCATION
 from cloudrunner.core import parser
-from cloudrunner.core.message import Queued, DictWrapper
+from cloudrunner.core.message import Queued, DictWrapper, EnvBroadcast
 from cloudrunner.util.config import Config
 from cloudrunner.util.daemon import Daemon
 from cloudrunner.util.logconfig import configure_loggers
@@ -193,11 +193,12 @@ class TriggerManager(Daemon):
                             owner_id=user.id,
                             revision_id=script.id,
                             lang=section.lang,
+                            script_part=i + 1,
                             target=section.target)
                 remote_task['script'] = "%s\n%s" % (section.header,
                                                     section.body)
                 if i == 0:
-                    task.env_in = json.dumps(kwargs.get('env'))
+                    task.env_in = json.dumps(env)
 
                 for tag in tags:
                     task.tags.append(Tag(name=tag))
@@ -220,7 +221,8 @@ class TriggerManager(Daemon):
                                                 tasks=remote_tasks,
                                                 roles=roles,
                                                 includes=[],
-                                                attachments=[])
+                                                attachments=[],
+                                                env=env)
             if not isinstance(msg, Queued):
                 return
 
@@ -301,12 +303,22 @@ class TriggerManager(Daemon):
                             if pattern:
                                 pubsub.punsubscribe(pattern)
                     # Processing triggers
-                    elif target in ['output', 'env']:
+                    elif target == 'output':
                         job_ids = [job_id for job_id, pat in patterns.items()
                                    if pat == item['pattern']]
                         if job_ids:
                             uuid = item['data']
                             self._process(job_ids, target, action, uuid)
+                    elif target == 'env':
+                        job_ids = [job_id for job_id, pat in patterns.items()
+                                   if pat == item['pattern']]
+                        if job_ids:
+                            msg = EnvBroadcast.build(item['data'])
+                            if not msg:
+                                continue
+                            self._process(job_ids, target, action,
+                                          msg.session_id,
+                                          env={msg.key: msg.value})
                     else:
                         LOG.warn("Unrecognized pattern: %s" % item['pattern'])
             except Exception, ex:
@@ -315,7 +327,7 @@ class TriggerManager(Daemon):
                 break
         LOG.info('Exited main thread')
 
-    def _process(self, job_ids, target, action, uuid):
+    def _process(self, job_ids, target, action, uuid, env=None):
         LOG.info('Processing event[%s:%s] from %s, triggered jobs: %s' % (
             target, action, uuid, job_ids))
 
@@ -326,13 +338,13 @@ class TriggerManager(Daemon):
 
             for job in jobs:
                 if filter(lambda t: t.started_by == job, group.tasks):
-                    LOG.warn("Curcular invocation of Trigger: %s" % job.name)
+                    LOG.warn("Circular invocation of Trigger: %s" % job.name)
                     # Job already invoked in this group
                     continue
-                kwargs = {}
+                kwargs = {'env': env}
                 if task.owner_id == job.owner_id:
                     # Allow env passing
-                    kwargs['env'] = {'env': 'yes'}
+                    kwargs['pass_env'] = True
                 job_uuid = self.execute(
                     user_id=task.owner_id, script_name=job.target.full_path(),
                     parent_uuid=uuid, job=job, **kwargs)

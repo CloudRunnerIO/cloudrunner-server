@@ -52,7 +52,7 @@ class SessionManager(object):
             sess_thread = JobSession(self, user, session_id, task,
                                      remote_user_map, plugin_ctx,
                                      env_in, env_out, timeout, **kwargs)
-            timeout += sess_thread.timeout
+            timeout += sess_thread.timeout + 2
             env_in = env_out
             env_out = Queue()
             queue.tasks.append(sess_thread)

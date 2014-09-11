@@ -239,14 +239,14 @@ class Dispatcher(Daemon):
         else:
             return [False, "Session not found"]
 
-    def dispatch(self, user, tasks, remote_user_map):
+    def dispatch(self, user, tasks, remote_user_map, env=None):
         """
         Dispatch script to targeted nodes
         """
 
         queue = self.manager.prepare_session(
             self.user_id, tasks, remote_user_map,
-            self.plugin_context.instance(self.user_id, ""))
+            self.plugin_context.instance(self.user_id, ""), env=env)
         return queue
 
     def worker(self, *args):
@@ -284,7 +284,8 @@ class Dispatcher(Daemon):
                     remote_user_map = msg.roles
                     LOG.info('user: %s/%s' % (msg.user,
                                               remote_user_map['org']))
-                    response = self.dispatch(msg.user, msg.tasks, msg.roles)
+                    response = self.dispatch(msg.user, msg.tasks, msg.roles,
+                                             env=getattr(msg, 'env', {}))
 
                 elif isinstance(msg, GetNodes):
                     response = self.list_active_nodes(msg.org)

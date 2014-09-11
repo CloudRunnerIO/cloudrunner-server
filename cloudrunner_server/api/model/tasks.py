@@ -47,6 +47,7 @@ class Task(TableBase):
     lang = Column(String(100))
     env_in = Column(Text)
     env_out = Column(Text)
+    script_part = Column(Integer)
 
     owner_id = Column(Integer, ForeignKey('users.id'))
     taskgroup_id = Column(Integer, ForeignKey(TaskGroup.id))

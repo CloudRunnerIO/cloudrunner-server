@@ -14,6 +14,7 @@
 
 import logging
 import re
+from Queue import Empty
 from sys import maxint as MAX_INT
 from threading import (Thread, Event)
 import time
@@ -54,15 +55,15 @@ class JobSession(Thread):
         self.manager = manager
         self.timeout = kwargs.get('timeout') or self.manager.wait_timeout
         self.plugin_context = plugin_ctx
-        self.seq = 1
         self.env_in = env_in
         self.env_out = env_out
         self.global_timeout = timeout
         self.section = None
+        self.env = {}
 
     def _reply(self, message):
-        message.seq_no = self.seq
-        self.seq += 1
+        seq = int(time.mktime(time.gmtime()))
+        message.seq_no = seq
         self.job_done.send(message._)
 
     def parse_script(self, env):
@@ -82,7 +83,11 @@ class JobSession(Thread):
             self.env_out.put(self.env)
 
     def _run(self):
-        env = self.env_in.get(True, self.global_timeout)
+        try:
+            env = self.env_in.get(True, self.global_timeout)
+        except Empty:
+            LOG.warn("Timeout waiting for previous task to finish")
+            return
 
         if self.session_event.is_set():
             return
@@ -94,7 +99,6 @@ class JobSession(Thread):
         self.parse_script(env)
         self.job_done = self.manager.backend.publish_queue('logger')
 
-        ret = []
         timeout = None
 
         timeout = self.kwargs.get('timeout', None)
@@ -148,7 +152,7 @@ class JobSession(Thread):
                                  ts=ts,
                                  org=user_org[1])
         self._reply(message)
-        msg_ret = []
+        result = {}
 
         try:
             """
@@ -214,7 +218,6 @@ class JobSession(Thread):
                     #   node_id, stdout, stderr
                     names = ("session_id", "run_as", "node",
                              "stdout", "stderr")
-                    print dict(zip(names, _reply[1:]))
                     ts = time.mktime(time.gmtime())
                     message = PipeMessage(user=self.user,
                                           org=self.remote_user_map['org'],
@@ -226,8 +229,28 @@ class JobSession(Thread):
                     break
 
             new_env = {}
+            # [{'node': 'yoga', 'remote_user': '@', 'env': {},
+            # 'stderr': '', 'stdout': '', 'ret_code': 0}]
+
             for _ret in msg_ret:
-                _env = _ret['env']
+                _env = _ret.pop('env', {})
+                _stdout = _ret.get('stdout', '')
+                _stderr = _ret.pop('stderr', '')
+                _node = _ret.pop('node')
+
+                if _stdout or _stderr:
+                    ts = time.mktime(time.gmtime())
+                    message = PipeMessage(user=self.user,
+                                          org=self.remote_user_map['org'],
+                                          ts=ts,
+                                          session_id=self.session_id,
+                                          run_as=_ret.get('run_as'),
+                                          node=_node,
+                                          stdout=_stdout,
+                                          stderr=_stderr)
+                    self._reply(message)
+
+                result[_node] = _ret
                 for k, v in _env.items():
                     if k in new_env:
                         if not isinstance(new_env[k], list):
@@ -259,24 +282,14 @@ class JobSession(Thread):
                 except Exception, ex:
                     LOG.error('Plugin error(%s):  %r' % (plugin, ex))
             """
-            ret.append(dict(targets=self.section.target,
-                            session_id=self.session_id,
-                            args=self.section.args_string,
-                            response=msg_ret))
-
         except Exception, ex:
             LOG.exception(ex)
         finally:
-            exec_result = [dict(node=node['node'],
-                                run_as=node['remote_user'],
-                                ret_code=node['ret_code'])
-                           for node in msg_ret]
-            ts = time.mktime(time.gmtime())
+            time.sleep(.5)
             message = FinishedMessage(session_id=self.session_id,
-                                      ts=ts,
                                       user=self.user,
                                       org=self.remote_user_map['org'],
-                                      result=exec_result,
+                                      result=result,
                                       env=env)
             self._reply(message)
             self.env_out.put(env)
@@ -325,7 +338,7 @@ class JobSession(Thread):
 
         try:
             while not self.session_event.is_set() and not job_event.is_set():
-                ready = poller.poll(1000)
+                ready = poller.poll()
 
                 if user_input_queue in ready:
                     frames = user_input_queue.recv()
