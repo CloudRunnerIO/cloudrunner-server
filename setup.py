@@ -8,8 +8,8 @@
 #  * Proprietary and confidential
 #  * This file is part of CloudRunner Server.
 #  *
-#  * CloudRunner Server can not be copied and/or distributed without the express
-#  * permission of CloudRunner.io
+#  * CloudRunner Server can not be copied and/or distributed
+#  * without the express permission of CloudRunner.io
 #  *******************************************************/
 
 import sys
@@ -17,7 +17,7 @@ import sys
 if sys.version_info < (2, 7):
     # 2.6 fix for unit tests
     # http://bugs.python.org/issue15881#msg170215
-    import multiprocessing
+    import multiprocessing  # noqa
 
 from distutils.core import setup
 from setuptools import find_packages
@@ -38,7 +38,7 @@ setup(
     description=('Script execution engine for cloud environments.'),
     license='Proprietary',
     packages=find_packages(),
-    package_data={'': ['*.txt', '*.rst'], 'conf': ['.*.conf'], 'db': ['*.py'],
+    package_data={'': ['*.txt', '*.rst'], 'conf': ['.*.conf'], 'db': ['*.*'],
                   'api': ["*.html"]},
     include_package_data = True,
     install_requires=requirements,
@@ -52,8 +52,6 @@ setup(
             "cloudrunner-trigger = cloudrunner_server.triggers.manager:main",
             "cloudrunner-plugins-openstack-master = "
             "cloudrunner_server.plugins.bin.plugins_openstack_master:install",
-            "cloudrunner-plugins-keystone = "
-            "cloudrunner_server.plugins.bin.plugins_keystone:install",
         ]
     },
     classifiers=[

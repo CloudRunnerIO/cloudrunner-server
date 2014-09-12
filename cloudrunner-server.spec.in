@@ -31,6 +31,7 @@ Requires:      python-httplib2
 Requires:      python-setuptools
 Requires:      cloudrunner >= 0.5
 Requires:      python-crontab
+Requires:      python-redis
 
 Obsoletes:     cloudrunner-dispatcher
 Obsoletes:     cloudrunner_server
@@ -77,14 +78,6 @@ Requires:   %{name} = %{version}-%{release}
 CloudRunner engine for running scripts in cloud environment.
 This package contains OpenStack auto-configure plugin for Master
 
-%package plugin-keystone
-Summary:    CloudRunner OpenStack Keystone Auth plugin
-Group:      Cloud tools
-Requires:   %{name} = %{version}-%{release}
-%description plugin-keystone
-CloudRunner engine for running scripts in cloud environment.
-This package contains OpenStack Keystone Auth plugin
-
 %prep
 %setup -q -n %{unmanaged_name}-%{version}
 
@@ -108,7 +101,6 @@ install -m755 etc/rc.d/init.d/centos/cloudrunner-dsp $RPM_BUILD_ROOT/%{_initrddi
 
 install -m755 cloudrunner_server/plugins/bin/plugins_openstack_node.py $RPM_BUILD_ROOT/%{_bindir}/cloudrunner-plugins-openstack-node
 install -m755 cloudrunner_server/plugins/bin/plugins_node.py $RPM_BUILD_ROOT/%{_bindir}/cloudrunner-plugins-node
-install -m755 scripts/common/configure_keystone_plugin.sh $RPM_BUILD_ROOT/%{_bindir}/configure_keystone_plugin.sh
 
 mkdir -p $RPM_BUILD_ROOT/%{python_sitelib}/cloudrunner_plugins/
 mkdir -p $RPM_BUILD_ROOT/%{python_sitelib}/cloudrunner_plugins/config
@@ -161,11 +153,14 @@ fi
 
 %{_bindir}/cloudrunner-dsp
 %{_bindir}/cloudrunner-master
+%{_bindir}/cloudrunner-trigger
 %{_bindir}/cloudrunner-server-autocomplete
 
-%{python_sitelib}/cloudrunner_server/db
 %{python_sitelib}/cloudrunner_server/dispatcher
 %{python_sitelib}/cloudrunner_server/master
+%{python_sitelib}/cloudrunner_server/api
+%{python_sitelib}/cloudrunner_server/triggers
+%{python_sitelib}/cloudrunner_server/util
 
 
 %files plugin-ssl-node
@@ -188,12 +183,10 @@ fi
 %{python_sitelib}/cloudrunner_server/plugins/auth/openstack_verifier.py
 %{_bindir}/cloudrunner-plugins-openstack-master
 
-%files plugin-keystone
-%{python_sitelib}/cloudrunner_server/plugins/auth/keystone_auth.py
-%{_bindir}/cloudrunner-plugins-keystone
-%{_bindir}/configure_keystone_plugin.sh
-
 %changelog
+* Fri Sep 12 2014 Tihomir Trifonov <ttrifonov at cloudrunner dot io> - 1.0-1
+- removed stale plugins, added new binaries
+
 * Thu Feb 27 2014 Stiliyan Sabchev <ssabchev at cloudrunner dot io> - 0.3-5
 - change name from cloudrunner_server to cloudrunner-server
 
