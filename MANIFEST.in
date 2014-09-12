@@ -8,6 +8,6 @@ recursive-include etc *
 recursive-include scripts/common *
 
 graft conf
-graft db
+graft cloudrunner_server/db
 graft cloudrunner_server/api
 graft etc

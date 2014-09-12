@@ -165,6 +165,7 @@ fi
 %{python_sitelib}/cloudrunner_server/api
 %{python_sitelib}/cloudrunner_server/triggers
 %{python_sitelib}/cloudrunner_server/util
+%{python_sitelib}/cloudrunner_server/db
 
 
 %files plugin-ssl-node
