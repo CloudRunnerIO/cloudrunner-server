@@ -8,4 +8,5 @@ dist
 .tox/
 BRANCH
 VERSION
+cache_test.py
 
