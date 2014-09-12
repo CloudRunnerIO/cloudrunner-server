@@ -31,7 +31,7 @@ Requires:      python-httplib2
 Requires:      python-setuptools
 Requires:      cloudrunner >= 0.5
 Requires:      python-crontab
-Requires:      python-redis
+Requires:      redis
 
 Obsoletes:     cloudrunner-dispatcher
 Obsoletes:     cloudrunner_server
