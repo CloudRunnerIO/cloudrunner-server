@@ -24,9 +24,9 @@ from setuptools import find_packages
 
 from cloudrunner_server.version import VERSION
 
-common = ['cloudrunner>=0.6', 'pecan', 'pytz',
-          'sqlalchemy', 'httplib2', 'M2Crypto']
-requirements = common + ['pyzmq', 'python-crontab', 'pymysql', 'redis']
+common = ['cloudrunner>=1.0', 'pecan', 'pytz', 'pyzmq',
+          'sqlalchemy', 'httplib2', 'M2Crypto', 'redis', 'msgpack-python']
+requirements = common + ['python-crontab']
 test_requirements = common + ['nose>=1.0', 'mock', 'coverage', 'flake8']
 
 setup(

@@ -26,12 +26,16 @@ BuildRequires: python-devel
 Requires:      python-argparse
 Requires:      python-crontab
 Requires:      m2crypto
-Requires:      python-zmq >= 13.0
+Requires:      pyzmq >= 13.0
 Requires:      python-httplib2
 Requires:      python-setuptools
 Requires:      cloudrunner >= 0.5
 Requires:      python-crontab
-Requires:      redis
+Requires:      python-redis
+Requires:      python-sqlalchemy >= 0.7
+Requires:      pytz
+Requires:      python-pecan
+Requires:      python-msgpack
 
 Obsoletes:     cloudrunner-dispatcher
 Obsoletes:     cloudrunner_server

@@ -90,7 +90,10 @@ class NodeTransport(TransportBackend):
                 pass
 
     def loop(self):
-        ioloop.IOLoop.instance().start()
+        try:
+            ioloop.IOLoop.instance().start()
+        except KeyboardInterrupt:
+            ioloop.IOLoop.instance().stop()
 
     def _ssl_socket_device(self, context):
         LOGC.info("Starting new SSL thread")
