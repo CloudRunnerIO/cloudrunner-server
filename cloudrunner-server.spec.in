@@ -166,7 +166,9 @@ fi
 %{python_sitelib}/cloudrunner_server/util
 %{python_sitelib}/cloudrunner_server/db
 
-#%exclude %{python_sitelib}/cloudrunner_server/**/*.py
+%exclude %{python_sitelib}/cloudrunner_server/**/*.py
+%exclude %{python_sitelib}/cloudrunner_server/**/**/*.py
+%exclude %{python_sitelib}/cloudrunner_server/**/**/**/*.py
 
 
 %files plugin-ssl-node
