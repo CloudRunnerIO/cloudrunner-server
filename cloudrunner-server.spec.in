@@ -181,10 +181,10 @@ fi
 
 %files plugin-openstack-node
 %dir %{python_sitelib}/cloudrunner_plugins/
-%{python_sitelib}/cloudrunner_plugins/__init__.py
-%{python_sitelib}/cloudrunner_plugins/transport/__init__.py
-%{python_sitelib}/cloudrunner_plugins/transport/zmq_node_transport.py
-%{python_sitelib}/cloudrunner_plugins/config/__init__.py
+%{python_sitelib}/cloudrunner_plugins/__init__.py*
+%{python_sitelib}/cloudrunner_plugins/transport/__init__.py*
+%{python_sitelib}/cloudrunner_plugins/transport/zmq_node_transport.py*
+%{python_sitelib}/cloudrunner_plugins/config/__init__.py*
 %{_bindir}/cloudrunner-plugins-openstack-node
 
 %files plugin-openstack-master
