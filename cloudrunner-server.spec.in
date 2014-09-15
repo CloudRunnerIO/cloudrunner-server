@@ -35,7 +35,7 @@ Requires:      python-redis
 Requires:      python-sqlalchemy >= 0.7
 Requires:      pytz
 Requires:      python-pecan
-Requires:      python-msgpack
+Requires:      python-msgpack >= 0.4
 
 Obsoletes:     cloudrunner-dispatcher
 Obsoletes:     cloudrunner_server
@@ -154,7 +154,6 @@ fi
 %{python_sitelib}/cloudrunner_server/plugins
 %{python_sitelib}/cloudrunner_server-%{version}-py*.egg-info
 
-
 %{_bindir}/cloudrunner-dsp
 %{_bindir}/cloudrunner-master
 %{_bindir}/cloudrunner-trigger
@@ -166,6 +165,8 @@ fi
 %{python_sitelib}/cloudrunner_server/triggers
 %{python_sitelib}/cloudrunner_server/util
 %{python_sitelib}/cloudrunner_server/db
+
+#%exclude %{python_sitelib}/cloudrunner_server/**/*.py
 
 
 %files plugin-ssl-node

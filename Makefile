@@ -34,7 +34,6 @@ default_target: all
 .PHONY: all
 all: clean
 	$(__python) setup.py build
-        ## _last_ ## $(__python) setup.py develop --install-dir . -m
 
 
 .PHONY: sdist
