@@ -585,8 +585,13 @@ class ZmqTransport(ServerTransportBackend):
                     self.tenants[name].refresh(adjust=-self.heartbeat_timeout)
                     xpub_listener.send_multipart(
                         [tenant.id, HB()._])
-            except:
-                pass
+            except zmq.ZMQError, err:
+                if self.context.closed or \
+                        getattr(err, 'errno', 0) == zmq.ETERM or \
+                        getattr(err, 'errno', 0) == zmq.ENOTSOCK:
+                    return
+            except Exception, ex:
+                LOGPUB.error(ex)
 
         def translate(org_name):
             # Translate org_name to org_uid
@@ -607,6 +612,7 @@ class ZmqTransport(ServerTransportBackend):
 
         timer = Timer(self.heartbeat_timeout, _ping_nodes)
         timer.start()
+        LOGPUB.info("Heartbeat at %s sec" % self.heartbeat_timeout)
 
         while not self.running.is_set():
             try:

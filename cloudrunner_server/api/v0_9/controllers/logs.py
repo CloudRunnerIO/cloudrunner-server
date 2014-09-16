@@ -41,6 +41,7 @@ class Logs(HookController):
     @expose('json')
     def all(self, start=None, end=None, tags=None, etag=None):
         start = int(start or 0) or 0
+        etag = etag or 0
         end = int(end or PAGE_SIZE)
         if end - start > 100:
             return O.error(msg="Page size cannot be bigger than 100")

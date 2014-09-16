@@ -249,7 +249,8 @@ class NodeTransport(TransportBackend):
                         ssl_proxy.send_multipart(['SSL_PROXY', Ident()._])
                     elif isinstance(message, HB):
                         # Heartbeat
-                        ssl_proxy.send(HBR(self.node_id)._)
+                        ssl_proxy.send_multipart(['SSL_PROXY',
+                                                  HBR(self.node_id)._])
                     elif isinstance(message, Crypto):
                         # decrypt
                         try:
@@ -349,7 +350,6 @@ class NodeTransport(TransportBackend):
                 print "FALSE", reply
                 return -1
 
-            print vars(msg).keys()
             if msg.status == "APPROVED":
                 # Load certificates from chain
                 (node_crt_string,

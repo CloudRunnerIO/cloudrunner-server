@@ -32,7 +32,9 @@ class Dispatch(HookController):
     @expose('json')
     def active_nodes(self):
         msg = request.zmq("list_active_nodes")
-        return O.nodes(_list=msg.nodes)
+        if getattr(msg, 'control', '') == 'NODES':
+            return O.nodes(_list=msg.nodes)
+        return O.nodes(_list=[])
 
     @expose('json')
     def execute(self, **kwargs):
