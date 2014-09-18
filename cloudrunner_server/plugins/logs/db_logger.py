@@ -86,7 +86,7 @@ class DbLogger(LoggerPluginBase):
                 # Empty
                 return
             with self.cache.writer(msg.org, msg.session_id) as cache:
-                cache.store_log(msg.node, msg.seq_no, msg.ts, log, io)
+                cache.store_log(msg.node, msg.ts, log, io)
             if msg.stdout:
                 self.r.publish('output:%s' %
                                msg.stdout, msg.session_id)

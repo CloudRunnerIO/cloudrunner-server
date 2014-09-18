@@ -12,7 +12,7 @@
 #  * without the express permission of CloudRunner.io
 #  *******************************************************/
 from __future__ import print_function
-from collections import Iterable
+from collections import Iterable, OrderedDict
 from functools import partial
 import logging
 from contextlib import contextmanager
@@ -123,7 +123,7 @@ class RegWriter(RegBase):
     def prepare_log(self):
         pass
 
-    def store_log(self, node, seq, ts, log, io='O'):
+    def store_log(self, node, ts, log, io='O'):
         if not log:
             return
 
@@ -149,10 +149,10 @@ class RegWriter(RegBase):
         line_range = "%s:%s" % (begin, end)
         self.redis.zadd(z_rel_key,
                         line_range,
-                        seq)
+                        ts)
 
         self.redis.publish(self.id, 'update')
-        self.redis.set(self.id, seq)
+        self.redis.set(self.id, ts)
 
     def store_meta(self, result):
         for node in result:
@@ -216,38 +216,38 @@ class RegReader(RegBase):
             self.redis.zrangebyscore(z_rel_key, min_score, max_score,
                                      withscores=True)
         logs = zip(nodes, self.redis.execute())
-        found_nodes = {}
+        found_nodes = OrderedDict()
         max_score = 0
+        print("Logs", logs)
         for log in logs:
             if log[1]:
                 for item in log[1]:
                     node = log[0]
-                    queue = found_nodes.setdefault(node, [])
                     range_, score = item
                     max_score = max(score, max_score)
                     begin, end = range_.split(":", 1)
                     begin = int(begin)
                     end = int(end)
+                    ts_dict = found_nodes.setdefault(node, OrderedDict())
+                    range_ = ts_dict.setdefault(score, [])
+                    range_.extend([(begin, end)])
+        ret = {}
+        print("Found", found_nodes)
+        for node, ts_range in found_nodes.items():
+            sectors = OrderedDict()
+            s_rel_key = self._get_rel_id('S', self.key(job_id), node)
+            for ts, range_ in ts_range.items():
+                for r_ in range_:
+                    self.redis.lrange(s_rel_key, r_[0], r_[1] - 1)
 
-                    found_nodes.setdefault(node, dict(begin=begin))
+                sectors[ts] = len(range_)
+        l = self.redis.execute()
+        for node, ts_range in found_nodes.items():
+            for ts, range_ in ts_range.items():
+                for r_ in range_:
+                    ret.setdefault(node, []).append((ts, l.pop(0)))
 
-                    if not queue:
-                        queue.append([begin, end])
-                    else:
-                        last = queue[-1]
-                        if last[1] == begin:
-                            last[1] = end
-                        else:
-                            # Need to swap elements
-                            queue.append([begin, end])
-        ret = []
-        for node, range_ in found_nodes.items():
-            for r_ in range_:
-                s_rel_key = self._get_rel_id('S', self.key(job_id), node)
-                self.redis.lrange(s_rel_key, r_[0], r_[1] - 1)
-            l = self.redis.execute()
-            l = [item for sublist in l for item in sublist]
-            ret.append((node, l))
+        print("Ret", ret)
         return ret, max_score
 
     def load_log(self, min_score, max_score, nodes=None, uuids=None):
@@ -261,14 +261,14 @@ class RegReader(RegBase):
 
             nodes = self.get_nodes(u, nodes=nodes)
             meta = self.get_meta(u, nodes)
-            lines, new_score = self.get_node_log_by_score(u, nodes,
-                                                          min_score, max_score)
-            for item in lines:
-                node, content = item
+            node_lines, new_score = self.get_node_log_by_score(
+                u, nodes, min_score, max_score)
+            for node, lines in node_lines.items():
                 log_info = log[node] = {}
                 log_info['result'] = meta.get(node)
-                log_info['lines'] = self.content_filter(content)
+                log_info['lines'] = self.content_filter(lines)
 
+        print(output)
         return new_score, output
 
     def is_match(self, meta):

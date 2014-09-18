@@ -15,7 +15,7 @@
 from sqlalchemy.sql.expression import func
 from sqlalchemy import (Column, Integer, String, DateTime, Boolean, Text,
                         ForeignKey, UniqueConstraint,
-                        or_, not_, event, select)
+                        or_, event, select)
 from sqlalchemy.orm import relationship, backref
 from .base import TableBase
 from .users import User, Org
@@ -164,18 +164,18 @@ class Script(TableBase):
     folder = relationship(Folder)
     owner = relationship(User)
 
-    def contents(self, ctx, ver=None, **kwargs):
-        if ver:
-            rev = ctx.db.query(Revision).filter(
+    def contents(self, ctx, rev=None, **kwargs):
+        if rev and str(rev).lower() != 'head':
+            _rev = ctx.db.query(Revision).filter(
                 Revision.script_id == self.id,
-                Revision.version == ver).first()
+                Revision.version == rev).first()
         else:
-            rev = ctx.db.query(Revision).filter(
+            _rev = ctx.db.query(Revision).filter(
                 Revision.script_id == self.id,
                 func.coalesce(Revision.draft, 0) != 1  # noqa
                 ).order_by(Revision.id.desc()).first()
-        if rev:
-            return rev
+        if _rev:
+            return _rev
         else:
             return None
 
@@ -200,6 +200,23 @@ class Script(TableBase):
         q = Script.visible(ctx, repository, folder).filter(
             Script.name == script)
 
+        return q
+
+    @staticmethod
+    def load(ctx, path):
+        repository, _, path = path.partition("/")
+        folder, _, script = path.rpartition("/")
+
+        if folder == '':
+            folder = '/'
+        else:
+            folder = "/" + folder + "/"
+        q = ctx.db.query(Script).join(
+            Folder, Repository, Org).filter(
+                Org.name == ctx.user.org,
+                Repository.name == repository,
+                Folder.full_name == folder,
+                Script.name == script)
         return q
 
     def full_path(self):

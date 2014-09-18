@@ -60,12 +60,13 @@ class Dispatch(HookController):
             kw.pop('user_id', '')
             kw.pop('content', '')
             kw.pop('script_name', '')
-            uuid = TriggerManager().execute(user_id=request.user.id,
+            resp = TriggerManager().execute(user_id=request.user.id,
                                             script_name=script_name, **kw)
+            return resp
 
         except KeyError, kerr:
             return O.error(msg="Missing value: %s" % kerr)
-        return O.dispatch(uuid=uuid)
+        return {}
 
     @expose('json')
     def term(self, command):

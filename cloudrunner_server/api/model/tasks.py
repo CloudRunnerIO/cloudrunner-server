@@ -47,7 +47,9 @@ class Task(TableBase):
     lang = Column(String(100))
     env_in = Column(Text)
     env_out = Column(Text)
-    script_part = Column(Integer)
+    full_script = Column(Text)
+    step = Column(Integer)
+    total_steps = Column(Integer)
 
     owner_id = Column(Integer, ForeignKey('users.id'))
     taskgroup_id = Column(Integer, ForeignKey(TaskGroup.id))
@@ -73,6 +75,12 @@ class Task(TableBase):
                 joinedload(Folder.repository),
                 joinedload(Task.started_by)).filter(
                     Org.name == ctx.user.org)
+
+    def is_visible(self, request):
+        if self.owner_id == int(request.user.id):
+            return True
+
+        return not self.script_content.script.folder.repository.private
 
 
 class Tag(TableBase):

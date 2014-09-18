@@ -74,9 +74,9 @@ class TriggerSwitch(HookController):
                               script_name=trig.target.full_path(),
                               job=trig,
                               env=env, **kwargs)
-            results.append(dict(id=trig.id,
-                                name=trig.name,
-                                result=res))
+            d = dict(id=trig.id, name=trig.name)
+            d.update(res)
+            results.append(d)
 
         return O.result(runs=results, trigger=trigger)
 

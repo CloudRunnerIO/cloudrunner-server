@@ -43,16 +43,13 @@ from cloudrunner.util.daemon import Daemon
 from cloudrunner.util.loader import load_plugins, local_plugin_loader
 from cloudrunner.util.shell import colors
 
-from cloudrunner_server.dispatcher import (PluginContext, TaskQueue)
+from cloudrunner_server.dispatcher import (TaskQueue)
 from cloudrunner_server.dispatcher.admin import Admin
 from cloudrunner_server.dispatcher.manager import SessionManager
 from cloudrunner_server.plugins import PLUGIN_BASES
 from cloudrunner_server.plugins.args_provider import (ArgsProvider,
                                                       ManagedPlugin)
 from cloudrunner_server.plugins.logs.base import LoggerPluginBase
-from cloudrunner_server.plugins.jobs.base import JobInOutProcessorPluginBase
-from cloudrunner_server.plugins.libs.base import IncludeLibPluginBase
-
 
 LOG = logging.getLogger("Dispatcher")
 
@@ -159,25 +156,6 @@ class Dispatcher(Daemon):
                 self.logger_klass.__module__,
                 self.logger_klass.__name__))
 
-        self.plugin_context = PluginContext(None)
-
-        self.plugin_context.args_plugins = args_plugins
-        if JobInOutProcessorPluginBase.__subclasses__():
-            job_plugins = JobInOutProcessorPluginBase.__subclasses__()
-            LOG.info('Loading Job Processing plugins: %s' %
-                     ', '.join([pl.__name__ for pl in job_plugins]))
-        else:
-            job_plugins = []
-        self.plugin_context.job_plugins = job_plugins
-
-        if IncludeLibPluginBase.__subclasses__():
-            lib_plugins = IncludeLibPluginBase.__subclasses__()
-            LOG.info('Loading Lib Save plugins: %s' %
-                     ', '.join([pl.__name__ for pl in lib_plugins]))
-        else:
-            lib_plugins = []
-        self.plugin_context.lib_plugins = lib_plugins
-
     def list_active_nodes(self, org):
         msg = Nodes()
         if hasattr(self, 'backend'):
@@ -245,8 +223,7 @@ class Dispatcher(Daemon):
         """
 
         queue = self.manager.prepare_session(
-            self.user_id, tasks, remote_user_map,
-            self.plugin_context.instance(self.user_id, ""), env=env)
+            self.user_id, tasks, remote_user_map, env=env)
         return queue
 
     def worker(self, *args):

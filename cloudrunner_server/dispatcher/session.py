@@ -19,13 +19,15 @@ from sys import maxint as MAX_INT
 from threading import (Thread, Event)
 import time
 
-from cloudrunner.core import parser
-from cloudrunner.core.exceptions import (ConnectionError)
+from cloudrunner.core.parser import has_params
+from cloudrunner.core.exceptions import (ConnectionError, InterruptExecution,
+                                         InterruptStep)
 from cloudrunner.core.message import (M, Ready, StdOut, StdErr,
-                                      Finished, Events, Job, Term, JobTarget)
-from cloudrunner.core.message import (InitialMessage,
+                                      Finished, Events, Job, Term, JobTarget,
+                                      InitialMessage,
                                       PipeMessage,
-                                      FinishedMessage)
+                                      FinishedMessage,
+                                      SafeDictWrapper)
 from cloudrunner.core.message import StatusCodes
 from cloudrunner.util.string import stringify
 from cloudrunner.util.string import stringify1
@@ -41,39 +43,30 @@ class JobSession(Thread):
     """
 
     def __init__(self, manager, user, session_id, task, remote_user_map,
-                 plugin_ctx, env_in, env_out, timeout, stop_event=None,
+                 env_in, env_out, timeout, stop_event=None,
                  **kwargs):
         super(JobSession, self).__init__()
         self.session_id = session_id
         self.user = user
-        self.payload = task['script']
+        self.task = SafeDictWrapper(task)
         self.remote_user_map = remote_user_map
         self.kwargs = kwargs
         self.stop_reason = 'term'
         self.session_event = stop_event or Event()
         self.task_name = str(kwargs.get('caller', ''))
         self.manager = manager
-        self.timeout = kwargs.get('timeout') or self.manager.wait_timeout
-        self.plugin_context = plugin_ctx
+        self.timeout = (self.task.timeout
+                        or kwargs.get('timeout')
+                        or self.manager.wait_timeout)
         self.env_in = env_in
         self.env_out = env_out
         self.global_timeout = timeout
-        self.section = None
         self.env = {}
 
     def _reply(self, message):
         seq = int(time.mktime(time.gmtime()))
         message.seq_no = seq
         self.job_done.send(message._)
-
-    def parse_script(self, env):
-
-        sections = parser.parse_sections(self.payload)
-
-        if not sections:
-            LOG.warn("No sections in script.")
-            return
-        self.section = sections[0]
 
     def run(self):
         try:
@@ -96,7 +89,6 @@ class JobSession(Thread):
         if not isinstance(env, dict):
             LOG.warn("Invalid ENV passed: %s" % env)
             env = {}
-        self.parse_script(env)
         self.job_done = self.manager.backend.publish_queue('logger')
 
         timeout = None
@@ -107,17 +99,6 @@ class JobSession(Thread):
                 timeout = int(timeout)
             except:
                 timeout = None
-
-        common_opts = parser.parse_common_opts(self.payload)
-        if common_opts:
-            args, __ = self.manager.opt_parser.parse_known_args(
-                common_opts[1].split())
-            if not timeout and args.timeout:
-                # read from opts
-                try:
-                    timeout = int(args.timeout)
-                except:
-                    pass
 
         if timeout == -1:
             # Persistent job
@@ -132,22 +113,17 @@ class JobSession(Thread):
         self.kwargs.pop('section', None)
         self.kwargs.pop('tgt_args', None)
 
-        user_libs = []
-        if 'includes' in self.kwargs:
+        attachments = []
+
+        if 'attachments' in self.kwargs:
             try:
                 # process runtime includes
-                for lib in self.kwargs['includes']:
-                    user_libs.append(lib)
+                for lib in self.kwargs['attachments']:
+                    attachments.append(lib)
             except Exception, ex:
                 LOG.exception(ex)
 
-        # start_time = time.time()
-
-        libs = []
-        if user_libs:
-            libs.extend(user_libs)
-
-        ts = time.mktime(time.gmtime())
+        ts = self._create_ts()
         message = InitialMessage(session_id=self.session_id,
                                  ts=ts,
                                  org=user_org[1])
@@ -155,73 +131,43 @@ class JobSession(Thread):
         result = {}
 
         try:
-            """
-            for plugin in self.plugin_context.job_plugins:
-                try:
-                    # Save passed env for job
-                    (data, env) = plugin().before(user_org,
-                                                  self.session_id,
-                                                  self.section.body,
-                                                  env,
-                                                  self.section.args,
-                                                  self.plugin_context,
-                                                  **self.kwargs)
-                    if data:
-                        # updated
-                        self.section.body = data
+            if self.task.pre_conditions:
+                for condition in self.task.pre_conditions:
+                    try:
+                        pass
+                    except InterruptStep:
+                        LOG.warn("BEFORE: Step execution interrupted by %s" %
+                                 condition)
+                        raise
+                    except InterruptExecution:
+                        LOG.warn(
+                            "BEFORE: Session execution interrupted by %s" %
+                            condition)
+                        raise
 
-                except InterruptStep:
-                    LOG.warn("BEFORE: Step execution interrupted by %s" %
-                             plugin.__name__)
-                    raise
-                except InterruptExecution:
-                    LOG.warn(
-                        "BEFORE: Session execution interrupted by %s" %
-                        plugin.__name__)
-                    raise
-                except Exception, ex:
-                    LOG.error('Plugin error(%s):  %r' % (plugin, ex))
-
-            for plugin in self.plugin_context.lib_plugins:
+            if self.task.timeout:
                 try:
-                    _libs = plugin().process(user_org,
-                                             self.section.body,
-                                             env,
-                                             self.section.args)
-                    for lib in _libs:
-                        libs.append(lib)
-                except Exception, ex:
-                    LOG.error('Plugin error(%s):  %r' % (plugin, ex))
-            """
-            if self.section.args and self.section.args.timeout:
-                try:
-                    timeout = int(self.section.args.timeout)
+                    timeout = int(self.task.timeout)
                 except ValueError:
                     pass
 
-            self.section.update_targets(env)
+            self.update_target(env)
             #
             # Exec section
             #
-
             section_it = self.exec_section(
-                self.section.target, dict(env=env, script=self.section.body,
-                                          remote_user_map=self.remote_user_map,
-                                          libs=libs), timeout=timeout)
+                self.task.target, dict(env=env, script=self.task.body,
+                                       remote_user_map=self.remote_user_map,
+                                       attachments=attachments),
+                timeout=timeout)
             for _reply in section_it:
                 if _reply[0] == 'PIPE':
-                    # reply: 'PIPE', self.session_id, run_as, node_id,
+                    # reply: 'PIPE', self.session_id, ts, run_as, node_id,
                     # stdout, stderr
-
-                    # reply-fwd: session_id, PIPEOUT, session_id, time,
-                    #   task_name, user, self.session_id, run_as,
-                    #   node_id, stdout, stderr
-                    names = ("session_id", "run_as", "node",
+                    names = ("session_id", "ts", "run_as", "node",
                              "stdout", "stderr")
-                    ts = time.mktime(time.gmtime())
                     message = PipeMessage(user=self.user,
                                           org=self.remote_user_map['org'],
-                                          ts=ts,
                                           **dict(zip(names, _reply[1:])))
                     self._reply(message)
                 else:
@@ -239,7 +185,7 @@ class JobSession(Thread):
                 _node = _ret.pop('node')
 
                 if _stdout or _stderr:
-                    ts = time.mktime(time.gmtime())
+                    ts = self._create_ts()
                     message = PipeMessage(user=self.user,
                                           org=self.remote_user_map['org'],
                                           ts=ts,
@@ -263,25 +209,19 @@ class JobSession(Thread):
                         new_env[k] = v
 
             env.update(new_env)
-            """
-            for plugin in self.plugin_context.job_plugins:
-                try:
-                    # Save passed env for job
-                    plugin().after(
-                        user_org, self.session_id, session_id, env,
-                        msg_ret, self.section.args, self.plugin_context,
-                        **self.kwargs)
-                except InterruptStep:
-                    LOG.warn("AFTER: Step execution interrupted by %s" %
-                             plugin.__name__)
-                    raise
-                except InterruptExecution:
-                    LOG.warn("AFTER: Session execution interrupted by %s" %
-                             plugin.__name__)
-                    raise
-                except Exception, ex:
-                    LOG.error('Plugin error(%s):  %r' % (plugin, ex))
-            """
+            if self.task.post_conditions:
+                for condition in self.task.post_conditions:
+                    try:
+                        pass
+                    except InterruptStep:
+                        LOG.warn("BEFORE: Step execution interrupted by %s" %
+                                 condition)
+                        raise
+                    except InterruptExecution:
+                        LOG.warn(
+                            "BEFORE: Session execution interrupted by %s" %
+                            condition)
+                        raise
         except Exception, ex:
             LOG.exception(ex)
         finally:
@@ -335,7 +275,7 @@ class JobSession(Thread):
         self.manager.publisher.send(target._)
 
         user_map = UserMap(remote_user_map['roles'], self.user)
-
+        log_queue = {}
         try:
             while not self.session_event.is_set() and not job_event.is_set():
                 ready = poller.poll()
@@ -403,6 +343,7 @@ class JobSession(Thread):
                                            stdout='',
                                            stderr=''))
 
+                ts = self._create_ts()
                 node_map[job_rep.hdr.peer]['router_id'] = job_rep.hdr.ident
                 if isinstance(job_rep, Ready):
                     remote_user = user_map.select(job_rep.hdr.peer)
@@ -427,18 +368,18 @@ class JobSession(Thread):
                     state['data']['ret_code'] = job_rep.result['ret_code']
                     state['data']['env'] = job_rep.result['env']
                     if job_rep.result['stdout'] or job_rep.result['stderr']:
-                        yield ('PIPE', self.session_id,
-                               '',
+                        yield ('PIPE', self.session_id, ts,
+                               job_rep.run_as,
                                job_rep.hdr.peer,
                                job_rep.result['stdout'],
                                job_rep.result['stderr'])
                 elif isinstance(job_rep, StdOut):
-                    yield ('PIPE', self.session_id,
+                    yield ('PIPE', self.session_id, ts,
                            job_rep.run_as,
                            job_rep.hdr.peer,
                            job_rep.output, '')
                 elif isinstance(job_rep, StdErr):
-                    yield ('PIPE', self.session_id,
+                    yield ('PIPE', self.session_id, ts,
                            job_rep.run_as,
                            job_rep.hdr.peer,
                            '', job_rep.output)
@@ -480,8 +421,8 @@ class JobSession(Thread):
                             '\nJob execution stopped: [%s]' % self.stop_reason
 
                         node['stdout'] = str(node)
-
-                        yield ('PIPE', self.session_id, '', name,
+                        ts = self._create_ts()
+                        yield ('PIPE', self.session_id, ts, '', name,
                                node['stdout'], node['stderr'])
 
             job_event.set()
@@ -498,6 +439,28 @@ class JobSession(Thread):
                                      stderr=n['data'].get('stderr', ''),
                                      ret_code=n['data'].get('ret_code', -255))
                                 for k, n in node_map.items()]
+
+    def _create_ts(self):
+        ts = time.mktime(time.gmtime())
+        millis = round(time.time() % 1, 3)
+        ts += millis
+        return ts
+
+    def update_target(self, env):
+        params = has_params(self.task.target)
+        if params:
+            for sel_param in params:
+                sel, param = sel_param
+                param_name = param.replace('$', '')
+                if param_name in env:
+                    param_val = env[param_name]
+                    if isinstance(param_val, list):
+                        repl_params = ' '.join(
+                            ['%s%s' % (sel, val) for val in param_val])
+                    else:
+                        repl_params = sel + param_val
+                    self.task.target = self.task.replace(
+                        sel + param, repl_params)
 
 
 class UserMap(object):

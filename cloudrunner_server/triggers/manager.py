@@ -34,6 +34,7 @@ from cloudrunner_server.api.model import *  # noqa
 from cloudrunner_server.api.server import Master
 from cloudrunner_server.util.db import checkout_listener
 from cloudrunner_server.util.cache import CacheRegistry
+from cloudrunner_server.api.util import JsonOutput as O
 
 CONFIG = Config(CONFIG_LOCATION)
 
@@ -148,8 +149,7 @@ class TriggerManager(Daemon):
                                     name=user.username,
                                     org=user.org.name)
             if not content:
-                script = Script.find(self, script_name).one()
-                script = script.contents(self)
+                script = self._parse_script_name(script_name)
                 if script:
                     script_content = script.content
                 else:
@@ -157,6 +157,10 @@ class TriggerManager(Daemon):
                     return
             else:
                 script_content = content.content
+                script = Revision(name="Anonymous", content=script_content)
+                self.db.add(script)
+                self.db.commit()
+                self.db.begin()
             env = kwargs.get('env')
             if env and not isinstance(env, dict):
                 kwargs['env'] = env = json.loads(env)
@@ -180,12 +184,23 @@ class TriggerManager(Daemon):
                     started_by_id = job
                 else:
                     started_by_id = job.id
-
+            LOG.info("Execute %s by %s" % (script_name or job, self.user.name))
             sections = parser.parse_sections(script_content)
             for i, section in enumerate(sections):
                 timeout = section.args.get('timeout', timeout)
+                parts = [section.body]
+                atts = []
 
-                remote_task = {}
+                if section.args.include:
+                    for inc, scr_name in enumerate(section.args.include):
+                        s = self._parse_script_name(scr_name)
+                        parts.insert(inc, s.content)
+
+                if section.args.attach:
+                    atts = section.args.attach
+                if section.args.append:
+                    parts.extend(section.args.append)
+                remote_task = dict(attachments=atts, body="\n".join(parts))
                 task = Task(status=LOG_STATUS.Running,
                             group=group,
                             started_by_id=started_by_id,
@@ -193,10 +208,11 @@ class TriggerManager(Daemon):
                             owner_id=user.id,
                             revision_id=script.id,
                             lang=section.lang,
-                            script_part=i + 1,
+                            step=i + 1,
+                            total_steps=len(sections),
+                            full_script=remote_task['body'],
                             target=section.target)
-                remote_task['script'] = "%s\n%s" % (section.header,
-                                                    section.body)
+                remote_task['target'] = section.target
                 if i == 0:
                     task.env_in = json.dumps(env)
 
@@ -236,13 +252,42 @@ class TriggerManager(Daemon):
                 task.uuid = job_id
                 self.db.add(task)
             self.db.commit()
-            return msg.task_ids
+            return O.task_ids(_list=msg.task_ids)
 
         except Exception, ex:
             LOG.exception(ex)
             self.db.rollback()
 
-        return ''
+        return {}
+
+    def _parse_script_name(self, path):
+        path = path.lstrip("/")
+        rev = None
+        scr_, _, rev = path.rpartition("@")
+        if not scr_:
+            scr_ = rev
+            rev = None
+        if rev and (rev.isdigit() or len(rev) == 8):
+            # rev = int(rev)
+            pass
+        else:
+            scr_ = path
+        is_ext = False
+        if is_ext:
+            return None
+        else:
+            if rev:
+                rev = int(rev)
+            try:
+                q = Script.load(self, scr_)
+                s = q.one()
+            except:
+                LOG.error("Cannot find %s" % scr_)
+                LOG.warn("%s" % q)
+                raise
+            return s.contents(self, rev=rev)
+
+        return None
 
     def run(self, **kwargs):
         self._prepare_db()
@@ -335,10 +380,9 @@ class TriggerManager(Daemon):
             task = self.db.query(Task).filter(Task.uuid == uuid).one()
             group = task.group
             jobs = self.db.query(Job).filter(Job.id.in_(job_ids)).all()
-
             for job in jobs:
                 if filter(lambda t: t.started_by == job, group.tasks):
-                    LOG.warn("Circular invocation of Trigger: %s" % job.name)
+                    # LOG.warn("Circular invocation of Trigger: %s" % job.name)
                     # Job already invoked in this group
                     continue
                 kwargs = {'env': env}
@@ -346,9 +390,9 @@ class TriggerManager(Daemon):
                     # Allow env passing
                     kwargs['pass_env'] = True
                 job_uuid = self.execute(
-                    user_id=task.owner_id, script_name=job.target.full_path(),
+                    user_id=job.owner_id, script_name=job.target.full_path(),
                     parent_uuid=uuid, job=job, **kwargs)
-                LOG.info("Executed %s" % job_uuid)
+                LOG.info("Executed %s/%s" % (job_uuid, job.target.full_path()))
         except Exception, ex:
             LOG.exception(ex)
 

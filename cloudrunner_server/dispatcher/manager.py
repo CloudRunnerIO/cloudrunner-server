@@ -12,7 +12,6 @@
 #  * without the express permission of CloudRunner.io
 #  *******************************************************/
 
-import argparse
 import logging
 from Queue import Queue
 import uuid
@@ -33,13 +32,10 @@ class SessionManager(object):
         self.sessions = {}
         self.subscriptions = []
 
-        self.opt_parser = argparse.ArgumentParser(add_help=False)
-        self.opt_parser.add_argument('-t', '--timeout')
-
         self.publisher = self.backend.create_fanout('publisher')
 
     def prepare_session(self, user, tasks,
-                        remote_user_map, plugin_ctx, **kwargs):
+                        remote_user_map, **kwargs):
         queue = TaskQueue()
         queue.owner = user
         timeout = 0
@@ -50,8 +46,8 @@ class SessionManager(object):
             session_id = uuid.uuid4().hex
             LOG.info("Enqueue new session %s" % session_id)
             sess_thread = JobSession(self, user, session_id, task,
-                                     remote_user_map, plugin_ctx,
-                                     env_in, env_out, timeout, **kwargs)
+                                     remote_user_map, env_in, env_out,
+                                     timeout, **kwargs)
             timeout += sess_thread.timeout + 2
             env_in = env_out
             env_out = Queue()

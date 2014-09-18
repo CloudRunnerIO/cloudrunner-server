@@ -20,7 +20,6 @@ import re
 from sqlalchemy.orm import exc, joinedload
 from sqlalchemy import func
 
-from cloudrunner.core import parser
 from cloudrunner_server.api.hooks.error_hook import ErrorHook
 from cloudrunner_server.api.hooks.db_hook import DbHook
 from cloudrunner_server.api.hooks.perm_hook import PermHook
@@ -73,7 +72,7 @@ class Logs(HookController):
         def walk(t):
             ser = t.serialize(
                 skip=['id', 'owner_id', 'revision_id',
-                      'started_by_id', 'script_part', 'timeout', 'env_in',
+                      'started_by_id', 'full_script', 'timeout', 'env_in',
                       'env_out'],
                 rel=[('taskgroup_id', 'group'),
                      ('script_content.script.full_path', 'name'),
@@ -106,23 +105,29 @@ class Logs(HookController):
         if not log_uuid:
             return O.error(msg="Selector not provided")
         try:
-            task = request.db.query(Task).filter(
-                Task.owner_id == request.user.id,
+            task = Task.visible(request).filter(
                 Task.uuid == log_uuid).one()
-            script = task.script_content.content
-            sections = parser.parse_sections(script)
-            section = sections[(task.script_part or 1) - 1]
-            selector = section.header
-            script = section.body
             data = dict(target=task.target,
-                        script=script,
-                        selector=selector,
+                        selector=task.target,
                         lang=task.lang,
                         created_at=task.created_at,
                         exit_code=task.exit_code,
                         uuid=task.uuid,
                         status=LOG_STATUS.from_value(task.status),
                         timeout=task.timeout)
+
+            if task.is_visible(request):
+                data['script'] = task.full_script
+            else:
+                template = """
+###
+### Workflow: %s
+### Owner: %s
+###"""
+                data['script'] = (template %
+                                  (task.script_content.script.full_path(),
+                                   task.owner.username)
+                                  )
             if task.owner_id == request.user.id:
                 data['env'] = task.env_in
             return O.task(**data)
@@ -145,8 +150,8 @@ class Logs(HookController):
                               content_type=content_type)
 
         # TODO: check for e-tag
-        min_score = int(kwargs.get('from') or request.headers.get('Etag', 0))
-        max_score = int(kwargs.get('to', 0)) or 'inf'
+        min_score = float(kwargs.get('from', request.headers.get('Etag', 0)))
+        max_score = float(kwargs.get('to', 'inf'))
         cache = CacheRegistry(redis=request.redis)
         score = 1
         if not log_uuid and not tags:
@@ -215,7 +220,7 @@ class Logs(HookController):
                         created_at=task.created_at,
                         status='running' if task.status == LOG_STATUS.Running
                         else 'finished',
-                        etag=int(score),
+                        etag=float(score),
                         uuid=uuid,
                         screen=log_data))
 

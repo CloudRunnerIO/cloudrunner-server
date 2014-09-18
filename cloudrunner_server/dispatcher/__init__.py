@@ -24,27 +24,6 @@ def is_valid_host(host):
 SCHEDULER_URI_TEMPLATE = "ipc://%(sock_dir)s/scheduler.sock"
 
 
-class PluginContext(object):
-
-    def __init__(self, auth):
-        self.props = {}
-        self.auth = auth
-
-    def __setattr__(self, name, prop):
-        if name != 'props':
-            self.props[name] = prop
-        super(PluginContext, self).__setattr__(name, prop)
-
-    def instance(self, user_id, password, auth_type=1):
-        ctx = PluginContext(self.auth)
-        ctx.user_id = user_id
-        ctx.password = password
-        ctx.is_token = auth_type == 2
-        for name, prop in self.props.items():
-            setattr(ctx, name, prop)
-        return ctx
-
-
 class TaskQueue(object):
 
     def __init__(self):

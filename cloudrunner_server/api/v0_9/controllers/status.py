@@ -32,7 +32,7 @@ class Status(object):
         self.last_event_id = None
         if last_event_id:
             try:
-                self.last_event_id = int(last_event_id)
+                self.last_event_id = last_event_id
             except ValueError:
                 self.last_event_id = None
         if event:
