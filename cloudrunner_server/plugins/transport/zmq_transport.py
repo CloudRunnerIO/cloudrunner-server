@@ -692,7 +692,7 @@ class ZmqTransport(ServerTransportBackend):
 
                     if isinstance(req, (HBR, Ident, Quit)):
                         try:
-                            if self.heartbeat(req):
+                            if self.heartbeat(req) or isinstance(req, Ident):
                                 msg = Init(self.tenants[req.hdr.org].id,
                                            req.hdr.org,
                                            self.crypter.key,
