@@ -218,7 +218,6 @@ class RegReader(RegBase):
         logs = zip(nodes, self.redis.execute())
         found_nodes = OrderedDict()
         max_score = 0
-        print("Logs", logs)
         for log in logs:
             if log[1]:
                 for item in log[1]:
@@ -232,7 +231,6 @@ class RegReader(RegBase):
                     range_ = ts_dict.setdefault(score, [])
                     range_.extend([(begin, end)])
         ret = {}
-        print("Found", found_nodes)
         for node, ts_range in found_nodes.items():
             sectors = OrderedDict()
             s_rel_key = self._get_rel_id('S', self.key(job_id), node)
@@ -247,7 +245,6 @@ class RegReader(RegBase):
                 for r_ in range_:
                     ret.setdefault(node, []).append((ts, l.pop(0)))
 
-        print("Ret", ret)
         return ret, max_score
 
     def load_log(self, min_score, max_score, nodes=None, uuids=None):
@@ -268,7 +265,6 @@ class RegReader(RegBase):
                 log_info['result'] = meta.get(node)
                 log_info['lines'] = self.content_filter(lines)
 
-        print(output)
         return new_score, output
 
     def is_match(self, meta):

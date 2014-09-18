@@ -65,6 +65,6 @@ class LibraryRenderer(object):
             return ("Template %s not found in the library" %
                     template_path)
 
-        template = Template(script.content)
+        template = Template(script.contents(request).content)
 
         return template.render(**res)

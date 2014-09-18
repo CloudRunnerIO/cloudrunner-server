@@ -24,7 +24,8 @@ from cloudrunner_server.api.hooks.error_hook import ErrorHook
 from cloudrunner_server.api.hooks.db_hook import DbHook
 from cloudrunner_server.api.hooks.perm_hook import PermHook
 from cloudrunner_server.api.hooks.redis_hook import RedisHook
-from cloudrunner_server.api.model import (Task, Tag, LOG_STATUS, SOURCE_TYPE)
+from cloudrunner_server.api.model import (Script, Task, Tag, Revision,
+                                          LOG_STATUS, SOURCE_TYPE)
 from cloudrunner_server.api.util import JsonOutput as O
 from cloudrunner_server.util.cache import CacheRegistry
 
@@ -138,12 +139,34 @@ class Logs(HookController):
 
     @expose('json', content_type="application/json")
     @expose('include/raw.html', content_type="text/plain")
-    def output(self, uuid=None, tags=None, tail=100, steps=None, nodes=None,
-               show=None, template=None, content_type="text/html", **kwargs):
+    def output(self, uuid=None, script=None, tags=None, tail=100, steps=None,
+               nodes=None, show=None, template=None, content_type="text/html",
+               **kwargs):
+        try:
+            tail = int(tail)
+        except ValueError:
+            return O.error(msg="Wrong value for tail. Must be an integer >= 0")
+        start = 0
+        end = 50
 
-        log_uuid = uuid
+        uuids = []
+        if uuid:
+            uuids.extend(re.split('[\s,;]', uuid))
         pattern = kwargs.get('filter')
         order_by = kwargs.get('order', 'desc')
+
+        q = Task.visible(request)
+
+        if script:
+            scr = Script.find(request, script).one()
+            q = q.join(Revision, Script).filter(Script.id == scr.id)
+        if tags:
+            # get uuids from tag
+            tag_names = [tag.strip() for tag in re.split('[\s,;]', tags)
+                         if tag.strip()]
+            print tag_names
+            # q = q.filter(Tag.name.in_(tag_names)).group_by(
+            #     Task.id).having(func.count(Task.id) == len(tag_names))
 
         if template:
             override_template("library:%s" % template,
@@ -154,36 +177,13 @@ class Logs(HookController):
         max_score = float(kwargs.get('to', 'inf'))
         cache = CacheRegistry(redis=request.redis)
         score = 1
-        if not log_uuid and not tags:
-            return O.error(msg="Selector(uuid or tags) not provided")
 
         try:
-            tail = int(tail)
-        except ValueError:
-            return O.error(msg="Wrong value for tail. Must be an integer >= 0")
-
-        """
-        if tail:
-            begin = -tail
-        else:
-            begin = 0
-        """
-
-        try:
-            q = Task.visible(request)
-            if tags:
-                tag_names = [tag.strip() for tag in re.split('[\s,;]', tags)
-                             if tag.strip()]
-                q = q.filter(Tag.name.in_(tag_names)).group_by(
-                    Task.id).having(func.count(Task.id) == len(tag_names))
-            else:
-                q = q.filter(Task.uuid == log_uuid)
-
             if order_by == 'asc':
                 q = q.order_by(Task.created_at.asc())
             else:
                 q = q.order_by(Task.created_at.desc())
-            tasks = q.all()  # [start:end]
+            tasks = q.all()[start:end]
         except Exception, ex:
             LOG.exception(ex)
             request.db.rollback()
