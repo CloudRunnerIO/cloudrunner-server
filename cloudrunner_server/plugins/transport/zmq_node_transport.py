@@ -231,6 +231,7 @@ class NodeTransport(TransportBackend):
         poller.register(master_sub, zmq.POLLIN)
         poller.register(ssl_proxy, zmq.POLLIN)
         # Sindicate requests from two endpoints and forward to 'requests'
+        time.sleep(0.5)
         ssl_proxy.send_multipart(['SSL_PROXY', HBR(self.node_id)._])
         while not self.stopped.is_set():
             try:
