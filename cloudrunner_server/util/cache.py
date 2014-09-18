@@ -210,7 +210,7 @@ class RegReader(RegBase):
         return zip(nodes, self.redis.execute())
 
     def get_node_log_by_score(self, job_id, nodes, min_score=0,
-                              max_score='inf'):
+                              max_score='inf', tail=None):
         for node in nodes:
             z_rel_key = self._get_rel_id('Z', self.key(job_id), node)
             self.redis.zrangebyscore(z_rel_key, min_score, max_score,
@@ -241,13 +241,22 @@ class RegReader(RegBase):
                 sectors[ts] = len(range_)
         l = self.redis.execute()
         for node, ts_range in found_nodes.items():
+            total_lines = 0
             for ts, range_ in ts_range.items():
                 for r_ in range_:
-                    ret.setdefault(node, []).append((ts, l.pop(0)))
+                    lines = l.pop(0)
+                    if tail and total_lines + len(lines) > tail:
+                        if total_lines < tail:
+                            ret.setdefault(node, []).append(
+                                (ts, lines[:tail - total_lines]))
+                    else:
+                        ret.setdefault(node, []).append((ts, lines))
+                    total_lines += len(lines)
 
         return ret, max_score
 
-    def load_log(self, min_score, max_score, nodes=None, uuids=None):
+    def load_log(self, min_score, max_score,
+                 nodes=None, uuids=None, tail=None):
         if not nodes and not uuids:
             return 0, {}
 
@@ -259,7 +268,7 @@ class RegReader(RegBase):
             nodes = self.get_nodes(u, nodes=nodes)
             meta = self.get_meta(u, nodes)
             node_lines, new_score = self.get_node_log_by_score(
-                u, nodes, min_score, max_score)
+                u, nodes, min_score, max_score, tail=tail)
             for node, lines in node_lines.items():
                 log_info = log[node] = {}
                 log_info['result'] = meta.get(node)

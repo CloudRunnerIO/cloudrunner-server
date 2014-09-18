@@ -203,7 +203,8 @@ class Logs(HookController):
             except ValueError:
                 return O.error(msg="Wrong regex pattern")
 
-            score, logs = c.load_log(min_score, max_score, uuids=uuids)
+            score, logs = c.load_log(min_score, max_score,
+                                     uuids=uuids, tail=tail)
 
             for uuid in uuids:
                 log_data = logs.get(uuid, [])
