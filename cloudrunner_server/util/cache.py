@@ -218,7 +218,6 @@ class RegReader(RegBase):
         logs = zip(nodes, self.redis.execute())
         found_nodes = OrderedDict()
         max_score = 0
-        tail = 5
         node_tail = {}
         for log in logs:
             if log[1]:
