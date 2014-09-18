@@ -383,7 +383,6 @@ class TriggerManager(Daemon):
             for job in jobs:
                 if filter(lambda t: t.started_by == job, group.tasks):
                     # LOG.warn("Circular invocation of Trigger: %s" % job.name)
-                    # Job already invoked in this group
                     continue
                 kwargs = {'env': env}
                 if task.owner_id == job.owner_id:
