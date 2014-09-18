@@ -160,14 +160,15 @@ class Logs(HookController):
         if script:
             scr = Script.find(request, script).one()
             q = q.join(Revision, Script).filter(Script.id == scr.id)
-        """
+
         if tags:
             # get uuids from tag
             tag_names = [tag.strip() for tag in re.split('[\s,;]', tags)
                          if tag.strip()]
+            print tag_names
             # q = q.filter(Tag.name.in_(tag_names)).group_by(
             #     Task.id).having(func.count(Task.id) == len(tag_names))
-        """
+
         if template:
             override_template("library:%s" % template,
                               content_type=content_type)
