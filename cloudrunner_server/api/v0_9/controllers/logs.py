@@ -150,12 +150,14 @@ class Logs(HookController):
         end = 50
 
         uuids = []
-        if uuid:
-            uuids.extend(re.split('[\s,;]', uuid))
         pattern = kwargs.get('filter')
         order_by = kwargs.get('order', 'desc')
 
         q = Task.visible(request)
+
+        if uuid:
+            uuids.extend(re.split('[\s,;]', uuid))
+            q = q.filter(Task.uuid == uuid)
 
         if script:
             scr = Script.find(request, script).one()

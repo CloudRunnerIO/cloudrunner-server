@@ -213,23 +213,33 @@ class RegReader(RegBase):
                               max_score='inf', tail=None):
         for node in nodes:
             z_rel_key = self._get_rel_id('Z', self.key(job_id), node)
-            self.redis.zrangebyscore(z_rel_key, min_score, max_score,
-                                     withscores=True)
+            self.redis.zrevrangebyscore(z_rel_key, max_score, min_score,
+                                        withscores=True)
         logs = zip(nodes, self.redis.execute())
         found_nodes = OrderedDict()
         max_score = 0
+        tail = 5
+        node_tail = {}
         for log in logs:
             if log[1]:
                 for item in log[1]:
                     node = log[0]
                     range_, score = item
+                    node_tail.setdefault(node, 0)
                     max_score = max(score, max_score)
                     begin, end = range_.split(":", 1)
                     begin = int(begin)
                     end = int(end)
+                    length = end - begin
+                    if node_tail[node] + length > tail:
+                        allowed = tail - node_tail[node]
+                        begin = end - allowed
                     ts_dict = found_nodes.setdefault(node, OrderedDict())
                     range_ = ts_dict.setdefault(score, [])
                     range_.extend([(begin, end)])
+                    node_tail[node] += length
+                    if node_tail[node] >= tail:
+                        break
         ret = {}
         for node, ts_range in found_nodes.items():
             sectors = OrderedDict()
@@ -241,17 +251,9 @@ class RegReader(RegBase):
                 sectors[ts] = len(range_)
         l = self.redis.execute()
         for node, ts_range in found_nodes.items():
-            total_lines = 0
             for ts, range_ in ts_range.items():
                 for r_ in range_:
-                    lines = l.pop(0)
-                    if tail and total_lines + len(lines) > tail:
-                        if total_lines < tail:
-                            ret.setdefault(node, []).append(
-                                (ts, lines[:tail - total_lines]))
-                    else:
-                        ret.setdefault(node, []).append((ts, lines))
-                    total_lines += len(lines)
+                    ret.setdefault(node, []).insert(0, (ts, l.pop(0)))
 
         return ret, max_score
 
