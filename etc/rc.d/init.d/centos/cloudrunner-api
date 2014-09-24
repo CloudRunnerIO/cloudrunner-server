@@ -9,28 +9,29 @@
 # Short-Description: starts the uwsgi app server
 # Description:       starts uwsgi app server using start-stop-daemon
 ### END INIT INFO
-set -e
+. /etc/rc.d/init.d/functions
 
 PATH=/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 DAEMON=/usr/bin/uwsgi
-RUN=/var/run/cloudruner/
+RUN=/var/run/cloudrunner
 OWNER=nginx
 NAME="cloudrunner-api"
 DESC="Cloudrunner API service"
 OP=$1
 NUM_WORKERS=10
 LISTEN_PORT=5558
+PIDFILE=$RUN/$NAME.pid
 
 [[ -x $DAEMON ]] || exit 0
 [[ -d $RUN ]] || mkdir -p $RUN && chown $OWNER $RUN
 
 DAEMON_OPTS="-p $NUM_WORKERS --master --socket :$LISTEN_PORT \
     --daemonize=/var/log/cloudrunner-api.log \
+    --pidfile=$PIDFILE \
     --pecan /etc/cloudrunner/api.config.py"
 
 do_pid_check()
 {
-    local PIDFILE=$1
     [[ -f $PIDFILE ]] || return 0
     local PID=$(cat $PIDFILE)
     for p in $(pgrep $DAEMON); do
@@ -42,25 +43,23 @@ do_pid_check()
 
 do_start()
 {
-    local PIDFILE=$RUN/$NAME.pid
-    if do_pid_check $PIDFILE; then
-        $DAEMON $DAEMON_OPTS --pidfile $PIDFILE
+    if [ ! -f  $PIDFILE ]; then
+        $DAEMON $DAEMON_OPTS
+        sleep 1
+        local PID=$(cat $PIDFILE)
+        echo "Started $NAME ($PID)"
     else
-        echo "Already running!"
+        echo "Already running, remove pid file first!"
     fi
 }
 
 send_sig()
 {
-    local PIDFILE=$RUN/$NAME.pid
-    set +e
     [[ -f $PIDFILE ]] && kill $1 $(cat $PIDFILE) > /dev/null 2>&1
-    set -e
 }
 
 wait_and_clean_pidfiles()
 {
-    local PIDFILE=$RUN/$NAME.pid
     until do_pid_check $PIDFILE; do
         echo -n "";
     done
@@ -83,9 +82,8 @@ do_force_reload()
     send_sig -15
 }
 
-get_status()
-{
-    send_sig -10
+get_status(){
+    status -p $PIDFILE $NAME
 }
 
 case "$OP" in
@@ -99,23 +97,16 @@ case "$OP" in
         do_stop
         echo "$NAME."
         ;;
-    reload)
+    restart)
         echo -n "Reloading $DESC: "
         do_reload
         echo "$NAME."
         ;;
-    force-reload)
+    force-restart)
         echo -n "Force-reloading $DESC: "
         do_force_reload
         echo "$NAME."
        ;;
-    restart)
-        echo  "Restarting $DESC: "
-        do_stop
-        sleep 1
-        do_start
-        echo "$NAME."
-        ;;
     status)
         get_status
         ;;
