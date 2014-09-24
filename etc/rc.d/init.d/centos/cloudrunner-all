@@ -1,0 +1,47 @@
+#!/bin/bash
+# CloudRunner dashboard services control
+# chkconfig: 345 20 80
+# description: CloudRunner Dispatcher comon init V script
+
+
+NAME=cloudrunner-all
+DESC="CloudRunner Dashboard services"
+
+DAEMONS="cloudrunner-dsp cloudrunner-trigger cloudrunner-api"
+
+
+case "$1" in
+
+start)
+
+for DAEMON  in $DAEMONS ;do
+
+  service $DAEMON start
+
+done
+
+;;
+status)
+    for DAEMON  in $DAEMONS ;do
+      service $DAEMON status
+    done
+;;
+stop)
+
+    for DAEMON  in $DAEMONS ;do
+     service $DAEMON stop
+    done
+;;
+
+restart)
+    for DAEMON  in $DAEMONS ;do
+      service $DAEMON restart
+      echo
+    done
+;;
+
+
+*)
+    echo "Usage: $0 {status|start|stop|restart}"
+    exit 1
+esac

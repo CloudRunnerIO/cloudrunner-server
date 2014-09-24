@@ -15,6 +15,7 @@
 import argparse
 import json
 import logging
+import os
 import re
 import redis
 from sqlalchemy.orm import scoped_session, sessionmaker, joinedload
@@ -23,7 +24,7 @@ try:
 except ImportError:
     pass
 
-from cloudrunner import CONFIG_LOCATION, LOG_LOCATION
+from cloudrunner import CONFIG_LOCATION, LOG_DIR
 from cloudrunner.core import parser
 from cloudrunner.core.message import Queued, DictWrapper, EnvBroadcast
 from cloudrunner.util.config import Config
@@ -37,6 +38,7 @@ from cloudrunner_server.util.cache import CacheRegistry
 from cloudrunner_server.api.util import JsonOutput as O
 
 CONFIG = Config(CONFIG_LOCATION)
+LOG_LOCATION = os.path.join(LOG_DIR, "cloudrunner-trigger.log")
 
 if CONFIG.verbose_level:
     configure_loggers(getattr(logging, CONFIG.verbose_level, 'INFO'),

@@ -98,10 +98,14 @@ rm -rf %{buildroot}
 
 mkdir -p $RPM_BUILD_ROOT/%{_sysconfdir}/cloudrunner/
 install -m644 conf/cloudrunner.conf $RPM_BUILD_ROOT/%{_sysconfdir}/cloudrunner/
+install -m644 cloudrunner_server/api/config.py $RPM_BUILD_ROOT/%{_sysconfdir}/cloudrunner/api.config.py
 
 
 mkdir -p $RPM_BUILD_ROOT/%{_initrddir}
 install -m755 etc/rc.d/init.d/centos/cloudrunner-dsp $RPM_BUILD_ROOT/%{_initrddir}
+install -m755 etc/rc.d/init.d/centos/cloudrunner-trigger $RPM_BUILD_ROOT/%{_initrddir}
+install -m755 etc/rc.d/init.d/centos/cloudrunner-api $RPM_BUILD_ROOT/%{_initrddir}
+install -m755 etc/rc.d/init.d/centos/cloudrunner-all $RPM_BUILD_ROOT/%{_initrddir}
 
 install -m755 cloudrunner_server/plugins/bin/plugins_openstack_node.py $RPM_BUILD_ROOT/%{_bindir}/cloudrunner-plugins-openstack-node
 install -m755 cloudrunner_server/plugins/bin/plugins_node.py $RPM_BUILD_ROOT/%{_bindir}/cloudrunner-plugins-node
@@ -145,6 +149,7 @@ fi
 %doc README.rst
 
 %{_initrddir}/cloudrunner-dsp
+%config(noreplace) %{_sysconfdir}/cloudrunner/cloudrunner.conf
 %config(noreplace) %{_sysconfdir}/cloudrunner/cloudrunner.conf
 
 %{python_sitelib}/cloudrunner_server/tests/*

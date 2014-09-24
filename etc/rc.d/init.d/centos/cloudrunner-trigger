@@ -1,0 +1,66 @@
+#!/bin/bash
+# CloudRunner Dispatcher Service
+# chkconfig: 345 20 80
+# description: CloudRunner Dispatcher service
+
+# processname: /usr/bin/cloudrunner-dsp
+# source function library
+. /etc/rc.d/init.d/functions
+
+NAME=cloudrunner-trigger
+DESC="CloudRunner Trigger service"
+PIDFILE=/var/run/$NAME.pid
+SCRIPTNAME=/etc/init.d/cloudrunner-trigger
+
+DAEMON=/usr/bin/cloudrunner-trigger
+DAEMONOPTS="--pidfile=$PIDFILE"
+
+start(){
+    printf "%-50s" "Starting ${NAME}"
+    $DAEMON service start $DAEMONOPTS &>/dev/null
+    PID=$(cat $PIDFILE 2>/dev/null)
+    if [ -z $PID ]; then
+        printf "%s\n" "Fail"
+    else
+        printf "%s\n" "Ok"
+    fi
+
+}
+
+stop(){
+    printf "%-50s" "Stopping ${NAME}"
+    $DAEMON service stop $DAEMONOPTS &>/dev/null
+    [ $? == 0 ] && echo Ok
+    rm -rf "$PIDFILE"
+}
+
+rh_status(){
+    status -p $PIDFILE $NAME
+}
+
+rh_status_q() {
+    rh_status >/dev/null 2>&1
+}
+
+case "$1" in
+start)
+    rh_status_q && exit 0
+    start
+;;
+status)
+    rh_status
+;;
+stop)
+    rh_status_q || exit 0
+    stop
+;;
+
+restart)
+    stop
+    start
+;;
+
+*)
+    echo "Usage: $0 {status|start|stop|restart}"
+    exit 1
+esac
