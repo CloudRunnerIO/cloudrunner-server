@@ -205,24 +205,6 @@ def main():
     conf_get.add_argument('Section.key',
                           help='Section.key')
 
-    # Scheduler
-
-    scheduler = commands.add_parser('schedule', parents=[_common],
-                                    help='Run scheduled jobs')
-
-    sched_actions = scheduler.add_subparsers(dest='action',
-                                             help='Manage CloudRunner '
-                                             'dispatcher scheduled jobs')
-
-    job_list = sched_actions.add_parser('list',
-                                        help='List all scheduled jobs')
-    job_list.add_argument('-s', '--search',
-                          help='Search pattern')
-
-    job_exec = sched_actions.add_parser('run', help='Run scheduled jobs')
-
-    job_exec.add_argument('job_id', help='Job id')
-
     # Users command
 
     def _list_users(prefix, parsed_args, **kwargs):
@@ -294,31 +276,27 @@ def main():
     if _eval_config().security.use_org:
         users_add.add_argument('--org', required=True, help='Organization')
 
-    users_role = users_actions.add_parser('add_role',
-                                          help='Create new auth role')
+    users_perm = users_actions.add_parser('add_perm',
+                                          help='Create new auth permission')
 
-    users_role.add_argument('username',
+    users_perm.add_argument('username',
                             help='User name').completer = _list_users
 
-    users_role.add_argument('node', help="Node to apply role. "
-                            "Can be plain value or regex")
+    users_perm.add_argument('permission', help="Permission name")
 
-    users_role.add_argument('role', help="User rule to be applied. "
-                            "A regex for selecting nodes")
+    users_perms = users_actions.add_parser('permissions',
+                                           help='List permissions for user')
 
-    users_roles = users_actions.add_parser('roles',
-                                           help='List roles for user')
-
-    users_roles.add_argument('username',
+    users_perms.add_argument('username',
                              help='User name').completer = _list_users
 
-    users_role_rm = users_actions.add_parser('rm_role',
-                                             help='Remove role for user')
+    users_rm_perm = users_actions.add_parser(
+        'rm_perm', help='Remove permission for user')
 
-    users_role_rm.add_argument('username',
+    users_rm_perm.add_argument('username',
                                help='User name').completer = _list_users
 
-    users_role_rm.add_argument('node', help="Node to remove role for.")
+    users_rm_perm.add_argument('permission', help="Permission name")
 
     users_remove = users_actions.add_parser('remove',
                                             help='Create new user')
@@ -357,10 +335,8 @@ def main():
     controllers = {'cert': functions.CertController,
                    'init': functions.ConfigController,
                    'config': functions.ConfigController,
-                   'schedule': functions.SchedulerController,
                    'users': functions.UserController,
-                   'org': OrgController,
-                   'trigger': functions.TriggerController}
+                   'org': OrgController}
     config = Config(args.config or CONFIG_LOCATION)
 
     printers = {
@@ -376,13 +352,16 @@ def main():
         if not items:
             return
         for line in items:
-            _type = line[0]
-            printables = list(line[1:])
-            for i in range(len(printables)):
-                if isinstance(printables[i], list):
-                    printables[i] = '\n'.join(concat(p) for p in printables[i])
-            printables = [str(p) for p in printables]
-            print printers[_type]('\n'.join(printables))
+            _type, printables = line
+            if isinstance(printables, (list, tuple)):
+                for i in range(len(printables)):
+                    if isinstance(printables[i], list):
+                        printables[i] = '\n'.join(
+                            concat(p) for p in printables[i])
+                printables = [str(p) for p in printables]
+                print printers[_type]('\n'.join(printables))
+            else:
+                print printables
     except Exception, ex:
         print colors.red(str(ex))
 

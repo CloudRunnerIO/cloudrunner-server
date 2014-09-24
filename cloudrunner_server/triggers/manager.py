@@ -146,7 +146,8 @@ class TriggerManager(Daemon):
             timeout = kwargs.get('timeout', 0)
 
             user = self.db.query(User).join(
-                Org).filter(User.id == user_id).one()
+                Org).filter(User.id == user_id,
+                            User.active == True).one()  # noqa
             self.user = DictWrapper(id=user.id,
                                     name=user.username,
                                     org=user.org.name)

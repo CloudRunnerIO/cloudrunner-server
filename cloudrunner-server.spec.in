@@ -134,6 +134,12 @@ mkdir -p $RPM_BUILD_ROOT/var/lib/cloudrunner/plugins/
 %clean
 rm -rf %{buildroot}
 
+%post
+if [ -n "$(command -v alembic)" ]; then
+	cd %{python_sitelib}/cloudrunner_server/db/
+	alembic upgrade head || echo "DB upgrade failed"
+fi
+
 %postun
 /sbin/service %{name} condrestart > /dev/null 2>&1 || :
 

@@ -37,9 +37,11 @@ class Auth(HookController):
 
     @expose('json')
     def login(self, username, password, expire=DEFAULT_EXP):
-        user = request.db.query(User).join(Org, Token, Permission).filter(
-            User.username == username,
-            User.password == hash_token(password)).first()
+        user = request.db.query(User).join(Org).outerjoin(
+            Token, Permission).filter(
+                User.active == True,  # noqa
+                User.username == username,
+                User.password == hash_token(password)).first()
         if not user:
             return O.error(msg='Cannot login')
 

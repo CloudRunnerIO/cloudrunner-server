@@ -12,10 +12,6 @@
 #  * without the express permission of CloudRunner.io
 #  *******************************************************/
 
-from cloudrunner.core.message import ScheduleReq
-from cloudrunner.util.shell import colors
-from cloudrunner.util.loader import local_plugin_loader
-from cloudrunner_server.plugins.auth.base import NodeVerifier
 
 import fcntl
 import M2Crypto as m
@@ -27,6 +23,13 @@ import shutil
 import stat
 from string import ascii_letters
 import time
+
+from sqlalchemy import create_engine, event
+from sqlalchemy.orm import scoped_session, sessionmaker
+
+from cloudrunner_server.plugins.auth.base import NodeVerifier
+from cloudrunner_server.api.model import *  # noqa
+from cloudrunner_server.util.db import checkout_listener
 
 YEARS = 10  # Default expire for signed certificates
 TAG = 1
@@ -948,167 +951,128 @@ class ConfigController(object):
         yield ERR, "Not set"
 
 
-class SchedulerController(object):
-
-    def __init__(self, config):
-        self.config = config
-        if self.config.scheduler:
-            scheduler_class = local_plugin_loader(self.config.scheduler)
-        else:
-            print colors.red("=" * 50, bold=1)
-            print colors.red("Cannot find scheduler class. "
-                             "Set it in config file.", bold=1)
-            print colors.red("=" * 50, bold=1)
-            exit(1)
-        if self.config.transport:
-            self.backend_class = local_plugin_loader(self.config.transport)
-        else:
-            print colors.red("=" * 50, bold=1)
-            print colors.red("Cannot find backend transport class. "
-                             "Set it in config file.", bold=1)
-            print colors.red("=" * 50, bold=1)
-            exit(1)
-
-        self.scheduler = scheduler_class()
-
-    @yield_wrap
-    def list(self, **kwargs):
-        success, jobs = self.scheduler.list(**kwargs)
-        output = [', '.join([': '.join([k, str(v)])
-                            for k, v in job.items()]) for job in jobs]
-        yield DATA, output
-
-    @yield_wrap
-    def run(self, job_id, **kwargs):
-        '''
-        Run Cloudrunner script from scheduled task.
-        Usually invoked from CronTab or other scheduler.
-        '''
-        _req = ScheduleReq('schedule', job_id)
-        scheduler_queue = None
-        try:
-            backend = self.backend_class(self.config)
-            scheduler_queue = backend.publish_queue('scheduler')
-            scheduler_queue.send(*_req.pack())
-            yield DATA, "Job %s sent for execution" % job_id
-        except Exception, ex:
-            yield ERR, str(ex)
-        finally:
-            if scheduler_queue:
-                scheduler_queue.close()
-
-
 class UserController(object):
 
     def __init__(self, config, to_print=True):
-        self.config = config
+        self.db_path = config.db
+        self.set_context_from_config(config)
 
-        if self.config.auth:
-            auth_class = local_plugin_loader(self.config.auth)
-        else:
-            print colors.red("=" * 50, bold=1)
-            print colors.red("Cannot find auth class. "
-                             "Set it in config file.", bold=1)
-            print colors.red("=" * 50, bold=1)
-            raise Exception("Error loading Auth module")
-
-        self.auth = auth_class(self.config)
-        self.auth.set_context_from_config()
+    def set_context_from_config(self, recreate=None, **configuration):
+        session = scoped_session(sessionmaker())
+        engine = create_engine(self.db_path, **configuration)
+        if 'mysql+pymysql://' in self.db_path:
+            event.listen(engine, 'checkout', checkout_listener)
+        session.bind = engine
+        metadata.bind = session.bind
+        if recreate:
+            # For tests: re-create tables
+            metadata.create_all(engine)
+        self.db = session
 
     @yield_wrap
     def list(self, **kwargs):
-        users = self.auth.list_users()
-        yield DATA, users
+        users = self.db.query(User).join(Org).all()
+        yield DATA, [(u.username, u.org.name) for u in users]
 
     @yield_wrap
     def list_orgs(self, **kwargs):
-        orgs = self.auth.list_orgs()
-        yield DATA, orgs
+        orgs = self.db.query(Org).all()
+        yield DATA, [(o.name,
+                      'Active' if o.active else 'Inactive') for o in orgs]
 
     @yield_wrap
-    def roles(self, username, **kwargs):
-        roles = self.auth.user_roles(username).items()
-        if not roles:
-            yield EMPTY, "No roles for user"
+    def permissions(self, username, **kwargs):
+        perms = self.db.query(Permission).join(User).filter(
+            User.username == username).all()
+        if not perms:
+            yield EMPTY, "No permissions for user"
 
-        for node, role in roles:
-            yield DATA, '%s => %s' % (node, role)
+        for perm in perms:
+            yield DATA, perm.name
 
     @yield_wrap
-    def create(self, username, password, org=None, **kwargs):
-        success, msg = self.auth.create_user(username, password, org)
-        if not success:
-            yield ERR, msg
-        else:
-            yield DATA, msg
+    def create(self, username, password, org='DEFAULT', **kwargs):
+        org = self.db.query(Org).filter(Org.name == org).first()
+        user = User(username=username, org_id=org.id)
+        user.set_password(password)
+        self.db.add(user)
+        self.db.commit()
+        yield DATA, 'Added with id: %s' % user.id
 
     @yield_wrap
     def create_org(self, name, **kwargs):
-        success, msg = self.auth.create_org(name)
-        if not success:
-            yield ERR, msg
-        else:
-            yield DATA, msg
+        org = Org(name=name)
+        self.db.add(org)
+        self.db.commit()
+        yield DATA, "Added"
 
     @yield_wrap
     def activate_org(self, name, **kwargs):
-        success, msg = self.auth.activate_org(name)
-        if not success:
-            yield ERR, msg
-        else:
-            yield DATA, msg
+        org = self.db.query(Org).filter(Org.name == name).first()
+        if not org:
+            yield ERR, "Organization not found"
+            return
+        org.active = True
+        self.db.add(org)
+        self.db.commit()
+        yield DATA, "Activated"
 
     @yield_wrap
     def deactivate_org(self, name, **kwargs):
-        success, msg = self.auth.deactivate_org(name)
-        if not success:
-            yield ERR, msg
-        else:
-            yield DATA, msg
+        org = self.db.query(Org).filter(Org.name == name).first()
+        if not org:
+            yield ERR, "Organization not found"
+            return
+        org.active = False
+        self.db.add(org)
+        self.db.commit()
+        yield DATA, "Deactivated"
 
     @yield_wrap
     def remove_org(self, name, **kwargs):
-        success, msg = self.auth.remove_org(name)
-        if not success:
-            yield ERR, msg
-        else:
-            yield DATA, msg
+        org = self.db.query(Org).filter(Org.name == name).first()
+        if not org:
+            yield ERR, "Organization not found"
+            return
+
+        self.db.delete(org)
+        self.db.commit()
+        yield DATA, "Removed"
 
     @yield_wrap
     def remove(self, username, **kwargs):
-        success, msg = self.auth.remove_user(username)
-        if not success:
-            yield ERR, msg
-        else:
-            yield DATA, msg
+        user = self.db.query(User).filter(
+            User.username == username).first()
+        if not user:
+            yield ERR, "User not found"
+            return
+
+        self.db.delete(user)
+        self.db.commit()
+        yield DATA, "Removed"
 
     @yield_wrap
-    def add_role(self, username, node, role, **kwargs):
-        success, msg = self.auth.add_role(username, node, role)
-        if not success:
-            yield ERR, msg
-        else:
-            yield DATA, msg
+    def add_perm(self, username, permission, **kwargs):
+        user = self.db.query(User).filter(
+            User.username == username).first()
+
+        perm = Permission(name=permission)
+        user.permissions.append(perm)
+        self.db.add(user)
+        self.db.commit()
+        yield DATA, "Added"
 
     @yield_wrap
-    def rm_role(self, username, node, **kwargs):
-        success, msg = self.auth.remove_role(username, node)
-        if not success:
-            yield ERR, msg
+    def rm_perm(self, username, permission, **kwargs):
+        user = self.db.query(User).outerjoin(Permission).filter(
+            User.username == username).first()
+
+        for perm in user.permissions:
+            if perm.name == permission:
+                user.permissions.remove(perm)
+                self.db.add(user)
+                self.db.commit()
+                yield DATA, "Removed"
+                break
         else:
-            yield DATA, msg
-
-
-class TriggerController(object):
-
-    def __init__(self, config, to_print=True):
-        self.config = config
-
-    def fire(self, signal, **kwargs):
-        yield TAG, "Firing signal [%s]" % signal
-
-    def attach(self, signal, target, **kwargs):
-        yield TAG, "Attaching to signal [%s]" % signal
-
-    def detach(self, signal, target, **kwargs):
-        yield TAG, "Detaching to signal [%s]" % signal
+            yield DATA, "No permissions for user"

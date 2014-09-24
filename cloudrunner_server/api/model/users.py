@@ -53,6 +53,7 @@ class User(TableBase):
     position = Column(String(100))
     department = Column(String(100))
     password = Column(String(128))
+    active = Column(Boolean, default=True)
 
     org_id = Column(Integer, ForeignKey('organizations.id'))
 
@@ -67,6 +68,7 @@ class User(TableBase):
     @staticmethod
     def visible(ctx):
         return ctx.db.query(User).join(Org).filter(
+            User.active == True,  # noqa
             Org.name == ctx.user.org
         )
 
