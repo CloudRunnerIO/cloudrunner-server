@@ -47,8 +47,8 @@ class BaseRESTTestCase(BaseTestCase):
 
         self.redis.zrangebyscore.return_value = ['PREDEFINED_TOKEN']
         self.redis.hgetall.return_value = dict(uid=1, org='MyOrg')
-        self.redis.smembers.return_value = {'role1', 'is_test_user',
-                                            'is_admin'}
+        self.redis.smembers.return_value = set(['role1', 'is_test_user',
+                                                'is_admin'])
         self.redis.get.return_value = "10"
         self.populate()
         global engine

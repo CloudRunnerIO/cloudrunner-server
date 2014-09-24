@@ -20,7 +20,7 @@ class TestManage(base.BaseRESTTestCase):
 
     def setUp(self):
         super(TestManage, self).setUp()
-        self.redis.smembers.return_value = {'is_admin', 'is_test_user'}
+        self.redis.smembers.return_value = set(['is_admin', 'is_test_user'])
 
     def test_list_users(self):
         resp = self.app.get('/rest/manage/users/',

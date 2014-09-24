@@ -153,7 +153,8 @@ class TestLibrary(base.BaseRESTTestCase):
                   "owner": "testuser",
                   "mime": "text/workflow",
                   'created_at': '2014-01-20 00:00:00',
-                  "name": "test2"}}
+                  "name": "test2",
+                  "version": "4"}}
         self.assertEqual(resp_json, result)
 
         resp = self.app.get(
@@ -167,7 +168,8 @@ class TestLibrary(base.BaseRESTTestCase):
                   "owner": "testuser",
                   "mime": "text/plain",
                   'created_at': '2014-01-10 00:00:00',
-                  "name": "test1"}}
+                  "name": "test1",
+                  'version': '2'}}
         self.assertEqual(resp_json, result)
 
     def test_create_script(self):
@@ -196,7 +198,8 @@ class TestLibrary(base.BaseRESTTestCase):
                   "content": "some content",
                   "owner": "testuser",
                   "mime": "text/plain",
-                  "name": "scr1"}}
+                  "name": "scr1",
+                  'version': '1'}}
         self.assertEqual(resp_json, result)
 
     def test_create_fail_script(self):
