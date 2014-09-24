@@ -150,7 +150,7 @@ fi
 
 %{_initrddir}/cloudrunner-dsp
 %config(noreplace) %{_sysconfdir}/cloudrunner/cloudrunner.conf
-%config(noreplace) %{_sysconfdir}/cloudrunner/cloudrunner.conf
+%config(noreplace) %{_sysconfdir}/cloudrunner/api.config.py
 
 %{python_sitelib}/cloudrunner_server/tests/*
 %{python_sitelib}/cloudrunner_server/__init__*
