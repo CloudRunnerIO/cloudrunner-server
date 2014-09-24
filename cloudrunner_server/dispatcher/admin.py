@@ -12,11 +12,17 @@
 #  * without the express permission of CloudRunner.io
 #  *******************************************************/
 
+from datetime import datetime
+import json
 import logging
 from threading import Thread
+from sqlalchemy import create_engine, event
+from sqlalchemy.orm import scoped_session, sessionmaker
 
 from cloudrunner.core.exceptions import ConnectionError
-from cloudrunner.core.message import (ADMIN_TOWER, Control, Register)
+from cloudrunner.core.message import (ADMIN_TOWER, M, Control)
+from cloudrunner_server.util.db import checkout_listener
+from cloudrunner_server.api.model import metadata, Node, Org
 
 LOG = logging.getLogger('Control Tower')
 
@@ -31,6 +37,19 @@ class Admin(Thread):
         super(Admin, self).__init__()
         self.config = config
         self.backend = backend
+        self.db_path = config.db
+
+    def set_context_from_config(self, recreate=None, **configuration):
+        session = scoped_session(sessionmaker())
+        engine = create_engine(self.db_path, **configuration)
+        if 'mysql+pymysql://' in self.db_path:
+            event.listen(engine, 'checkout', checkout_listener)
+        session.bind = engine
+        metadata.bind = session.bind
+        if recreate:
+            # For tests: re-create tables
+            metadata.create_all(engine)
+        self.db = session
 
     def run(self):
         # Endpoint to receive commands from nodes
@@ -43,7 +62,7 @@ class Admin(Thread):
             try:
                 packed = self.admin_endp.recv(100)
                 if packed:
-                    req = Control.build(packed[0])
+                    req = M.build(packed[0])
                     if not req:
                         LOG.warn("ADMIN_TOWER invalid packet recv: %s" %
                                  packed)
@@ -71,20 +90,32 @@ class Admin(Thread):
     def process(self, req):
         LOG.info("Received admin req: %s %s" % (req.control, req.node))
 
-        if req.action == 'ECHO':
+        if req.control == 'ECHO':
             return [req.node, req.data or 'ECHO']
-        if req.action == 'REGISTER':
+        if req.control == 'REGISTER':
             try:
-                success, approval = self.backend.verify_node_request(
+                node = Node(name=req.node, meta=json.dumps(req.meta))
+                self.db.add(node)
+                self.db.commit()
+                approved, approval_msg, org = self.backend.verify_node_request(
                     req.node,
                     req.data)
-                if success:
-                    return Register(req.node, 'APPROVED', approval)
+                node.approved = approved
+                if approved:
+                    node.approved_at = datetime.now()
+                if org:
+                    org_ = self.db.query(Org).filter(Org.name == org).one()
+                    node.org = org_
+                self.db.add(node)
+                self.db.commit()
+                if approved:
+                    return Control(req.node, 'APPROVED', approval_msg)
                 else:
-                    return Register(req.node, 'REJECTED', approval)
+                    return Control(req.node, 'REJECTED', approval_msg)
             except Exception, ex:
-                LOG.exception(ex)
-                return Register(req.node, 'REJECTED', 'APPR_FAIL')
+                self.db.rollback()
+                LOG.error(ex)
+                return Control(req.node, 'REJECTED', 'APPR_FAIL')
 
         return None
 

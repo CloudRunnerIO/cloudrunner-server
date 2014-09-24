@@ -337,23 +337,26 @@ class ZmqTransport(ServerTransportBackend):
             csr = m.X509.load_request_string(str(request))
             subj = csr.get_subject()
             CN = subj.CN
-            OU = subj.OU or 'no--org'
+            OU = subj.OU or DEFAULT_ORG
             csr_file_name = p.join(base_path, 'reqs',
                                    '.'.join([OU, node, 'csr']))
             crt_file_name = p.join(base_path,
                                    'issued',
                                    '.'.join([OU, node, 'crt']))
             if CN != node:
-                return False, "ERR_CN_FAIL"
+                return False, None, "ERR_CN_FAIL"
             if not is_valid_host(CN):
-                return False, "ERR_NAME_FORBD"
+                return False, None, "ERR_NAME_FORBD"
             if p.exists(crt_file_name):
-                return self._build_cert_response(node, request, crt_file_name)
+                appr, cert = self._build_cert_response(node,
+                                                       request,
+                                                       crt_file_name)
+                return appr, cert, OU
             csr.save(csr_file_name)
             LOGA.info("Saved CSR file: %s" % csr_file_name)
         except Exception, ex:
             LOGA.exception(ex)
-            return False, 'INV_CSR'
+            return False, None, 'INV_CSR'
         finally:
             del csr
 
@@ -365,15 +368,18 @@ class ZmqTransport(ServerTransportBackend):
             for _, data in messages:
                 LOGA.info(data)
             if crt_file:
-                return self._build_cert_response(node, request, crt_file)
+                appr, cert = self._build_cert_response(node, request, crt_file)
+                return appr, cert, OU
             else:
-                return False, 'APPR_FAIL'
+                return False, None, 'APPR_FAIL'
         else:
             if p.exists(csr_file_name):
                 # Not issued yet
-                return False, 'PENDING'
+                return False, None, 'PENDING'
             elif not request:
-                return False, 'SEND_CSR'
+                return False, None, 'SEND_CSR'
+
+        return False, None, ''
 
     def configure(self, overwrite=False, **kwargs):
         pass
@@ -542,7 +548,12 @@ class ZmqTransport(ServerTransportBackend):
             else:
                 LOGPUB.info("HB from %s" % msg.hdr.peer)
 
-            if self.tenants[msg.hdr.org].push(msg.hdr.peer):
+            is_new = self.tenants[msg.hdr.org].push(msg.hdr.peer)
+            if msg.control == 'HBR':
+                print vars(msg)
+                self.tenants[msg.hdr.org].update(msg.hdr.peer, msg.usage)
+
+            if is_new:
                 # New node
                 LOGPUB.info("Node %s attached to %s" % (msg.hdr.peer,
                                                         msg.hdr.org))

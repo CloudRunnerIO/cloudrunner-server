@@ -32,4 +32,4 @@ class TestDispatch(base.BaseRESTTestCase):
             'Cr-Token': 'PREDEFINED_TOKEN', 'Cr-User': 'testuser'})
         self.assertEqual(resp.status_int, 200, resp.status_int)
         resp_json = json.loads(resp.body)
-        self.assertEqual(resp_json,  {'nodes': ['Node', 15]}, resp_json)
+        self.assertEqual(resp_json, {'nodes': ['Node', 15]}, resp_json)

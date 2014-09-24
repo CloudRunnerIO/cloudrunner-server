@@ -161,7 +161,9 @@ class Dispatcher(Daemon):
         if hasattr(self, 'backend'):
             tenant = self.backend.tenants.get(org, None)
             if tenant:
-                msg.nodes = [dict(name=n.name, last_seen=int(n.last_seen))
+                msg.nodes = [dict(name=n.name,
+                                  last_seen=int(n.last_seen),
+                                  usage=n.usage)
                              for n in tenant.active_nodes()]
             return msg
         return msg
@@ -331,6 +333,7 @@ class Dispatcher(Daemon):
         self.backend.prepare()
 
         self.admin = Admin(self.config, self.backend)
+        self.admin.set_context_from_config()
         self.admin.start()
 
         self.manager = SessionManager(self.config, self.backend)

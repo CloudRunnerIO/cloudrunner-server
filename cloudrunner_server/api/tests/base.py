@@ -182,6 +182,7 @@ class BaseRESTTestCase(BaseTestCase):
         r1_1 = Revision(draft=False, content="Version 6",
                         script=wf1)
         Session.add(r1_1)
+        Session.commit()
 
         r1_2 = Revision(draft=False, content="Version 7",
                         script=wf1)
@@ -193,41 +194,24 @@ class BaseRESTTestCase(BaseTestCase):
 
         r2_1 = Revision(draft=False, content="Version 1", script=wf2)
         Session.add(r2_1)
+        Session.commit()
 
         r2_2 = Revision(draft=False, content="Version 2", script=wf2)
         Session.add(r2_2)
+        Session.commit()
 
         r2_3 = Revision(draft=False, content="Version 3", script=wf2)
         Session.add(r2_3)
 
+        Session.commit()
         r2_3draft = Revision(version='3.cde', draft=True,
                              content="Version 3 Draft", script=wf2)
         Session.add(r2_3draft)
+        Session.commit()
 
         r2_4 = Revision(draft=False, content="Version 4 Final",
                         script=wf2)
         Session.add(r2_4)
-
-        Session.commit()
-
-        log1 = Log(status=1, exit_code=-99)
-        Session.add(log1)
-
-        log2 = Log(status=2, exit_code=0)
-
-        Session.add(log2)
-        # log2.tags.append(Tag(name="tag1"))
-        # log2.tags.append(Tag(name="tag2"))
-
-        log3 = Log(status=2, exit_code=-1)
-
-        Session.add(log3)
-        step1 = Step(target="*", timeout=90, script="script")
-        # log3.steps.append(step1)
-
-        step2 = Step(target="nodeX nodeY", timeout=90, script="script")
-        # log3.steps.append(step2)
-
         Session.commit()
 
         job1 = Job(name="trigger1", enabled=True, source=1,
@@ -236,6 +220,25 @@ class BaseRESTTestCase(BaseTestCase):
         job2 = Job(name="trigger2", enabled=True, source=2, arguments="JOB",
                    target_id=3, owner_id=2)
         Session.add(job2)
+        Session.commit()
+
+        node1 = Node(name='node1', approved=True, meta='{"ID": "NODE1"}',
+                     org_id=1,
+                     joined_at=datetime.strptime('2014-01-01', '%Y-%m-%d'),
+                     approved_at=datetime.strptime('2014-01-01', '%Y-%m-%d'))
+        Session.add(node1)
+
+        node2 = Node(name='node2', approved=False, meta='{"ID": "NODE2"}',
+                     joined_at=datetime.strptime('2014-04-01', '%Y-%m-%d'),
+                     org_id=1)
+        Session.add(node2)
+
+        node3 = Node(name='node3', approved=True, meta='{"ID": "NODE3"}',
+                     org_id=1,
+                     joined_at=datetime.strptime('2014-09-01', '%Y-%m-%d'),
+                     approved_at=datetime.strptime('2014-11-01', '%Y-%m-%d'))
+        Session.add(node3)
+
         Session.commit()
 
     def assertRedisInc(self, value):

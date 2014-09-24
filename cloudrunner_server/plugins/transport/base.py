@@ -55,6 +55,7 @@ class Node(object):
     def __init__(self, name):
         self.refreshed = time.time()
         self.name = name
+        self.usage = {}
 
     @property
     def last_seen(self):
@@ -104,6 +105,9 @@ class Tenant(object):
 
     def refresh(self, adjust=0):
         self.refreshed = time.time() + adjust
+
+    def update(self, node, usage):
+        self.nodes[self.nodes.index(node)].usage = usage
 
     def active_nodes(self):
         return [node for node in self.nodes if node.refreshed > self.refreshed]

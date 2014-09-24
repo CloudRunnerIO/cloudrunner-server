@@ -12,8 +12,9 @@
 #  * without the express permission of CloudRunner.io
 #  *******************************************************/
 
-from sqlalchemy import (Column, Integer, String, DateTime, Boolean,
+from sqlalchemy import (Column, Integer, String, DateTime, Boolean, Text,
                         ForeignKey, UniqueConstraint)
+from sqlalchemy.sql.expression import func
 from sqlalchemy.orm import relationship
 from .base import TableBase
 from .users import Org
@@ -26,12 +27,10 @@ class Node(TableBase):
     )
 
     id = Column(Integer, primary_key=True)
-    name = Column(String(255), unique=True)
-    joined_at = Column(DateTime)
+    name = Column(String(255))
+    joined_at = Column(DateTime, default=func.now())
     approved_at = Column(DateTime)
-    key_file = Column(String(512), unique=True)
-    cert_file = Column(String(512), unique=True)
-    csr_subject = Column(String(512))
+    meta = Column(Text)
     approved = Column(Boolean)
 
     org_id = Column(Integer, ForeignKey(Org.id))

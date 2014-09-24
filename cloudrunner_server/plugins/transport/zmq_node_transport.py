@@ -16,10 +16,13 @@ import httplib
 import logging
 import M2Crypto as m
 import os
+import platform
+import psutil
 import random
 import socket
 import stat
 from string import ascii_letters
+from socket import gethostname
 from threading import Thread
 from threading import Event
 import time
@@ -28,10 +31,12 @@ from zmq.eventloop import ioloop
 import uuid
 
 from cloudrunner import LIB_DIR, CONFIG_NODE_LOCATION
+from cloudrunner.version import VERSION
 from cloudrunner.core.message import *  # noqa
 from cloudrunner.util.aes_crypto import Crypter
 from cloudrunner.util.config import Config
 from cloudrunner.util.decorators import catch_ex
+from cloudrunner.util.net import get_local_ips
 from cloudrunner.util.shell import colors
 from cloudrunner.util.tlszmq import TLSZmqClientSocket
 from cloudrunner.plugins.transport.base import TransportBackend
@@ -88,6 +93,66 @@ class NodeTransport(TransportBackend):
                     self.properties.append(('Organization', org))
             except:
                 pass
+
+    def meta(self):
+        if not hasattr(self, '_meta'):
+            meta = {}
+            try:
+                meta['ID'] = self.node_id
+                meta['SERVER_NAME'] = socket.gethostname()
+                meta['SERVER_IP'] = socket.gethostname()
+
+                meta['HOST'] = gethostname().lower()
+                meta['OS'] = platform.system()
+                meta['ARCH'] = platform.machine()
+                try:
+                    # only OS, not version
+                    meta['DIST'] = platform.linux_distribution()[0]
+                    if not meta['DIST']:
+                        # Try a hack for ArchLinux
+                        meta['DIST'] = platform.linux_distribution(
+                            # only OS, not version
+                            supported_dists=('arch'))[0]
+                except:
+                    # Python < 2.6
+                    meta['DIST'] = platform.dist()[0]  # only OS, not version
+                meta['RELEASE'] = platform.release()
+                meta['IPS'] = []
+                try:
+                    meta['IPS'] = get_local_ips()
+                except:
+                    pass
+                if not meta['IPS']:
+                    LOG.warn("No IPs were detected")
+
+                mem = psutil.virtual_memory()
+                meta['TOTAL_MEM'] = mem.total / (1024 * 1024)
+                meta['AVAIL_MEM'] = mem.available / (1024 * 1024)
+                meta['CPU_CORES'] = psutil.cpu_count()
+                meta['CPUS'] = psutil.cpu_count(logical=False)
+
+                meta['CRN_VER'] = VERSION
+                self._meta = meta
+            except:
+                self._meta = None
+
+        return self._meta
+
+    def usage(self):
+        usage = {}
+        try:
+            mem = psutil.virtual_memory()
+            usage['TOTAL_MEM'] = mem.total / (1024 * 1024)
+            usage['AVAIL_MEM'] = mem.available / (1024 * 1024)
+            usage['FREE_MEM'] = mem.free / (1024 * 1024)
+            usage['CPU_USAGE'] = psutil.cpu_percent()
+            cpu_perc = psutil.cpu_times_percent()
+            usage['CPU_TIMES_IDLE'] = cpu_perc.idle
+            usage['CPU_TIMES_SYS'] = cpu_perc.system
+            usage['CPU_TIMES_USER'] = cpu_perc.user
+        except:
+            pass
+        return usage
 
     def loop(self):
         try:
@@ -232,7 +297,8 @@ class NodeTransport(TransportBackend):
         poller.register(ssl_proxy, zmq.POLLIN)
         # Sindicate requests from two endpoints and forward to 'requests'
         time.sleep(0.5)
-        ssl_proxy.send_multipart(['SSL_PROXY', HBR(self.node_id)._])
+        ssl_proxy.send_multipart(['SSL_PROXY',
+                                  HBR(self.node_id, usage=self.usage())._])
         while not self.stopped.is_set():
             try:
                 ready = dict(poller.poll(1000))
@@ -247,11 +313,13 @@ class NodeTransport(TransportBackend):
 
                     if isinstance(message, Welcome) or \
                             isinstance(message, Reload):
-                        ssl_proxy.send_multipart(['SSL_PROXY', Ident()._])
+                        ssl_proxy.send_multipart(
+                            ['SSL_PROXY', Ident(meta=self.meta())._])
                     elif isinstance(message, HB):
                         # Heartbeat
-                        ssl_proxy.send_multipart(['SSL_PROXY',
-                                                  HBR(self.node_id)._])
+                        ssl_proxy.send_multipart(
+                            ['SSL_PROXY', HBR(self.node_id,
+                                              usage=self.usage())._])
                     elif isinstance(message, Crypto):
                         # decrypt
                         try:
@@ -284,14 +352,15 @@ class NodeTransport(TransportBackend):
                             except Exception, ex:
                                 LOGC.error(
                                     "Cannot decrypt frames %r" % ex)
-                        if isinstance(msg, Register):
+                        if isinstance(msg, Control):
                             ssl_proxy.send_multipart(["REGISTER", msg._])
                     elif src == "REGISTER":
                         msg = M.build(packed)
-                        if isinstance(msg, Control):
+                        if isinstance(msg, Register):
                             ssl_proxy.send_multipart(['SSL_PROXY', msg._])
                         elif isinstance(msg, Reload):
-                            ssl_proxy.send_multipart(['SSL_PROXY', Ident()._])
+                            ssl_proxy.send_multipart(
+                                ['SSL_PROXY', Ident(meta=self.meta())._])
                     else:
                         # Session -> SSL proxy
                         ssl_proxy.send_multipart(['SSL_PROXY', packed])
@@ -344,11 +413,10 @@ class NodeTransport(TransportBackend):
         def _next(reply):
             if not reply:
                 # First call? Send CSR
-                return Control('REGISTER', node_id, csreq_data)
+                return Register(node_id, csreq_data, meta=self.meta())
 
-            msg = Register.build(reply)
+            msg = Control.build(reply)
             if not msg:
-                print "FALSE", reply
                 return -1
 
             if msg.status == "APPROVED":
@@ -414,12 +482,12 @@ class NodeTransport(TransportBackend):
             elif msg.status == "REJECTED":
                 if msg.message == 'SEND_CSR':
                     # resend
-                    return Control('REGISTER', node_id, csreq_data)
+                    return Register(node_id, csreq_data, meta=self.meta())
                 if msg.message == 'PENDING':
                     LOGC.info("Master says: Request queued for approval.")
                     if time.time() < start_reg + int(self.wait_for_approval):
                         time.sleep(10)  # wait 10 sec before next try
-                        return Control('REGISTER', node_id, csreq_data)
+                        return Register(node_id, csreq_data, meta=self.meta())
                     else:
                         return -1
                 elif msg.message == 'ERR_CRT_EXISTS':

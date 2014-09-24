@@ -43,7 +43,6 @@ class Orgs(object):
         name = kwargs['org']
         org = Org(name=name, active=True)
         request.db.add(org)
-        request.db.commit()
 
     @orgs.when(method='PATCH', template='json')
     @check_policy('is_super_admin')
@@ -58,7 +57,6 @@ class Orgs(object):
         if org:
             org.active = status
             request.db.add(org)
-            request.db.commit()
 
     @orgs.when(method='DELETE', template='json')
     @check_policy('is_super_admin')
@@ -73,4 +71,3 @@ class Orgs(object):
 
         if org:
             request.db.delete(org)
-            request.db.commit()
