@@ -148,7 +148,10 @@ fi
 %defattr(-,root,root,-)
 %doc README.rst
 
+%{_initrddir}/cloudrunner-all
 %{_initrddir}/cloudrunner-dsp
+%{_initrddir}/cloudrunner-api
+%{_initrddir}/cloudrunner-trigger
 %config(noreplace) %{_sysconfdir}/cloudrunner/cloudrunner.conf
 %config(noreplace) %{_sysconfdir}/cloudrunner/api.config.py
 
@@ -173,6 +176,8 @@ fi
 %exclude %{python_sitelib}/cloudrunner_server/**/*.py
 %exclude %{python_sitelib}/cloudrunner_server/**/**/*.py
 %exclude %{python_sitelib}/cloudrunner_server/**/**/**/*.py
+%exclude %{_sysconfdir}/cloudrunner/api.config.pyc
+%exclude %{_sysconfdir}/cloudrunner/api.config.pyo
 
 %{python_sitelib}/cloudrunner_server/db
 

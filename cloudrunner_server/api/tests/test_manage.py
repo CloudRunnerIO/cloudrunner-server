@@ -96,7 +96,7 @@ class TestManage(base.BaseRESTTestCase):
         resp_json = resp.json
 
         self.assertEqual(
-            resp_json,  {"error": {"msg": "User not found"}}, resp.body)
+            resp_json, {"error": {"msg": "User not found"}}, resp.body)
 
         self.assertRedisInc(None)
         self.assertRedisPub(None, None)
@@ -125,7 +125,7 @@ class TestManage(base.BaseRESTTestCase):
         self.assertEqual(resp.status_int, 200, resp.status_int)
         resp_json = resp.json
 
-        self.assertEqual(resp_json,  {"success": {"status": "ok"}}, resp.body)
+        self.assertEqual(resp_json, {"success": {"status": "ok"}}, resp.body)
 
         self.assertRedisInc('users:modify')
         self.assertRedisPub('users:modify', 2)
@@ -276,7 +276,7 @@ class TestManage(base.BaseRESTTestCase):
                              headers={'Cr-Token': 'PREDEFINED_TOKEN',
                                       'Cr-User': 'testuser'}
                              ).json['roles']), 1)
-        self.assertEqual(resp_json,  {"success": {"status": "ok"}},
+        self.assertEqual(resp_json, {"success": {"status": "ok"}},
                          resp.body)
 
     def test_list_orgs_no_perm(self):
@@ -290,7 +290,7 @@ class SuperAdminTest(base.BaseRESTTestCase):
 
     def setUp(self):
         super(SuperAdminTest, self).setUp()
-        self.redis.smembers.return_value = {'is_super_admin'}
+        self.redis.smembers.return_value = set(['is_super_admin'])
 
     def test_list_orgs(self):
         resp = self.app.get('/rest/manage/orgs/',
