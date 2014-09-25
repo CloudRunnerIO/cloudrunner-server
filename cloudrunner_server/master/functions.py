@@ -978,7 +978,8 @@ class UserController(object):
     def list_orgs(self, **kwargs):
         orgs = self.db.query(Org).all()
         yield DATA, [(o.name,
-                      'Active' if o.active else 'Inactive') for o in orgs]
+                      'Active' if o.active else 'Inactive',
+                      o.uid) for o in orgs]
 
     @yield_wrap
     def permissions(self, username, **kwargs):
