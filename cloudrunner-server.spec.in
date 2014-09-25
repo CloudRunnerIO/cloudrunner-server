@@ -91,9 +91,6 @@ install -m755 etc/rc.d/init.d/centos/cloudrunner-trigger $RPM_BUILD_ROOT/%{_init
 install -m755 etc/rc.d/init.d/centos/cloudrunner-api $RPM_BUILD_ROOT/%{_initrddir}
 install -m755 etc/rc.d/init.d/centos/cloudrunner-all $RPM_BUILD_ROOT/%{_initrddir}
 
-install -m755 cloudrunner_server/plugins/bin/plugins_openstack_node.py $RPM_BUILD_ROOT/%{_bindir}/cloudrunner-plugins-openstack-node
-install -m755 cloudrunner_server/plugins/bin/plugins_node.py $RPM_BUILD_ROOT/%{_bindir}/cloudrunner-plugins-node
-
 sed -i -e 's,{lib_dir},%{python_sitelib},g'                     $RPM_BUILD_ROOT/%{_sysconfdir}/cloudrunner/cloudrunner.conf
 sed -i -e 's,{ca_dir},%{_sharedstatedir}/cloudrunner/CA,g'      $RPM_BUILD_ROOT/%{_sysconfdir}/cloudrunner/cloudrunner.conf
 sed -i -e 's,{var_dir},%{_sharedstatedir}/cloudrunner,g'        $RPM_BUILD_ROOT/%{_sysconfdir}/cloudrunner/cloudrunner.conf
