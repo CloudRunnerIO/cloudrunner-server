@@ -20,5 +20,5 @@ class NodeVerifier(object):
     __metaclass__ = abc.ABCMeta
 
     @abc.abstractmethod
-    def verify(self, node, request, **kwargs):
+    def verify(self, node, subject, **kwargs):
         pass

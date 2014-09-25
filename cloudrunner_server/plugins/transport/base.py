@@ -45,10 +45,6 @@ class ServerTransportBackend(TransportBackend):
     def subscribe_fanout(self, endpoint, sub_pattern=None, *args, **kwargs):
         pass
 
-    @abc.abstractmethod
-    def verify_node_request(self, node, request):
-        pass
-
 
 class Node(object):
 

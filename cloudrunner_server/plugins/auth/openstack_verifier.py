@@ -43,10 +43,10 @@ class OpenStackVerifier(NodeVerifier):
         token = keystone.auth_token
         return token
 
-    def verify(self, node, request, **kwargs):
+    def verify(self, node, subject, **kwargs):
         try:
-            CN = request.get_subject().CN
-            OU = request.get_subject().OU
+            CN = subject.CN
+            OU = subject.OU
 
             keystone = k.Client(token=self._get_token(),
                                 auth_url=self.ADMIN_AUTH_URL,

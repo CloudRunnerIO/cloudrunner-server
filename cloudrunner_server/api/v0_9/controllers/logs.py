@@ -12,6 +12,7 @@
 #  * without the express permission of CloudRunner.io
 #  *******************************************************/
 
+import json
 import logging
 from pecan import expose, request
 from pecan.core import override_template
@@ -109,7 +110,6 @@ class Logs(HookController):
             task = Task.visible(request).filter(
                 Task.uuid == log_uuid).one()
             data = dict(target=task.target,
-                        selector=task.target,
                         lang=task.lang,
                         created_at=task.created_at,
                         exit_code=task.exit_code,
@@ -130,7 +130,10 @@ class Logs(HookController):
                                    task.owner.username)
                                   )
             if task.owner_id == request.user.id:
-                data['env'] = task.env_in
+                try:
+                    data['env'] = json.loads(task.env_in)
+                except:
+                    data['env'] = {}
             return O.task(**data)
         except exc.NoResultFound, ex:
             LOG.error(ex)

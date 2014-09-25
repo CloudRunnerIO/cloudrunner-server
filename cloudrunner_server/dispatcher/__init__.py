@@ -41,9 +41,7 @@ class TaskQueue(object):
             task.start()
 
     def __str__(self):
-        return "[%s] (%s) /%s /%s" % (self.session_id, self.main,
-                                      self.peer, self.owner)
+        return "%s (%s)" % (self.task_ids, self.owner)
 
     def __repr__(self):
-        return "[%s] (%s) /%s /%s" % (self.session_id, self.main,
-                                      self.peer, self.owner)
+        return "%s (%s)" % (self.task_ids, self.owner)

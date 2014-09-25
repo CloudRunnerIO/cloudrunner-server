@@ -23,8 +23,22 @@ from cloudrunner.core.exceptions import ConnectionError
 from cloudrunner.core.message import (ADMIN_TOWER, M, Control)
 from cloudrunner_server.util.db import checkout_listener
 from cloudrunner_server.api.model import metadata, Node, Org
+from cloudrunner_server.master.functions import (CertController,
+                                                 CertificateExists)
+from cloudrunner_server.plugins.auth.base import NodeVerifier
 
 LOG = logging.getLogger('Control Tower')
+
+
+class OrgVerifier(NodeVerifier):
+
+    def __init__(self, config):
+        pass
+
+    def verify(self, node, subject, **kwargs):
+        org = self.db.query(Org).filter(Org.uid == subject.OU).first()
+        if org:
+            return org.name
 
 
 class Admin(Thread):
@@ -38,6 +52,7 @@ class Admin(Thread):
         self.config = config
         self.backend = backend
         self.db_path = config.db
+        self.ccont = CertController(config)
 
     def set_context_from_config(self, recreate=None, **configuration):
         session = scoped_session(sessionmaker())
@@ -50,6 +65,7 @@ class Admin(Thread):
             # For tests: re-create tables
             metadata.create_all(engine)
         self.db = session
+        OrgVerifier.db = session
 
     def run(self):
         # Endpoint to receive commands from nodes
@@ -95,23 +111,56 @@ class Admin(Thread):
         if req.control == 'REGISTER':
             try:
                 node = Node(name=req.node, meta=json.dumps(req.meta))
-                self.db.add(node)
-                self.db.commit()
-                approved, approval_msg, org = self.backend.verify_node_request(
-                    req.node,
-                    req.data)
-                node.approved = approved
-                if approved:
-                    node.approved_at = datetime.now()
+                try:
+                    valid, msg, org = self.ccont.validate_request(req.node,
+                                                                  req.data)
+                    if not valid:
+                        LOG.info("Request validation result: %s" % msg)
+                except CertificateExists, cex:
+                    LOG.error("Certificate exists for node %s[%s]" % (
+                        req.node, cex.org))
+                    valid, cert_or_msg = self.ccont.build_cert_chain(
+                        req.node, cex.org, req.data)
+                    if valid:
+                        node = self.db.query(Node).join(Org).filter(
+                            Node.name == req.node, Org.name == cex.org).one()
+                        if node.approved:
+                            return Control(req.node, 'APPROVED', cert_or_msg)
+                        node.approved = True
+                        node.approved_at = datetime.now()
+                        self.db.commit()
+                        return Control(req.node, 'APPROVED', cert_or_msg)
+                    else:
+                        return Control(req.node, 'REJECTED', cert_or_msg)
+
+                if not valid:
+                    return Control(req.node, 'REJECTED', "INV_CSR")
                 if org:
                     org_ = self.db.query(Org).filter(Org.name == org).one()
                     node.org = org_
+
+                if not self.ccont.can_approve(req.node):
+                    node.approved = False
+                    self.db.add(node)
+                    self.db.commit()
+                    return Control(req.node, 'REJECTED', 'PENDING')
+
+                msgs, cert_file = self.ccont.sign_node(req.node, ca=org)
+                approved = bool(cert_file)
+                node.approved = approved
+                if approved:
+                    node.approved_at = datetime.now()
                 self.db.add(node)
                 self.db.commit()
                 if approved:
-                    return Control(req.node, 'APPROVED', approval_msg)
+                    success, cert_or_msg = self.ccont.build_cert_chain(
+                        req.node, org, req.data)
+                    if success:
+                        return Control(req.node, 'APPROVED', cert_or_msg)
+                    else:
+                        return Control(req.node, 'REJECTED', cert_or_msg)
                 else:
-                    return Control(req.node, 'REJECTED', approval_msg)
+                    return Control(req.node, 'REJECTED', "APPR_FAIL")
             except Exception, ex:
                 self.db.rollback()
                 LOG.error(ex)

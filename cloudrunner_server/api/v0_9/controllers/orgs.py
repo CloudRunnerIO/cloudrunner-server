@@ -61,7 +61,7 @@ class Orgs(object):
     @orgs.when(method='DELETE', template='json')
     @check_policy('is_super_admin')
     @orgs.wrap_delete()
-    def delete(self, name=None, **kwargs):
+    def remove(self, name=None, **kwargs):
         name = name or kwargs['name']
         org = request.db.query(Org).filter(
             Org.name == name, Org.active != True).first()  # noqa

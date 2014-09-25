@@ -76,10 +76,10 @@ whoami
                 self.lib_plugins = []
                 self.job_plugins = []
 
-        session = JobSession(Ctx(),
-                             'user', SESSION, payload,
-                             remote_user_map, stop_event,
-                             PluginCtx())
+        session = JobSession(
+            Ctx(), 'user', SESSION,
+            {'target': '*', 'body': "\ntest_1\nexport NEXT_NODE='host2'\n\n"},
+            remote_user_map, Mock(), Mock(), None)
 
         ret_data1 = [
             ['PIPE', 'JOB_ID', 'admin', '["STDOUT", "BLA"]'],
@@ -94,66 +94,20 @@ whoami
                             'env': {'NEXT_NODE': "host9"}}]
             ]
         ]
-        ret_data2 = [
-            ['PIPE', 'JOB_ID', 'admin', '["STDOUT", "RUN 2 OUT"]'],
-            [
-                'JOB_ID', [{'node': "NODE2",
-                            'remote_user': 'admin',
-                            'ret_code': 2,
-                            'env': {'next_step': 'linux'}},
-                           {'node': "NODE4",
-                            'remote_user': 'admin',
-                            'ret_code': 0,
-                            'env': {'next_step': 'windows'}}]
-            ]
-        ]
-        ret_data3 = [
-            ['PIPE', 'JOB_ID', 'admin', '["STDOUT", "RUN 3 OUT"]'],
-            [
-                'JOB_ID', [{'node': "NODE3",
-                            'remote_user': 'admin',
-                            'ret_code': 2,
-                            'env': {'next_step': 'linux'}},
-                           {'node': "NODE4",
-                            'remote_user': 'admin',
-                            'ret_code': 0,
-                            'env': {'next_step': 'windows'}}]
-            ]
-        ]
 
         with nested(
             patch.multiple(session,
-                           exec_section=Mock(side_effect=[iter(ret_data1),
-                                                          iter(ret_data2),
-                                                          iter(ret_data3),
-                                                          ]))):
+                           exec_section=Mock(side_effect=[iter(ret_data1)]))):
             session.run()
 
             expected = [
                 call(
                     '*',
-                    {'libs': [], 'remote_user_map': remote_user_map,
-                     'env': {'next_step': ['linux', 'windows'],
-                             'NEXT_NODE': ['host2', 'host9']},
+                    {'remote_user_map': remote_user_map,
+                     'attachments': [],
+                     'env': {'NEXT_NODE': ['host2', 'host9']},
                      'script': "\ntest_1\nexport NEXT_NODE='host2'\n\n"},
-                    timeout=None),
-                call(
-                    'host2 host9',
-                    {'libs': [],
-                        'remote_user_map': remote_user_map,
-                        'env': {'next_step': ['linux', 'windows'],
-                                'NEXT_NODE': ['host2', 'host9']},
-                     'script':
-                     "\nhostname\n\nexport next_step='linux'\n\n"},
-                    timeout=None),
-                call(
-                    'os=linux os=windows', {
-                        'libs': [], 'remote_user_map': remote_user_map,
-                        'env': {'next_step': ['linux', 'windows'],
-                                'NEXT_NODE': ['host2', 'host9']},
-                        'script': '\nwhoami\n'},
                     timeout=None)]
 
             self.assertEqual(
-                session.exec_section.call_args_list, expected,
-                session.exec_section.call_args_list)
+                session.exec_section.call_args_list, expected)

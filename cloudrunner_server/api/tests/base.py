@@ -239,6 +239,11 @@ class BaseRESTTestCase(BaseTestCase):
                      approved_at=datetime.strptime('2014-11-01', '%Y-%m-%d'))
         Session.add(node3)
 
+        task = Task(uuid='1111111111', owner=user, status=2,
+                    exit_code=1, target='nodes', full_script='script',
+                    env_in='{"key": "value"}', timeout=60, lang='python',
+                    created_at=datetime.strptime('2014-01-01', '%Y-%m-%d'))
+        Session.add(task)
         Session.commit()
 
     def assertRedisInc(self, value):

@@ -39,6 +39,7 @@ else:
 from cloudrunner.core.exceptions import ConnectionError
 from cloudrunner.core.message import (M, Dispatch, GetNodes, Nodes,
                                       Error, Queued)
+from cloudrunner.plugins.args_provider import ManagedPlugin
 from cloudrunner.util.daemon import Daemon
 from cloudrunner.util.loader import load_plugins, local_plugin_loader
 from cloudrunner.util.shell import colors
@@ -47,8 +48,6 @@ from cloudrunner_server.dispatcher import (TaskQueue)
 from cloudrunner_server.dispatcher.admin import Admin
 from cloudrunner_server.dispatcher.manager import SessionManager
 from cloudrunner_server.plugins import PLUGIN_BASES
-from cloudrunner_server.plugins.args_provider import (ArgsProvider,
-                                                      ManagedPlugin)
 from cloudrunner_server.plugins.logs.base import LoggerPluginBase
 
 LOG = logging.getLogger("Dispatcher")
@@ -116,21 +115,6 @@ class Dispatcher(Daemon):
         self.plugin_register = {}
         for plugin_classes in self.loaded_plugins.values():
             for plugin in plugin_classes:
-                if issubclass(plugin, ArgsProvider):
-                    try:
-                        _args = plugin().append_args()
-                        if not isinstance(_args, list):
-                            _args = [_args]
-
-                        for _d in _args:
-                            arg = _d.pop('arg')
-                            args_plugins.add_argument(arg, **_d)
-                            self.plugin_register.setdefault(arg,
-                                                            []).append(plugin)
-                    except Exception, ex:
-                        LOG.exception(ex)
-                        continue
-
                 if issubclass(plugin, ManagedPlugin):
                     try:
                         plugin.start(CONFIG)

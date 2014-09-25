@@ -13,9 +13,11 @@
 #  *******************************************************/
 
 
+from datetime import datetime
 import fcntl
 import M2Crypto as m
 import json
+import logging
 import os
 import random
 import re
@@ -27,6 +29,7 @@ import time
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import scoped_session, sessionmaker
 
+from cloudrunner.core.message import DEFAULT_ORG, TOKEN_SEPARATOR
 from cloudrunner_server.plugins.auth.base import NodeVerifier
 from cloudrunner_server.api.model import *  # noqa
 from cloudrunner_server.util.db import checkout_listener
@@ -47,23 +50,51 @@ except:
     C = 'US'
 
 VALID_NAME = re.compile('^[a-zA-Z0-9\-_\.]+$')
+LOG = logging.getLogger("Functions")
+
+
+class DbMixin(object):
+
+    def set_context_from_config(self, config, recreate=None):
+        session = scoped_session(sessionmaker())
+        self.db_path = config.db
+        engine = create_engine(self.db_path)
+        if 'mysql+pymysql://' in self.db_path:
+            event.listen(engine, 'checkout', checkout_listener)
+        session.bind = engine
+        metadata.bind = session.bind
+        if recreate:
+            # For tests: re-create tables
+            metadata.create_all(engine)
+        self.db = session
 
 
 def yield_wrap(func):
     def consume(*args, **kwargs):
         it = func(*args, **kwargs)
+        ret = []
         if it:
-            return [x for x in it]
+            for x in it:
+                ret.append(x)
+            return ret
         return []
     return consume
 
 
-class CertController(object):
+class CertificateExists(Exception):
+
+    def __init__(self, org):
+        self.message = "Certificate exists in Org(%s)" % org
+        self.org = org
+
+
+class CertController(DbMixin):
 
     def __init__(self, config):
         self.config = config
         self.ca_path = os.path.dirname(
             os.path.abspath(self.config.security.ca))
+        self.set_context_from_config(config)
 
     def pass_cb(self, *args):
         return self.config.security.cert_pass
@@ -164,24 +195,6 @@ class CertController(object):
                     print ee
                     pass
 
-        for (_dir, _, nodes) in os.walk(os.path.join(self.ca_path, 'issued')):
-            for node in nodes:
-                try:
-                    if not node.endswith('.crt'):
-                        continue
-                    node = node.rsplit('.crt', 1)[0]
-                    org, _, node = node.partition('.')
-                    if not node:
-                        node = org
-                        org = ''
-                    if self.config.security.use_org:
-                        yield DATA, "%-40s %s" % (node, org)
-                    else:
-                        yield DATA, node
-                    total_cnt += 1
-                except Exception, ee:
-                    print ee
-                    pass
         if not total_cnt:
             yield DATA, '--None--'
 
@@ -218,158 +231,140 @@ class CertController(object):
         return pending_nodes
 
     @yield_wrap
-    def sign(self, node=None, **kwargs):
-        if node:
-            for n in node:
-                messages, _ = self.sign_node(n, **kwargs)
-                for line in messages:
-                    yield line
+    def sign(self, nodes=None, **kwargs):
+        if not isinstance(nodes, (list, tuple)):
+            nodes = [nodes]
+
+        for node in nodes:
+            messages, _ = self.sign_node(node, **kwargs)
+            for line in messages:
+                yield line
 
     def sign_node(self, node, **kwargs):
         is_signed = False
         messages = []
 
-        for (_dir, _, reqs) in os.walk(os.path.join(self.ca_path, 'reqs')):
-            for req in reqs:
-                csr = None
-                cert = None
-                ca_key = None
-                ca_priv_key = None
-                now = None
-                nowPlusYear = None
-                try:
-                    csr = m.X509.load_request(os.path.join(_dir, req))
-                    if node == csr.get_subject().CN:
-                        ca = kwargs.get('ca', '')
-                        if self.config.security.use_org and not ca:
-                            if kwargs.get('auto'):
-                                # Load from CSR
-                                ca = csr.get_subject().OU
-                                if not ca:
-                                    messages.append((
-                                        ERR,
-                                        "OU is not found in CSR subject"))
-                                    return messages, None
-                            else:
-                                for verifier in NodeVerifier.__subclasses__():
-                                    ca = verifier(
-                                        self.config).verify(node, csr)
-                                    if ca:
-                                        break
-                                else:
-                                    messages.append((
-                                        ERR, "CA is mandatory for "
-                                        "signing a node"))
-                                    return messages, None
-                        if not self.config.security.use_org and ca:
-                            messages.append((
-                                ERR, "Although CA value is passed, "
-                                "it will be skipped for No-org setup."))
+        ca = kwargs.get('ca', None)
 
-                        # Validate names
-                        if not VALID_NAME.match(node):
-                            messages.append((ERR, "Invalid node name"))
-                            return messages, None
-                        if self.config.security.use_org and \
-                                not VALID_NAME.match(ca):
-                            messages.append((ERR, "Invalid org name"))
-                            return messages, None
+        if not self.config.security.use_org:
+            if ca:
+                messages.append((
+                    ERR, "Although CA value is passed, "
+                    "it will be skipped for No-org setup."))
+            else:
+                ca = DEFAULT_ORG
+        elif not ca:
+                messages.append((
+                    ERR, "CA is mandatory for "
+                    "signing a node"))
+                return messages, None
 
-                        if not csr.get_subject().OU:
-                            messages.append((ERR, "subject.OU is empty"))
-                            return messages, None
+        csr_file_name = os.path.join(self.ca_path, 'reqs',
+                                     '.'.join([ca, node, 'csr']))
+        if not os.path.exists(csr_file_name):
+            messages.append((ERR, "CSR request not found"))
+            return messages, None
 
-                        messages.append((TAG, "Signing %s" % node))
-                        if ca:
-                            ca_cert_file = os.path.join(self.ca_path, 'org',
-                                                        ca + '.ca.crt')
-                            if not os.path.exists(ca_cert_file):
-                                messages.append((
-                                    ERR, "No CA certificate found "
-                                    "for %s" % ca))
-                                return messages, None
-                            try:
-                                ca_priv_key = m.RSA.load_key(
-                                    os.path.join(self.ca_path, 'org',
-                                                 ca + '.key'),
-                                    self.pass_cb)
-                            except Exception, ca_ex:
-                                messages.append((
-                                    ERR,
-                                    "Cannot load Sub-CA cert: %s" % ca_ex))
-                                return messages, None
+        csr = None
+        cert = None
+        ca_key = None
+        ca_priv_key = None
+        now = None
+        nowPlusYear = None
+        try:
+            csr = m.X509.load_request(csr_file_name)
+            messages.append((TAG, "Signing %s" % node))
+            ca_cert_file = os.path.join(self.ca_path, 'org',
+                                        ca + '.ca.crt')
+            if not os.path.exists(ca_cert_file):
+                messages.append((
+                    ERR, "No CA certificate found "
+                    "for %s" % ca))
+                return messages, None
+            try:
+                ca_priv_key = m.RSA.load_key(
+                    os.path.join(self.ca_path, 'org',
+                                 ca + '.key'),
+                    self.pass_cb)
+            except Exception, ca_ex:
+                messages.append((
+                    ERR,
+                    "Cannot load Sub-CA cert: %s" % ca_ex))
+                return messages, None
 
-                        else:
-                            # Use Master CA
-                            ca_cert_file = self.config.security.ca
-                            ca_priv_key = m.RSA.load_key(
-                                os.path.join(self.ca_path, 'ca.key'),
-                                self.pass_cb)
+            ca_crt = m.X509.load_cert(ca_cert_file)
 
-                        ca_crt = m.X509.load_cert(ca_cert_file)
+            ca_key = m.EVP.PKey()
+            ca_key.assign_rsa(ca_priv_key)
+            ca_crt.set_pubkey(ca_key)
 
-                        ca_key = m.EVP.PKey()
-                        ca_key.assign_rsa(ca_priv_key)
-                        ca_crt.set_pubkey(ca_key)
+            cert = m.X509.X509()
+            cert.set_version(2)
+            ser_no = self.serial_no_inc()
+            messages.append((TAG, "Setting serial to %d" % ser_no))
+            cert.set_serial_number(ser_no)
+            csr_subj = csr.get_subject()
+            cert.get_subject().C = csr_subj.C
+            cert.get_subject().CN = csr_subj.CN
+            cert.get_subject().O = ca
+            cert.set_issuer(ca_crt.get_subject())
+            t = long(time.time()) + time.timezone
+            now = m.ASN1.ASN1_UTCTIME()
+            now.set_time(t)
+            nowPlusYear = m.ASN1.ASN1_UTCTIME()
+            nowPlusYear.set_time(t + 60 * 60 * 24 * 365 * YEARS)
+            cert.set_not_before(now)
+            cert.set_not_after(nowPlusYear)
+            cert.set_pubkey(csr.get_pubkey())
 
-                        cert = m.X509.X509()
-                        cert.set_version(2)
-                        ser_no = self.serial_no_inc()
-                        messages.append((TAG, "Setting serial to %d" % ser_no))
-                        cert.set_serial_number(ser_no)
-                        csr_subj = csr.get_subject()
-                        cert.get_subject().C = csr_subj.C
-                        cert.get_subject().CN = csr_subj.CN
-                        if ca:
-                            cert.get_subject().O = ca
-                        cert.set_issuer(ca_crt.get_subject())
-                        t = long(time.time()) + time.timezone
-                        now = m.ASN1.ASN1_UTCTIME()
-                        now.set_time(t)
-                        nowPlusYear = m.ASN1.ASN1_UTCTIME()
-                        nowPlusYear.set_time(t + 60 * 60 * 24 * 365 * YEARS)
-                        cert.set_not_before(now)
-                        cert.set_not_after(nowPlusYear)
-                        cert.set_pubkey(csr.get_pubkey())
+            res = cert.sign(ca_key, 'sha1')
+            assert cert.verify(ca_crt.get_pubkey())
 
-                        res = cert.sign(ca_key, 'sha1')
-                        assert cert.verify(ca_crt.get_pubkey())
+            if res < 0:
+                messages.append((ERR, "Sign failed"))
+            else:
+                if not os.path.exists(os.path.join(self.ca_path,
+                                                   'issued')):
+                    os.makedirs(os.path.join(self.ca_path,
+                                             'issued'))
+                cert_file_name = os.path.join(
+                    self.ca_path, 'issued',
+                    '.'.join([ca, node, 'crt']))
+                cert.save_pem(cert_file_name)
+                os.chmod(
+                    cert_file_name, stat.S_IREAD | stat.S_IWRITE)
+                cert.save_pem(cert_file_name)
+                is_signed = True
+                os.unlink(csr_file_name)
+                messages.append((DATA, "%s signed" % node))
+                messages.append((DATA,
+                                 "Issuer %s" % cert.get_issuer()))
+                messages.append((
+                    DATA, "Subject %s" % cert.get_subject()))
 
-                        if res < 0:
-                            messages.append((ERR, "Sign failed"))
-                        else:
-                            if not os.path.exists(os.path.join(self.ca_path,
-                                                               'issued')):
-                                os.makedirs(os.path.join(self.ca_path,
-                                                         'issued'))
-                            cert_file_name = os.path.join(
-                                self.ca_path, 'issued',
-                                '.'.join([csr.get_subject().OU, node, 'crt']))
-                            cert.save_pem(cert_file_name)
-                            os.chmod(
-                                cert_file_name, stat.S_IREAD | stat.S_IWRITE)
-                            cert.save_pem(cert_file_name)
-                            is_signed = True
-                            os.unlink(os.path.join(_dir, req))
-                            messages.append((DATA, "%s signed" % node))
-                            messages.append((DATA,
-                                             "Issuer %s" % cert.get_issuer()))
-                            messages.append((
-                                DATA, "Subject %s" % cert.get_subject()))
-                            return messages, cert_file_name
-                except Exception, ex:
-                    print "Error: %r" % ex
-                    messages.append((ERR, "Error: %r" % ex))
-                finally:
-                    del csr
-                    del cert
-                    del ca_key
-                    del ca_priv_key
-                    del now
-                    del nowPlusYear
+                return messages, cert_file_name
+        except Exception, ex:
+            print "Error: %r" % ex
+            messages.append((ERR, "Error: %r" % ex))
+        finally:
+            del csr
+            del cert
+            del ca_key
+            del ca_priv_key
+            del now
+            del nowPlusYear
+
+            if is_signed:
+                db_node = self.db.query(Node).join(Org).filter(
+                    Node.name == node, Org.name == ca).first()
+                if db_node:
+                    db_node.approved = True
+                    db_node.approved_at = datetime.now()
+                    self.db.add(db_node)
+                    self.db.commit()
 
         if not is_signed:
-            messages.append((EMPTY, "Nothing found to sign for %s" % node))
+            messages.append((EMPTY, "Not signed"))
         return messages, None
 
     def _ensure_autosign(self):
@@ -417,59 +412,212 @@ class CertController(object):
         f.close()
         yield TAG, "Set autosign to %s" % node
 
-    @yield_wrap
-    def revoke(self, node, **kwargs):
-        for n in node:
-            ca = kwargs.get('ca')
-            if self.config.security.use_org and not ca:
-                yield ERR, "ORG param is required to revoke"
-                return
-            if ca:
-                yield TAG, "Revoking certificate for %s:%s" % (ca, n)
+    def validate_request(self, node_id, csreq):
+        # self.ca_path
+        csr = m.X509.load_request_string(str(csreq))
+        subj = csr.get_subject()
+        CN = subj.CN
+        ca = None
+
+        try:
+            if CN != node_id:
+                return False, 'CN is different than node ID', None
+
+            if self.config.security.use_org:
+                for verifier in NodeVerifier.__subclasses__():
+                    try:
+                        ca = verifier(
+                            self.config).verify(node_id, subj)
+                        if ca:
+                            break
+                    except Exception, ex:
+                        LOG.exception(ex)
+                        pass
             else:
-                ca = 'DEFAULT'
-                yield TAG, "Revoking certificate for ", n
+                ca = DEFAULT_ORG
+            if not ca:
+                return False, 'ORG cannot be determined', None
+            if not VALID_NAME.match(CN):
+                return False, 'Invalid node name', None
+            if self.config.security.use_org and not VALID_NAME.match(ca):
+                return False, 'Invalid org name', None
 
-            cert_fn = os.path.join(
-                self.ca_path, 'nodes', '%s.%s.crt' % (ca, n))
-            if os.path.exists(cert_fn):
-                ser_no = open(cert_fn).read().strip()
-                assert int(ser_no)
-                # Update CRL file
-                crl_file = open(os.path.join(self.ca_path, 'crl'), 'w')
-                fcntl.flock(crl_file, fcntl.LOCK_EX)
-                crl_file.write('%s\n' % ser_no)
-                crl_file.close()
-                yield DATA, "Removing signed certificate found for %s " % n
-                os.unlink(cert_fn)
-            issued_fn = os.path.join(
-                self.ca_path, 'issued', '%s.%s.crt' % (ca, n))
-            if os.path.exists(issued_fn):
-                yield DATA, "Removing issued certificate found for %s " % n
-                os.unlink(issued_fn)
+            csr_file_name = os.path.join(self.ca_path, 'reqs',
+                                         '.'.join([ca, node_id, 'csr']))
+            crt_file_name = os.path.join(self.ca_path,
+                                         'issued',
+                                         '.'.join([ca, node_id, 'crt']))
+            if os.path.exists(crt_file_name):
+                raise CertificateExists(ca)
 
-            yield DATA, "Certificate for node [%s] revoked" % n
+            csr.save(csr_file_name)
+        except CertificateExists:
+            raise
+        except Exception, ex:
+            LOG.exception(ex)
+        finally:
+            del subj
+            del csr
+
+        return True, CN, ca
+
+    def _check_cert2req(self, crt_file, req):
+        """
+        Check the CSR with the issued certificate.
+        This checks the case when the node has regenerated its keys,
+        and sends a REGISTER request to master, but the Master already has
+        signed certificate with a previous request. Also this could be
+        the case of an attacker who tries to send a certificate request
+        using the name of a attacked node. We *MUST NOT* return the CRT
+        in that case, as this will make the node legally approved!
+        """
+        crt = None
+        if not os.path.exists(crt_file):
+            return False, None, None
+        try:
+            crt = m.X509.load_cert(crt_file)
+            subj = crt.get_subject()
+            if req.verify(crt.get_pubkey()):
+                if self.config.security.use_org:
+                    return subj.O, subj.CN, crt.get_serial_number()
+                else:
+                    return 'DEFAULT', subj.CN, crt.get_serial_number()
+            else:
+                return False, None, None
+        except Exception, ex:
+            LOG.exception(ex)
+            return False, None, None
+        finally:
+            del crt
+
+    def build_cert_chain(self, node, ca, check_csr):
+        csr = None
+        try:
+            crt_file_name = os.path.join(self.ca_path,
+                                         'issued',
+                                         '.'.join([ca, node, 'crt']))
+            if not os.path.exists(crt_file_name):
+                return False, "CRT_MISSING"
+            csr = m.X509.load_request_string(check_csr)
+            if not csr:
+                return False, 'INV_CSR'
+
+            cert_id, cn, ser_no = self._check_cert2req(crt_file_name, csr)
+            if cert_id:
+                # All is fine, cert is verified to be issued
+                # from the sent request and is OK to be send to node
+                try:
+                    ca_cert = ""
+                    # Return SubCA+CA
+                    subca_cert_file = os.path.join(
+                        self.ca_path,
+                        'org', cert_id + '.ca.crt')
+                    ca_cert = '%s%s' % (
+                        open(subca_cert_file).read(),
+                        open(self.config.security.ca).read())
+
+                    # Write record in /nodes
+                    node_cert_name = os.path.join(
+                        self.ca_path,
+                        'nodes',
+                        '%s.%s.crt' % (cert_id, cn))
+                    open(node_cert_name, 'w').write(str(ser_no))
+                    return True, (
+                        open(crt_file_name).read() +
+                        TOKEN_SEPARATOR +
+                        ca_cert +
+                        TOKEN_SEPARATOR +
+                        open(self.config.security.server_cert).read())
+                except:
+                    raise
+            else:
+                # Issued CRT already exists,
+                # and doesn't match current csr
+                return False, 'ERR_CRT_EXISTS'
+        except Exception, ex:
+            LOG.exception(ex)
+            return False, 'UNKNOWN'
+        finally:
+            # clear locally stored crt files
+            if os.path.exists(crt_file_name):
+                os.unlink(crt_file_name)
+            del csr
 
     @yield_wrap
-    def clear_req(self, node, **kwargs):
-        for n in node:
-            ca = kwargs.get('ca')
-            if self.config.security.use_org and not ca:
-                yield ERR, "OEG param is required to revoke"
-                return
-            if ca:
-                yield TAG, "Clearing requests for %s:%s" % (ca, n)
-            else:
-                yield TAG, "Clearing requests for ", n
+    def revoke(self, nodes, **kwargs):
+        ca = kwargs.get('ca')
+        if self.config.security.use_org and not ca:
+            yield ERR, "ORG param is required to revoke"
+            return
+        if not ca:
+            ca = DEFAULT_ORG
+        if not isinstance(nodes, (list, tuple)):
+            nodes = [nodes]
+        for node in nodes:
+            try:
+                if ca:
+                    yield TAG, "Revoking certificate for %s:%s" % (ca, node)
+                else:
+                    ca = DEFAULT_ORG
+                    yield TAG, "Revoking certificate for ", node
 
-            req_fn = os.path.join(
-                self.ca_path, 'reqs', '%s.%s.csr' % (ca, n))
-            if not os.path.exists(req_fn):
-                yield DATA, "No pending request found for %s " % n
-                return
+                cert_fn = os.path.join(
+                    self.ca_path, 'nodes', '%s.%s.crt' % (ca, node))
+                if os.path.exists(cert_fn):
+                    ser_no = open(cert_fn).read().strip()
+                    assert int(ser_no)
+                    # Update CRL file
+                    crl_file = open(os.path.join(self.ca_path, 'crl'), 'w')
+                    fcntl.flock(crl_file, fcntl.LOCK_EX)
+                    crl_file.write('%s\n' % ser_no)
+                    crl_file.close()
+                    yield DATA, "Removing signed certificate for %s " % node
+                    os.unlink(cert_fn)
+                issued_fn = os.path.join(
+                    self.ca_path, 'issued', '%s.%s.crt' % (ca, node))
+                if os.path.exists(issued_fn):
+                    yield DATA, "Removing issued certificate for %s " % node
+                    os.unlink(issued_fn)
 
-            os.unlink(req_fn)
-            yield DATA, "Request for node [%s] deleted" % n
+                yield DATA, "Certificate for node [%s] revoked" % node
+            finally:
+                node = self.db.query(Node).join(Org).filter(
+                    Node.name == node, Org.name == ca,
+                    Node.approved == True).first()  # noqa
+                if node:
+                    yield DATA, "Removing from database"
+                    self.db.delete(node)
+                    self.db.commit()
+
+    @yield_wrap
+    def clear_req(self, nodes, **kwargs):
+        for node in nodes:
+            try:
+                ca = kwargs.get('ca')
+                if self.config.security.use_org and not ca:
+                    yield ERR, "OEG param is required to revoke"
+                    return
+                if ca:
+                    yield TAG, "Clearing requests for %s:%s" % (ca, node)
+                else:
+                    yield TAG, "Clearing requests for ", node
+
+                req_fn = os.path.join(
+                    self.ca_path, 'reqs', '%s.%s.csr' % (ca, node))
+                if not os.path.exists(req_fn):
+                    yield DATA, "No pending request found for %s " % node
+                    continue
+
+                os.unlink(req_fn)
+                yield DATA, "Request for node [%s] deleted" % node
+            finally:
+                node = self.db.query(Node).join(Org).filter(
+                    Node.name == node, Org.name == ca,
+                    Node.approved == False).first()  # noqa
+                if node:
+                    yield DATA, "Removing from database"
+                    self.db.delete(node)
+                    self.db.commit()
 
     @yield_wrap
     def create_ca(self, ca, **kwargs):
@@ -856,6 +1004,13 @@ class ConfigController(object):
         self.config.update('Security', 'cert_pass', cert_password)
         self.config.reload()
 
+        if not self.config.security.use_org:
+            yield TAG, "Creating DEFAULT Organization"
+            try:
+                CertController(self.config).create_ca(DEFAULT_ORG)
+            except Exception, ex:
+                yield ERR, ex
+
         yield TAG, "IMPORTANT !!! READ CAREFULLY !!!"
         yield NOTE, 'Keep your CA key file(%s) in a secure place. ' \
             'It is needed to sign node certificates and to reissue ' \
@@ -951,28 +1106,15 @@ class ConfigController(object):
         yield ERR, "Not set"
 
 
-class UserController(object):
+class UserController(DbMixin):
 
     def __init__(self, config, to_print=True):
-        self.db_path = config.db
         self.set_context_from_config(config)
-
-    def set_context_from_config(self, recreate=None, **configuration):
-        session = scoped_session(sessionmaker())
-        engine = create_engine(self.db_path, **configuration)
-        if 'mysql+pymysql://' in self.db_path:
-            event.listen(engine, 'checkout', checkout_listener)
-        session.bind = engine
-        metadata.bind = session.bind
-        if recreate:
-            # For tests: re-create tables
-            metadata.create_all(engine)
-        self.db = session
 
     @yield_wrap
     def list(self, **kwargs):
         users = self.db.query(User).join(Org).all()
-        yield DATA, [(u.username, u.org.name) for u in users]
+        yield DATA, [(u.username, u.org.name, u.active) for u in users]
 
     @yield_wrap
     def list_orgs(self, **kwargs):

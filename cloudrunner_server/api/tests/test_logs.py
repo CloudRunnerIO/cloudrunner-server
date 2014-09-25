@@ -17,61 +17,59 @@ from cloudrunner_server.api.tests import base
 
 class TestLogs(base.BaseRESTTestCase):
 
+    def setUp(self):
+        super(TestLogs, self).setUp()
+
     def test_list_logs(self):
-        logs = [
-            {
-                'uuid': '3333333333',
-                'source_type': None,
-                'created_at': '2014-08-03 00:00:00',
-                'tags': None,
-                'exit_code': -1,
-                'source': None,
-                'user': 'testuser',
-                'timeout': None,
-                'targets': ['*', 'nodeX nodeY']
-            }, {
-                'uuid': '2222222222',
-                'source_type': None,
-                'created_at': '2014-08-02 00:00:00',
-                'tags': ['tag1', 'tag2'],
-                'exit_code': 0,
-                'source': None,
-                'user': 'testuser',
-                'timeout': None,
-                'targets': None
-            }, {
-                'uuid': '1111111111',
-                'source_type': None,
-                'created_at': '2014-08-01 00:00:00',
-                'tags': None,
-                'exit_code': -99,
-                'source': None,
-                'user': 'testuser',
-                'timeout': None,
-                'targets': None
-            }
-        ]
+        self.redis.pipeline().execute.return_value = [(('111111111', 1000),)]
+        tasks = {
+            'etag': 1000,
+            'groups': [
+                {
+                    'status': 2,
+                    'lang': 'python',
+                    'uuid': '1111111111', 'group': None,
+                    'target': 'nodes', 'step': None,
+                    'source': '',
+                    'created_at': '2014-01-01 00:00:00',
+                    'exit_code': 1,
+                    'parent_id': None,
+                    'job': None,
+                    'taskgroup_id': None,
+                    'owner': 'testuser',
+                    'total_steps': None,
+                    'revision': None,
+                    'name':
+                    None
+                }]}
 
         resp = self.app.get('/rest/logs/all', headers={
             'Cr-Token': 'PREDEFINED_TOKEN', 'Cr-User': 'testuser'})
         self.assertEqual(resp.status_int, 200, resp.status_int)
         resp_json = resp.json
-        self.assertEqual(resp_json['logs'], logs, resp_json)
+        self.assertEqual(resp_json['tasks'], tasks, resp_json)
 
     def test_get_log(self):
-        log = {'created_at': '2014-08-01 00:00:00',
-               'exit_code': -99,
-               'status': 'Running',
-               'steps': [],
-               'timeout': None,
-               'uuid': '1111111111'
-               }
+        log = {
+            'task':
+              {
+                  'status': 'Finished',
+                  'lang': 'python',
+                  'uuid': '1111111111',
+                  'script': "script",
+                  'created_at': '2014-01-01 00:00:00',
+                  'exit_code': 1,
+                  'timeout': 60,
+                  'env': {"key": "value"},
+                  'target': 'nodes'
+              }
+        }
 
-        resp = self.app.get('/rest/logs/get/1111111111', headers={
+        resp = self.app.get('/rest/logs/get?log_uuid=1111111111', headers={
             'Cr-Token': 'PREDEFINED_TOKEN', 'Cr-User': 'testuser'})
         self.assertEqual(resp.status_int, 200, resp.status_int)
         resp_json = resp.json
-        self.assertEqual(resp_json['log'], log)
+        self.assertEqual(resp_json, log, resp_json)
 
     def test_get_wrong_log(self):
 

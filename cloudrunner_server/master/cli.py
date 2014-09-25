@@ -87,8 +87,8 @@ def main():
 
     cert_sign = c_subcmd.add_parser('sign',
                                     help='Sign a pending node certificate')
-    cert_sign.add_argument('node', nargs="+",
-                           help='Node common name').completer = \
+    cert_sign.add_argument('nodes', nargs="+",
+                           help='Node common names').completer = \
         _list_pending_nodes
 
     if _eval_config().security.use_org:
@@ -120,7 +120,7 @@ def main():
 
     cert_revoke = c_subcmd.add_parser('revoke',
                                       help='Revoke already issued certificate')
-    cert_revoke.add_argument('node', nargs="+", help='Node common name').\
+    cert_revoke.add_argument('nodes', nargs="+", help='Node common names').\
         completer = _list_active_nodes
 
     if _eval_config().security.use_org:
@@ -147,7 +147,7 @@ def main():
 
     clear_req = c_subcmd.add_parser('clear_req',
                                     help='Clear pending node request')
-    clear_req.add_argument('node', nargs="+", help='Node common name').\
+    clear_req.add_argument('nodes', nargs="+", help='Node common names').\
         completer = _list_pending_nodes
 
     if _eval_config().security.use_org:

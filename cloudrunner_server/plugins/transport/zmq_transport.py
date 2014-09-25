@@ -14,7 +14,6 @@
 
 import fcntl
 import logging
-import M2Crypto as m
 import os
 from os import path as p
 import signal
@@ -32,7 +31,6 @@ from cloudrunner.plugins.transport.zmq_transport import (SockWrapper,
 from cloudrunner.util.aes_crypto import Crypter
 from cloudrunner.util.shell import Timer
 
-from cloudrunner_server.plugins.auth.base import NodeVerifier
 from cloudrunner_server.plugins.transport.base import (ServerTransportBackend,
                                                        Tenant)
 from cloudrunner_server.master.functions import CertController
@@ -227,93 +225,6 @@ class ZmqTransport(ServerTransportBackend):
             if org not in orgs:
                 self.tenants.pop(org)
 
-    def _verify_node(self, node, request, **kwargs):
-        for verifier in NodeVerifier.__subclasses__():
-            if verifier(self.config).verify(node, request):
-                return True
-        return False
-
-    def _check_cert2req(self, crt_file, req):
-        """
-        Check the CSR with the issued certificate.
-        This checks the case when the node has regenerated its keys,
-        and sends a REGISTER request to master, but the Master already has
-        signed certificate with a previous request. Also this could be
-        the case of an attacker who tries to send a certificate request
-        using the name of a attacked node. We *MUST NOT* return the CRT
-        in that case, as this will make the node legally approved!
-        """
-        crt = None
-        if not p.exists(crt_file):
-            return False, None, None
-        try:
-            crt = m.X509.load_cert(crt_file)
-            subj = crt.get_subject()
-            if req.verify(crt.get_pubkey()):
-                if self.config.security.use_org:
-                    return subj.O, subj.CN, crt.get_serial_number()
-                else:
-                    return 'DEFAULT', subj.CN, crt.get_serial_number()
-            else:
-                return False, None, None
-        except Exception, ex:
-            LOGA.exception(ex)
-            return False, None, None
-        finally:
-            del crt
-
-    def _build_cert_response(self, node, csr_data, crt_file_name):
-        csr = None
-        try:
-            csr = m.X509.load_request_string(csr_data)
-            if not csr:
-                return False, 'INV_CSR'
-
-            cert_id, cn, ser_no = self._check_cert2req(crt_file_name, csr)
-            if cert_id:
-                # All is fine, cert is verified to be issued
-                # from the sent request and is OK to be send to node
-                try:
-                    ca_cert = ""
-                    if self.config.security.use_org:
-                        # Return SubCA+CA
-                        subca_cert_file = p.join(p.dirname(p.abspath(
-                            self.config.security.ca)),
-                            'org', cert_id + '.ca.crt')
-                        ca_cert = '%s%s' % (
-                            open(subca_cert_file).read(),
-                            open(self.config.security.ca).read())
-                    else:
-                        # Return CA
-                        ca_cert = open(self.config.security.ca).read()
-
-                    # Write record in /nodes
-                    node_cert_name = p.join(
-                        p.dirname(p.abspath(self.config.security.ca)),
-                        'nodes',
-                        '%s.%s.crt' % (cert_id, cn))
-                    open(node_cert_name, 'w').write(str(ser_no))
-                    return True, (
-                        open(crt_file_name).read() +
-                        TOKEN_SEPARATOR +
-                        ca_cert +
-                        TOKEN_SEPARATOR +
-                        open(self.config.security.server_cert).read())
-                except:
-                    raise
-            else:
-                # Issued CRT already exists,
-                # and doesn't match current csr
-                return False, 'ERR_CRT_EXISTS'
-        except Exception, ex:
-            LOGA.exception(ex)
-            return False, 'UNKNOWN'
-        finally:
-            # clear locally stored crt files
-            if p.exists(crt_file_name):
-                os.unlink(crt_file_name)
-            del csr
-
     def register_session(self, session_id):
         self.managed_sessions[session_id] = True
 
@@ -322,64 +233,6 @@ class ZmqTransport(ServerTransportBackend):
             self.managed_sessions.pop(session_id)
         except:
             pass
-
-    def verify_node_request(self, node, request):
-        base_path = p.join(p.dirname(
-            p.abspath(self.config.security.ca)))
-        # Check if node is already requested or signed
-
-        # if node in self.ccont.list_all_approved():
-        # cert already issued
-        #    return self._build_cert_response(node, request, crt_file_name)
-        # Saving CSR
-        csr = None
-        try:
-            csr = m.X509.load_request_string(str(request))
-            subj = csr.get_subject()
-            CN = subj.CN
-            OU = subj.OU or DEFAULT_ORG
-            csr_file_name = p.join(base_path, 'reqs',
-                                   '.'.join([OU, node, 'csr']))
-            crt_file_name = p.join(base_path,
-                                   'issued',
-                                   '.'.join([OU, node, 'crt']))
-            if CN != node:
-                return False, None, "ERR_CN_FAIL"
-            if not is_valid_host(CN):
-                return False, None, "ERR_NAME_FORBD"
-            if p.exists(crt_file_name):
-                appr, cert = self._build_cert_response(node,
-                                                       request,
-                                                       crt_file_name)
-                return appr, cert, OU
-            csr.save(csr_file_name)
-            LOGA.info("Saved CSR file: %s" % csr_file_name)
-        except Exception, ex:
-            LOGA.exception(ex)
-            return False, None, 'INV_CSR'
-        finally:
-            del csr
-
-        if self.ccont.can_approve(node):
-            kwargs = {}
-            if self.config.security.trust_verify:
-                kwargs['auto'] = True
-            messages, crt_file = self.ccont.sign_node(node, **kwargs)
-            for _, data in messages:
-                LOGA.info(data)
-            if crt_file:
-                appr, cert = self._build_cert_response(node, request, crt_file)
-                return appr, cert, OU
-            else:
-                return False, None, 'APPR_FAIL'
-        else:
-            if p.exists(csr_file_name):
-                # Not issued yet
-                return False, None, 'PENDING'
-            elif not request:
-                return False, None, 'SEND_CSR'
-
-        return False, None, ''
 
     def configure(self, overwrite=False, **kwargs):
         pass
@@ -550,7 +403,6 @@ class ZmqTransport(ServerTransportBackend):
 
             is_new = self.tenants[msg.hdr.org].push(msg.hdr.peer)
             if msg.control == 'HBR':
-                print vars(msg)
                 self.tenants[msg.hdr.org].update(msg.hdr.peer, msg.usage)
 
             if is_new:
