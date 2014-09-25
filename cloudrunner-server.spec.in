@@ -58,22 +58,6 @@ This package contains common libs and files.
 #CloudRunner engine for running scripts in cloud environment.
 #This package contains Dispatcher node service software.
 
-%package plugin-ssl-node
-Summary:    CloudRunner Server transport plugin
-Group:      Cloud tools
-Requires:   cloudrunner-node => 0.5
-%description plugin-ssl-node
-CloudRunner engine for running scripts in cloud environment.
-This package contains transport plugin for node-server configuration.
-
-%package plugin-openstack-node
-Summary:    CloudRunner Server transport plugin
-Group:      Cloud tools
-Requires:   cloudrunner-node => 0.5
-%description plugin-openstack-node
-CloudRunner engine for running scripts in cloud environment.
-This package contains transport plugin for node-server configuration with OpenStack.
-
 %package plugin-openstack-master
 Summary:    CloudRunner OpenStack plugin
 Group:      Cloud tools
@@ -118,9 +102,6 @@ touch $RPM_BUILD_ROOT/%{python_sitelib}/cloudrunner_plugins/__init__.py
 touch $RPM_BUILD_ROOT/%{python_sitelib}/cloudrunner_plugins/config/__init__.py
 touch $RPM_BUILD_ROOT/%{python_sitelib}/cloudrunner_plugins/transport/__init__.py
 
-
-
-install -m755 cloudrunner_server/plugins/transport/zmq_node_transport.py $RPM_BUILD_ROOT/%{python_sitelib}/cloudrunner_plugins/transport/zmq_node_transport.py
 
 sed -i -e 's,{lib_dir},%{python_sitelib},g'                     $RPM_BUILD_ROOT/%{_sysconfdir}/cloudrunner/cloudrunner.conf
 sed -i -e 's,{ca_dir},%{_sharedstatedir}/cloudrunner/CA,g'      $RPM_BUILD_ROOT/%{_sysconfdir}/cloudrunner/cloudrunner.conf
@@ -186,22 +167,6 @@ fi
 %exclude %{_sysconfdir}/cloudrunner/api.config.pyo
 
 %{python_sitelib}/cloudrunner_server/db
-
-%files plugin-ssl-node
-%dir %{python_sitelib}/cloudrunner_plugins/
-%{python_sitelib}/cloudrunner_plugins/__init__.py
-%{python_sitelib}/cloudrunner_plugins/transport/__init__.py
-%{python_sitelib}/cloudrunner_plugins/transport/zmq_node_transport.py
-%{python_sitelib}/cloudrunner_plugins/config/__init__.py
-%{_bindir}/cloudrunner-plugins-node
-
-%files plugin-openstack-node
-%dir %{python_sitelib}/cloudrunner_plugins/
-%{python_sitelib}/cloudrunner_plugins/__init__.py*
-%{python_sitelib}/cloudrunner_plugins/transport/__init__.py*
-%{python_sitelib}/cloudrunner_plugins/transport/zmq_node_transport.py*
-%{python_sitelib}/cloudrunner_plugins/config/__init__.py*
-%{_bindir}/cloudrunner-plugins-openstack-node
 
 %files plugin-openstack-master
 %{python_sitelib}/cloudrunner_server/plugins/auth/openstack_verifier.py
