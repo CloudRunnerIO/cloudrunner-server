@@ -14,9 +14,12 @@
 
 import abc
 from hashlib import md5
+import logging
 import time
 
 from cloudrunner.plugins.transport.base import TransportBackend
+
+LOG = logging.getLogger()
 
 
 class ServerTransportBackend(TransportBackend):
@@ -107,3 +110,18 @@ class Tenant(object):
 
     def active_nodes(self):
         return [node for node in self.nodes if node.refreshed > self.refreshed]
+
+
+class TenantDict(dict):
+
+    def __init__(self, refresh=None, *args, **kwargs):
+        super(TenantDict, self).__init__(*args, **kwargs)
+        self.refresh = refresh
+
+    def __getitem__(self, key):
+        try:
+            return super(TenantDict, self).__getitem__(key)
+        except KeyError:
+            LOG.warn("Hit miss from tenants for %s, trying refresh" % key)
+            self.refresh()
+            return super(TenantDict, self).__getitem__(key)

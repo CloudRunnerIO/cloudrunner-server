@@ -150,7 +150,7 @@ class Admin(Thread):
                 if not approved:
                     LOG.warn(msgs)
                 else:
-                    LOG.info("Requiest approved")
+                    LOG.info("Request approved")
 
                 node.approved = approved
                 if approved:

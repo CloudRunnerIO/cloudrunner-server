@@ -32,7 +32,7 @@ from cloudrunner.util.aes_crypto import Crypter
 from cloudrunner.util.shell import Timer
 
 from cloudrunner_server.plugins.transport.base import (ServerTransportBackend,
-                                                       Tenant)
+                                                       Tenant, TenantDict)
 from cloudrunner_server.master.functions import CertController
 
 LOGR = logging.getLogger('ZMQ ROUTER')
@@ -162,7 +162,7 @@ class ZmqTransport(ServerTransportBackend):
 
         # init
         self.heartbeat_timeout = int(self.config.heartbeat_timeout or 30)
-        self.tenants = {}
+        self.tenants = TenantDict(refresh=self._cert_changed)
         self._cert_changed()
         self._nodes_changed(wait=False)
 
@@ -223,6 +223,7 @@ class ZmqTransport(ServerTransportBackend):
         current_orgs = self.tenants.keys()
         for org in current_orgs:
             if org not in orgs:
+                LOGR.warn("Un-registering tenant %s" % org)
                 self.tenants.pop(org)
 
     def register_session(self, session_id):
