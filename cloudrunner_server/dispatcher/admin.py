@@ -147,6 +147,11 @@ class Admin(Thread):
 
                 msgs, cert_file = self.ccont.sign_node(req.node, ca=org)
                 approved = bool(cert_file)
+                if not approved:
+                    LOG.warn(msgs)
+                else:
+                    LOG.info("Requiest approved")
+
                 node.approved = approved
                 if approved:
                     node.approved_at = datetime.now()
