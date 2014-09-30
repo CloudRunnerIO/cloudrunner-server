@@ -16,7 +16,6 @@ from contextlib import nested
 from mock import call
 from mock import Mock
 from mock import patch
-import threading
 
 from cloudrunner.core import parser
 from cloudrunner_server.dispatcher import server, TaskQueue
@@ -81,6 +80,7 @@ whoami
                                 tasks,
                                 access_map,
                                 env=env)
+            """
             expected = [call('\n'),  # noqa
                         call('#! switch [*]'),
                         call('\ntest_1\nexport NEXT_NODE=\'host2\'\n\n'),
@@ -88,11 +88,11 @@ whoami
                         call('\nhostname\n\nexport next_step=\'linux\'\n\n'),
                         call('#! switch [os=$next_step]'),
                         call('\nwhoami\n')]
-
+            """
             self.assertTrue(ret.tasks[0].session_id, '1234-5678-9012')
 
     def _test_returns(self):
-        access_map = []
+        """
         expected = [  # noqa
             call('*', {'libs': [], 'remote_user_map': access_map,
                        'env': {'next_step': ['linux', 'windows'],
@@ -120,10 +120,8 @@ whoami
                         'KEY': 'VALUE'},
                     'script': '\nwhoami\n'},
                 timeout=200)]
-        """
         self.assertTrue(disp.publisher.send.call_args_list == expected,
                         disp.publisher.send.call_args_list)
-        """
 
         expected_resp = [  # noqa
             {'nodes': [{'run_as': 'root', 'node': 'NODE1', 'ret_code': 1},
@@ -168,22 +166,9 @@ whoami
                   '"jobid": "JOB_ID"}, {"nodes": [{"run_as": "admin", "node": '
                   '"NODE3", "ret_code": 0}], "args": [], '
                   '"targets": "os=linux os=windows", "jobid": "JOB_ID"}]'])]
+        """
 
     def test_session(self):
-        payload = """
-#! switch [*]
-test_1
-export NEXT_NODE='host2'
-
-#! switch [$NEXT_NODE] --plugin-dir
-hostname
-
-export next_step='linux'
-
-#! switch [os=$next_step]
-whoami
-"""
-        stop_event = threading.Event()
 
         class Ctx(object):
 

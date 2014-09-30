@@ -275,7 +275,6 @@ class JobSession(Thread):
         self.manager.publisher.send(target._)
 
         user_map = UserMap(remote_user_map['roles'], self.user)
-        log_queue = {}
         try:
             while not self.session_event.is_set() and not job_event.is_set():
                 ready = poller.poll()

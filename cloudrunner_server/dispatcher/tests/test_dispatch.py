@@ -16,7 +16,6 @@ from contextlib import nested
 from mock import call
 from mock import Mock
 from mock import patch
-import threading
 
 from cloudrunner_server.dispatcher.session import JobSession
 from cloudrunner_server.tests import base
@@ -27,20 +26,6 @@ SESSION = "1234-5678-9012"
 class TestDispatch(base.BaseTestCase):
 
     def test_session(self):
-        payload = """
-#! switch [*]
-test_1
-export NEXT_NODE='host2'
-
-#! switch [$NEXT_NODE] --plugin-dir
-hostname
-
-export next_step='linux'
-
-#! switch [os=$next_step]
-whoami
-"""
-        stop_event = threading.Event()
 
         class Ctx(object):
 
