@@ -74,13 +74,14 @@ class Library(HookController):
     @repo.wrap_delete()
     def repository_delete(self, *args, **kwargs):
         name = args[0]
-        repository = Repository.visible(request).filter(
+        repository = Repository.own(request).filter(
             Repository.name == name).one()
-        for folder in repository.folders:
-            if folder.name != "/" or folder.full_name != "/":
-                return O.error("Cannot remove repo, "
-                               "not empty")
-            request.db.delete(folder)
+        if any([f for f in repository.folders
+                if f.name != "/" or f.full_name != "/"]):
+            return O.error("Cannot remove repo, "
+                           "not empty")
+        for f in repository.folders:
+            request.db.delete(f)
         request.db.delete(repository)
 
     @expose('json')

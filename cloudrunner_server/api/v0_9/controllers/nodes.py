@@ -66,6 +66,6 @@ class Nodes(object):
             return O.error(msg="Node not found")
         cert = CertController(conf.cr_config)
         msgs = [m for m in cert.revoke(n.name)]
-        if msgs[-1] != ("Certificate for node [%s] revoked" % n.name):
+        if ("Certificate for node [%s] revoked" % n.name in msgs):
             LOG.error(msgs)
             return O.error(msg="Cannot revoke node")

@@ -45,6 +45,13 @@ class Repository(TableBase):
                 Repository.private != True)  # noqa
         )
 
+    @staticmethod
+    def own(ctx):
+        return ctx.db.query(Repository).join(User, Org).filter(
+            Org.name == ctx.user.org,
+            or_(Repository.owner_id == ctx.user.id)
+        )
+
 
 class RepositoryCreds(TableBase):
     __tablename__ = 'repository_creds'
