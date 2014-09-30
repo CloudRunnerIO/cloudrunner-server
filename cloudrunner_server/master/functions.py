@@ -49,23 +49,29 @@ try:
 except:
     C = 'US'
 
+ENGINE = None
 VALID_NAME = re.compile('^[a-zA-Z0-9\-_\.]+$')
 LOG = logging.getLogger("Functions")
 
 
 class DbMixin(object):
 
-    def set_context_from_config(self, config, recreate=None):
+    def set_context_from_config(self, config, recreate=None, engine=None):
+        global ENGINE
         session = scoped_session(sessionmaker())
         self.db_path = config.db
-        engine = create_engine(self.db_path)
+        if not ENGINE:
+            if engine:
+                ENGINE = engine
+            else:
+                ENGINE = create_engine(self.db_path)
         if 'mysql+pymysql://' in self.db_path:
             event.listen(engine, 'checkout', checkout_listener)
-        session.bind = engine
+        session.bind = ENGINE
         metadata.bind = session.bind
         if recreate:
             # For tests: re-create tables
-            metadata.create_all(engine)
+            metadata.create_all(ENGINE)
         self.db = session
 
 
@@ -90,11 +96,11 @@ class CertificateExists(Exception):
 
 class CertController(DbMixin):
 
-    def __init__(self, config):
+    def __init__(self, config, **kwargs):
         self.config = config
         self.ca_path = os.path.dirname(
             os.path.abspath(self.config.security.ca))
-        self.set_context_from_config(config)
+        self.set_context_from_config(config, **kwargs)
 
     def pass_cb(self, *args):
         return self.config.security.cert_pass
@@ -176,7 +182,7 @@ class CertController(DbMixin):
 
         total_cnt = 0
         yield TAG, "Approved nodes:"
-        for (_dir, _, nodes) in os.walk(os.path.join(self.ca_path, 'nodes')):
+        for (_dir, _, nodes) in os.walk(os.path.join(self.ca_path, 'issued')):
             for node in nodes:
                 try:
                     if not node.endswith('.crt'):
@@ -243,6 +249,10 @@ class CertController(DbMixin):
     def sign_node(self, node, **kwargs):
         is_signed = False
         messages = []
+
+        if not VALID_NAME.match(node):
+            messages.append((ERR, 'Invalid node name'))
+            return messages, None
 
         ca = kwargs.get('ca', None)
 

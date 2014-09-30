@@ -15,10 +15,13 @@
 import logging
 import os
 from unittest import TestCase
+from sqlalchemy import create_engine
+from sqlalchemy.pool import StaticPool
 
 import cloudrunner.plugins as plugins
 from cloudrunner.util.config import Config
 from cloudrunner.util.loader import load_plugins
+from cloudrunner_server.api.model import *  # noqa
 
 CONFIG = Config(os.path.join(os.path.dirname(__file__), 'test.config'))
 LOG = logging.getLogger("BaseTest")
@@ -29,6 +32,7 @@ _plugins = [('common',
             # ('signals', "cloudrunner_server.plugins.signals.signal_handler")]
             ]
 CONFIG.plugins.items = lambda: _plugins
+engine = None
 
 
 class BaseTestCase(TestCase):
@@ -79,3 +83,25 @@ class BaseTestCase(TestCase):
 
     def assertCount(self, _list, count):
         self.assertEqual(len(_list), count)
+
+
+class BaseDBTestCase(BaseTestCase):
+
+    @classmethod
+    def fixture_class(cls):
+        global engine
+        engine = create_engine(
+            'sqlite://',
+            connect_args={'check_same_thread': False},
+            poolclass=StaticPool)
+        Session.bind = engine
+        metadata.bind = Session.bind
+        cls.ENGINE = engine
+        # metadata.drop_all(Session.bind)
+        metadata.create_all(Session.bind)
+
+    def setUp(self):
+        super(BaseDBTestCase, self).setUp()
+
+    def tearDown(self):
+        super(BaseDBTestCase, self).tearDown()

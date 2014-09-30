@@ -22,18 +22,22 @@ from cloudrunner_server.master.functions import ConfigController
 from cloudrunner_server.master.functions import ERR
 
 
-class TestCert(base.BaseTestCase):
+class TestCert(base.BaseDBTestCase):
 
     @classmethod
     def fixture_class(cls):
+        super(TestCert, cls).fixture_class()
+        ccont = CertController(base.CONFIG, engine=cls.ENGINE)
         assert base.CONFIG.security.ca == '/tmp/cloudrunner-tests/ca.crt'
+        base.CONFIG.security.use_org = False
+        base.CONFIG.security.auto_approve = True
         conf_ctrl = ConfigController(base.CONFIG)
         gen = conf_ctrl.create(overwrite=True)
         for line in gen:
             assert line[0] != ERR, line
         if os.path.exists('/tmp/cloudrunner-tests/org'):
             shutil.rmtree('/tmp/cloudrunner-tests/org')
-        CertController(base.CONFIG).create_ca('MyOrg')
+        print ccont.create_ca('DEFAULT')
 
     @classmethod
     def release_class(cls):
@@ -58,13 +62,13 @@ class TestCert(base.BaseTestCase):
         self.assertEqual(messages.pop(0), (2, '--None--'))
         self.assertEqual(messages, [])
 
-        messages = [x for x in CertController(base.CONFIG).sign(['TEST_NODE'],
-                                                                org="MyOrg")]
+        messages = [x for x in CertController(base.CONFIG).sign(['TEST_NODE'])]
         self.assertEqual(messages.pop(0), (1, 'Signing TEST_NODE'))
         self.assertEqual(messages.pop(0), (1, 'Setting serial to 3'))
         self.assertEqual(messages.pop(0), (2, 'TEST_NODE signed'))
 
         messages = [x for x in CertController(base.CONFIG).list()]
+        print messages
 
         self.assertEqual(messages.pop(0), (1, 'Pending node requests:'))
         self.assertEqual(messages.pop(0), (2, '--None--'))
@@ -75,8 +79,7 @@ class TestCert(base.BaseTestCase):
         self._create_csr('TEST_NODE_2')
         self._create_csr('TEST_NODE_PEND')
         messages = [x for x in CertController(
-            base.CONFIG).sign(['TEST_NODE_2'],
-                              org='MyOrg')]
+            base.CONFIG).sign(['TEST_NODE_2'])]
 
         self.assertEqual(messages.pop(0), (1, 'Signing TEST_NODE_2'))
         self.assertEqual(messages.pop(0), (1, 'Setting serial to 4'))
@@ -104,7 +107,7 @@ class TestCert(base.BaseTestCase):
 
         messages = [x for x in CertController(base.CONFIG).sign(
             ['TEST_NODE_PEND'],
-            org="MyOrg")]
+            org="DEFAULT")]
 
         self.assertEqual(messages.pop(0), (1, 'Signing TEST_NODE_PEND'))
         self.assertEqual(messages.pop(0), (1, 'Setting serial to 5'))
@@ -122,7 +125,7 @@ class TestCert(base.BaseTestCase):
         self._create_csr('INVALID NAME')
         messages = [x for x in CertController(base.CONFIG).sign(
             ['INVALID NAME'],
-            org="MyOrg")]
+            org="DEFAULT")]
 
         self.assertEqual(messages.pop(0), (3, 'Invalid node name'))
         self.assertEqual(messages, [])
@@ -130,7 +133,7 @@ class TestCert(base.BaseTestCase):
         self._create_csr('INVALID_NAME#2')
         messages = [x for x in CertController(base.CONFIG).sign(
             ['INVALID_NAME#2'],
-            org="MyOrg")]
+            org="DEFAULT")]
 
         self.assertEqual(messages.pop(0), (3, 'Invalid node name'))
         self.assertEqual(messages, [])
@@ -138,17 +141,17 @@ class TestCert(base.BaseTestCase):
         self._create_csr('VALID_NAME.DOMAIN')
         messages = [x for x in CertController(base.CONFIG).sign(
             ['VALID_NAME.DOMAIN'],
-            org="MyOrg")]
+            org="DEFAULT")]
 
         self.assertEqual(messages.pop(0), (1, 'Signing VALID_NAME.DOMAIN'))
         self.assertEqual(messages.pop(0), (1, 'Setting serial to 6'))
         self.assertEqual(messages.pop(0), (2, 'VALID_NAME.DOMAIN signed'))
         self.assertEqual(
-            messages.pop(0), (2, 'Issuer /C=%s/CN=CloudRunner Master CA' %
+            messages.pop(0), (2, 'Issuer /C=%s/O=DEFAULT/CN=DEFAULT' %
                               self.country))
         self.assertEqual(
-            messages.pop(0), (2, 'Subject /C=%s/CN=VALID_NAME.DOMAIN' %
-                              self.country))
+            messages.pop(0),
+            (2, 'Subject /C=%s/CN=VALID_NAME.DOMAIN/O=DEFAULT' % self.country))
         self.assertEqual(messages, [])
 
     @property
