@@ -12,6 +12,7 @@
 #  * without the express permission of CloudRunner.io
 #  *******************************************************/
 
+import re
 from sqlalchemy.sql.expression import func
 from sqlalchemy import (Column, Integer, String, DateTime, Boolean, Text,
                         ForeignKey, UniqueConstraint,
@@ -19,6 +20,8 @@ from sqlalchemy import (Column, Integer, String, DateTime, Boolean, Text,
 from sqlalchemy.orm import relationship, backref
 from .base import TableBase
 from .users import User, Org
+
+VALID_NAME = re.compile(r"^[\w\-. ]+$")
 
 
 class Repository(TableBase):
@@ -230,3 +233,7 @@ class Script(TableBase):
         return "%s%s%s" % (self.folder.repository.name,
                            self.folder.full_name,
                            self.name)
+
+    @staticmethod
+    def valid_name(name):
+        return re.match(VALID_NAME, name)

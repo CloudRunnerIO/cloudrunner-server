@@ -66,7 +66,7 @@ class DbMixin(object):
             else:
                 ENGINE = create_engine(self.db_path)
         if 'mysql+pymysql://' in self.db_path:
-            event.listen(engine, 'checkout', checkout_listener)
+            event.listen(ENGINE, 'checkout', checkout_listener)
         session.bind = ENGINE
         metadata.bind = session.bind
         if recreate:

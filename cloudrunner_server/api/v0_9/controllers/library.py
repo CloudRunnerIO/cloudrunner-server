@@ -17,6 +17,7 @@ import logging
 from pecan import expose, request
 from pecan.hooks import HookController
 
+from cloudrunner.core.parser import parse_sections
 from cloudrunner_server.api.decorators import wrap_command
 from cloudrunner_server.api.hooks.error_hook import ErrorHook
 from cloudrunner_server.api.hooks.db_hook import DbHook
@@ -169,8 +170,13 @@ class Library(HookController):
     @script.wrap_create()
     def script_create(self, name=None, **kwargs):
         name = name or kwargs['name']
+        if not Script.valid_name(name):
+            return O.error(msg="Invalid script name")
         content = kwargs['content']
-        mime = kwargs.get('mime', 'text/plain')
+        if parse_sections(content):
+            mime = 'text/workflow'
+        else:
+            mime = 'text/plain'
         folder_name = kwargs['folder']
         repository, _, folder_path = folder_name.partition("/")
         folder_path = "/" + folder_path
@@ -195,7 +201,6 @@ class Library(HookController):
     def script_update(self, name=None, **kwargs):
         name = name or kwargs['name']
         content = kwargs['content']
-        mime = kwargs.get('mime', 'text/plain')
         folder_name = kwargs['folder']
         repository, _, folder_path = folder_name.partition("/")
         folder_path = "/" + folder_path
@@ -209,7 +214,16 @@ class Library(HookController):
         if not scr:
             return O.error(msg="Script '%s' not found" % name)
 
-        scr.mime_type = mime
+        if kwargs.get('new_name'):
+            if not Script.valid_name(kwargs['new_name']):
+                return O.error(msg="Invalid script name")
+            scr.name = kwargs['new_name']
+
+        if parse_sections(content):
+            scr.mime_type = 'text/workflow'
+        else:
+            scr.mime_type = 'text/plain'
+
         request.db.add(scr)
         request.db.commit()
 
