@@ -94,6 +94,9 @@ class CacheRegistry(object):
         db = redis.get(db_key)
         if not db:
             db = redis.incr("ORGS")
+            if db == 1:
+                # First time
+                db = redis.incr("ORGS")
             redis.set(db_key, db)
         # redis.select(db)
         redis.execute_command("SELECT", db)
