@@ -79,7 +79,7 @@ class Library(HookController):
             Repository.name == name).one()
         if any([f for f in repository.folders
                 if f.name != "/" or f.full_name != "/"]):
-            return O.error("Cannot remove repo, "
+            return O.error(msg="Cannot remove repo, "
                            "not empty")
         for f in repository.folders:
             request.db.delete(f)
@@ -88,7 +88,7 @@ class Library(HookController):
     @expose('json')
     def browse(self, repository, *args, **kwargs):
         if not repository:
-            return O.error("No repo selected")
+            return O.error(msg="No repo selected")
         args = list([a for a in args if a])
         name = '/'
         if args:
@@ -97,10 +97,19 @@ class Library(HookController):
             if not name.endswith('/'):
                 name = name + "/"
 
+        parent, _, __ = name.rstrip("/").rpartition("/")
+        if parent:
+            parent = parent + "/"
+        else:
+            parent = None
+        folder = Folder.visible(request, repository, parent=parent).join(
+            Repository).filter(Folder.full_name == name)
+        folder = folder.one()
+
         subfolders = Folder.visible(
             request, repository, parent=name).all()
-        scripts = request.db.query(Script).join(Folder, Repository).filter(
-            Repository.name == repository,
+        scripts = request.db.query(Script).join(Folder).filter(
+            Script.folder == folder,
             Folder.full_name == name).all()
 
         folders = [f.serialize(
@@ -111,7 +120,8 @@ class Library(HookController):
                                       rel=[('owner.username', 'owner')])
                           for s in scripts],
                          key=lambda s: (s['mime_type'], s['name']))
-        return O.contents(folders=folders, scripts=scripts)
+        return O.contents(folders=folders, scripts=scripts,
+                          owner=folder.owner.username)
 
     @expose('json')
     @wrap_command(Script)
@@ -163,7 +173,7 @@ class Library(HookController):
                             version=rev.version,
                             mime=scr.mime_type)
         else:
-            return O.error("Not found")
+            return O.error(msg="Not found")
         return O.script({})
 
     @script.when(method='POST', template='json')
@@ -290,8 +300,8 @@ class Library(HookController):
             folder_path += "/"
 
         if folder_path == "/":
-            print O.error("Cannot delete root folder")
-            return O.error("Cannot delete root folder")
+            print O.error(msg="Cannot delete root folder")
+            return O.error(msg="Cannot delete root folder")
 
         folder = Folder.editable(request,
                                  repository,

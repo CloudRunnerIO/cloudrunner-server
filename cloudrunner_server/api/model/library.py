@@ -102,8 +102,9 @@ class Folder(TableBase):
                 or_(Repository.owner_id == ctx.user.id,
                     Repository.private != True)  # noqa
             )
-        q = q.join(Folder.parent,
-                   aliased=True).filter(Folder.full_name == parent)
+        if parent:
+            q = q.join(Folder.parent,
+                       aliased=True).filter(Folder.full_name == parent)
         return q
 
     @staticmethod

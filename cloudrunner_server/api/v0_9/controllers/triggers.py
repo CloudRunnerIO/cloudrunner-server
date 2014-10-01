@@ -114,8 +114,8 @@ class Triggers(HookController):
             except exc.NoResultFound, ex:
                 LOG.error(ex)
                 request.db.rollback()
-                return O.error("Job %s not found" % job_id)
-        return O.error("Invalid request")
+                return O.error(msg="Job %s not found" % job_id)
+        return O.error(msg="Invalid request")
 
     @jobs.when(method='POST', template='json')
     @jobs.wrap_create()
