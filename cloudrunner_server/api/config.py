@@ -24,8 +24,6 @@ from cloudrunner_server.api.base import SseRenderer, LibraryRenderer
 DEBUG = False
 # DEBUG = True
 
-REST_SERVER_URL = "http://dash:12000/rest/"
-
 APP_DIR = cloudrunner_server.api.__path__[0]
 
 API_VER = VERSION.replace('.', '_')
@@ -62,6 +60,8 @@ if DEBUG:
 cr_config = Config(CONFIG_LOCATION)
 
 schedule_manager = local_plugin_loader(cr_config.scheduler)()
+
+REST_SERVER_URL = cr_config.rest_api_url or "http://localhost/rest/"
 
 redis = {
     'host': 'localhost',
