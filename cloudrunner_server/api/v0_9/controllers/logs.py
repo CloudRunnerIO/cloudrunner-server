@@ -62,9 +62,9 @@ class Logs(HookController):
         with cache.reader(request.user.org) as c:
             if etag:
                 max_score, uuids = c.get_uuid_by_score(min_score=etag)
-                tasks = tasks.filter(Task.uuid.in_(uuids))
             else:
-                max_score, uuids = c.get_uuid_by_score(min_score=etag)
+                max_score, uuids = c.get_uuid_by_score(min_score=0)
+            tasks = tasks.filter(Task.uuid.in_(uuids))
 
         tasks = sorted(tasks.all()[start:end], key=lambda t: t.id)
 
