@@ -121,6 +121,8 @@ class Triggers(HookController):
     @jobs.wrap_create()
     def create(self, name=None, **kwargs):
         name = name or kwargs['name']
+        if not Job.valid_name(name):
+            return O.error(msg="Invalid name: %s" % name, field="name")
         source = kwargs['source']
         target = kwargs['target']
         if target:
@@ -155,11 +157,8 @@ class Triggers(HookController):
             # CRON
             tags.extend(["Scheduler", name])
             kw['tags'] = ",".join([urllib.quote(t) for t in tags])
-            success, res = schedule_manager.add(
-                request.user.username,
-                name=name,
-                period=args,
-                url=url % kw)
+            success, res = schedule_manager.add(request.user.username,
+                                                name, args, url % kw)
         elif source == SOURCE_TYPE.ENV:
             # ENV
             # Regiter at publisher
@@ -199,6 +198,12 @@ class Triggers(HookController):
                 Job.name == name).first()
             if not job:
                 return O.error(msg="Job %s not found" % name)
+
+            if kwargs.get('new_name'):
+                new_name = kwargs['new_name']
+                if not Job.valid_name(new_name):
+                    return O.error(msg="Invalid name: %s" % name, field="name")
+                job.name = new_name
 
             if 'source' in kwargs:
                 try:

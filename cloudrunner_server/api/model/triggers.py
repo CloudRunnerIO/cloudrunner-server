@@ -12,6 +12,7 @@
 #  * without the express permission of CloudRunner.io
 #  *******************************************************/
 
+import re
 from string import letters, digits
 from cloudrunner.util import Enum
 from sqlalchemy.sql.expression import func
@@ -26,8 +27,8 @@ from .base import TableBase
 from .users import User, Org
 from .library import Script
 
-
 SOURCE_TYPE = Enum('N/A', 'CRON', 'ENV', 'LOG_CONTENT', 'EXTERNAL')
+VALID_NAME = re.compile(r"^[\w\-. ]+$")
 
 
 class Job(TableBase):
@@ -76,3 +77,7 @@ class Job(TableBase):
         return ctx.db.query(Job).join(User).filter(
             Job.owner_id == ctx.user.id
         )
+
+    @staticmethod
+    def valid_name(name):
+        return re.match(VALID_NAME, name)
