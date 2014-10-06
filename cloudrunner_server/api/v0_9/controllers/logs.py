@@ -59,17 +59,20 @@ class Logs(HookController):
 
         cache = CacheRegistry(redis=request.redis)
         max_score = 0
+        uuids = []
         with cache.reader(request.user.org) as c:
             if etag:
                 max_score, uuids = c.get_uuid_by_score(min_score=etag)
             else:
                 max_score, uuids = c.get_uuid_by_score(min_score=0)
-            tasks = tasks.filter(Task.uuid.in_(uuids))
+
+        tasks = tasks.filter(Task.uuid.in_(uuids))
 
         tasks = sorted(tasks.all()[start:end], key=lambda t: t.id)
 
         task_list = []
         task_map = {}
+        print vars(tasks[0])
 
         def walk(t):
             ser = t.serialize(
@@ -147,6 +150,8 @@ class Logs(HookController):
                **kwargs):
         try:
             tail = int(tail)
+            if tail == -1:
+                tail = None
         except ValueError:
             return O.error(msg="Wrong value for tail. Must be an integer >= 0")
         start = 0
@@ -170,7 +175,6 @@ class Logs(HookController):
             # get uuids from tag
             tag_names = [tag.strip() for tag in re.split('[\s,;]', tags)
                          if tag.strip()]
-            print tag_names
             # q = q.filter(Tag.name.in_(tag_names)).group_by(
             #     Task.id).having(func.count(Task.id) == len(tag_names))
 
@@ -210,7 +214,6 @@ class Logs(HookController):
 
             score, logs = c.load_log(min_score, max_score,
                                      uuids=uuids, tail=tail)
-
             for uuid in uuids:
                 log_data = logs.get(uuid, [])
                 if not log_data:

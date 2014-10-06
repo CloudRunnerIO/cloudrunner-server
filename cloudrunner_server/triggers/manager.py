@@ -13,12 +13,14 @@
 #  *******************************************************/
 
 import argparse
+from datetime import datetime
 import json
 import logging
 import os
 import re
 import redis
-from sqlalchemy.orm import scoped_session, sessionmaker, joinedload
+from sqlalchemy.orm import (scoped_session, sessionmaker,
+                            joinedload, make_transient)
 try:
     import argcomplete
 except ImportError:
@@ -110,7 +112,7 @@ class TriggerManager(Daemon):
                              bold=1)
             exit(1)
 
-    def _prepare_db(self, recreate=False):
+    def _prepare_ctx(self, user_id=None, recreate=False):
         if hasattr(self, 'db'):
             return
         db_path = CONFIG.db
@@ -128,6 +130,14 @@ class TriggerManager(Daemon):
         host, port = redis_host.split(':')
         self.redis = redis.Redis(host=host, port=port, db=0)
 
+        if user_id:
+            user = self.db.query(User).join(
+                Org).filter(User.id == user_id,
+                            User.active == True).one()  # noqa
+            self.user = DictWrapper(id=user.id,
+                                    name=user.username,
+                                    org=user.org.name)
+
     def choose(self):
         kwargs = vars(self.args)
         action = kwargs.pop('action')
@@ -135,7 +145,7 @@ class TriggerManager(Daemon):
 
     def execute(self, user_id=None, script_name=None, content=None,
                 parent_uuid=None, job=None, **kwargs):
-        self._prepare_db()
+        self._prepare_ctx(user_id=user_id)
         self.db.begin()
         remote_tasks = []
         local_tasks = []
@@ -145,12 +155,6 @@ class TriggerManager(Daemon):
                 tags = sorted(re.split(r'[\s,;]', tags))
             timeout = kwargs.get('timeout', 0)
 
-            user = self.db.query(User).join(
-                Org).filter(User.id == user_id,
-                            User.active == True).one()  # noqa
-            self.user = DictWrapper(id=user.id,
-                                    name=user.username,
-                                    org=user.org.name)
             if not content:
                 script = self._parse_script_name(script_name)
                 if script:
@@ -187,7 +191,8 @@ class TriggerManager(Daemon):
                     started_by_id = job
                 else:
                     started_by_id = job.id
-            LOG.info("Execute %s by %s" % (script_name or job, self.user.name))
+            LOG.info("Execute %s by %s" % (script_name or job,
+                                           self.user.name))
             sections = parser.parse_sections(script_content)
             for i, section in enumerate(sections):
                 timeout = section.args.get('timeout', timeout)
@@ -208,7 +213,7 @@ class TriggerManager(Daemon):
                             group=group,
                             started_by_id=started_by_id,
                             parent_id=parent_id,
-                            owner_id=user.id,
+                            owner_id=self.user.id,
                             revision_id=script.id,
                             lang=section.lang,
                             step=i + 1,
@@ -235,13 +240,13 @@ class TriggerManager(Daemon):
             self.db.commit()
             self.db.begin()
 
-            roles = {'org': user.org.name, 'roles': {'*': '@'}}
-            msg = Master(user.username).command('dispatch',
-                                                tasks=remote_tasks,
-                                                roles=roles,
-                                                includes=[],
-                                                attachments=[],
-                                                env=env)
+            roles = {'org': self.user.org, 'roles': {'*': '@'}}
+            msg = Master(self.user.name).command('dispatch',
+                                                 tasks=remote_tasks,
+                                                 roles=roles,
+                                                 includes=[],
+                                                 attachments=[],
+                                                 env=env)
             if not isinstance(msg, Queued):
                 return
 
@@ -249,7 +254,7 @@ class TriggerManager(Daemon):
             LOG.info("TASK UUIDs: %s" % msg.task_ids)
             for i, job_id in enumerate(msg.task_ids):
                 for tag in tags:
-                    cache.associate(user.org.name, tag, job_id)
+                    cache.associate(self.user.org, tag, job_id)
                 # Update
                 task = local_tasks[i]
                 task.uuid = job_id
@@ -262,6 +267,36 @@ class TriggerManager(Daemon):
             self.db.rollback()
 
         return {}
+
+    def resume(self, user_id=None, task_uuid=None):
+        try:
+            self._prepare_ctx(user_id=user_id)
+            self.db.begin()
+            task = Task.visible(self).filter(Task.uuid == task_uuid).one()
+            task.id = None
+            self.db.expunge(task)
+            make_transient(task)
+            atts = []
+            remote_task = dict(attachments=atts, body=task.full_script)
+            remote_task['target'] = task.target
+            roles = {'org': self.user.org, 'roles': {'*': '@'}}
+            msg = Master(self.user.name).command('dispatch',
+                                                 tasks=[remote_task],
+                                                 roles=roles,
+                                                 includes=[],
+                                                 attachments=[],
+                                                 env=task.env_in)
+            if not isinstance(msg, Queued):
+                return
+            task.created_at = datetime.now()
+            task.uuid = msg.task_ids[0]
+            self.db.add(task)
+            self.db.commit()
+
+        except Exception, ex:
+            LOG.exception(ex)
+            self.db.rollback()
+        return 1
 
     def _parse_script_name(self, path):
         path = path.lstrip("/")
@@ -293,7 +328,7 @@ class TriggerManager(Daemon):
         return None
 
     def run(self, **kwargs):
-        self._prepare_db()
+        self._prepare_ctx()
         LOG.info('Listening for events')
 
         pubsub = self.redis.pubsub()

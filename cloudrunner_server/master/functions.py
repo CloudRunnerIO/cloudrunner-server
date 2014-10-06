@@ -1200,8 +1200,11 @@ class UserController(DbMixin):
             yield ERR, "User not found"
             return
 
+        user_id = user.id
         self.db.delete(user)
         self.db.commit()
+
+        self.db.query(Token).filter(Token.user_id == user_id).delete()
         yield DATA, "Removed"
 
     @yield_wrap

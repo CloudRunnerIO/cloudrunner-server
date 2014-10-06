@@ -118,7 +118,7 @@ class RegBase(object):
     def _get_rel_id(*args, **kwargs):
         return ":".join([str(a) for a in args] +
                         ["=".join([str(k), str(v)]) for k, v in kwargs.items()
-                        if v is not None])
+                         if v is not None])
 
 
 class RegWriter(RegBase):
@@ -233,14 +233,14 @@ class RegReader(RegBase):
                     begin = int(begin)
                     end = int(end)
                     length = end - begin
-                    if node_tail[node] + length > tail:
+                    if tail and node_tail[node] + length > tail:
                         allowed = tail - node_tail[node]
                         begin = end - allowed
                     ts_dict = found_nodes.setdefault(node, OrderedDict())
                     range_ = ts_dict.setdefault(score, [])
                     range_.extend([(begin, end)])
                     node_tail[node] += length
-                    if node_tail[node] >= tail:
+                    if tail and node_tail[node] >= tail:
                         break
         ret = {}
         for node, ts_range in found_nodes.items():

@@ -69,6 +69,15 @@ class Dispatch(HookController):
         return {}
 
     @expose('json')
+    def resume(self, uuid, **kwargs):
+        #try:
+        TriggerManager().resume(user_id=request.user.id,
+                                    task_uuid=uuid, **kwargs)
+        #except:
+        #    return O.error(msg="Cannot resume task: %s" % uuid)
+        #return O.success(status='ok')
+
+    @expose('json')
     def term(self, command):
         if not command or command.lower() not in ['term', 'quit']:
             return dict(error="Unknown termination command: %s" % command)
