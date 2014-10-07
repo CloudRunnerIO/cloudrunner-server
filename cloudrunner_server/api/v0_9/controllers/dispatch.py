@@ -70,12 +70,12 @@ class Dispatch(HookController):
 
     @expose('json')
     def resume(self, uuid, **kwargs):
-        #try:
-        TriggerManager().resume(user_id=request.user.id,
+        try:
+            TriggerManager().resume(user_id=request.user.id,
                                     task_uuid=uuid, **kwargs)
-        #except:
-        #    return O.error(msg="Cannot resume task: %s" % uuid)
-        #return O.success(status='ok')
+        except:
+            return O.error(msg="Cannot resume task: %s" % uuid)
+        return O.success(status='ok')
 
     @expose('json')
     def term(self, command):

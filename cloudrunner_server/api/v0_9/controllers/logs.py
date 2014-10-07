@@ -72,7 +72,6 @@ class Logs(HookController):
 
         task_list = []
         task_map = {}
-        print vars(tasks[0])
 
         def walk(t):
             ser = t.serialize(
