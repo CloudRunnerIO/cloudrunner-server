@@ -40,7 +40,7 @@ class SessionManager(object):
         queue.owner = user
         timeout = 0
         env_in = Queue()
-        env_in.put(kwargs.get('env', {}))
+        env_in.put((kwargs.get('env', {}), kwargs.get('attachments')))
         env_out = Queue()
         for task in tasks:
             session_id = uuid.uuid4().hex

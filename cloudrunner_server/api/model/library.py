@@ -32,7 +32,7 @@ class Repository(TableBase):
 
     id = Column(Integer, primary_key=True)
     name = Column(String(255), unique=True)
-    is_link = Column(Boolean)
+    type = Column(String(100))
     owner_id = Column(Integer, ForeignKey(User.id))
     private = Column(Boolean, default=False)
     org_id = Column(Integer, ForeignKey(Org.id))

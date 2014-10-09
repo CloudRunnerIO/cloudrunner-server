@@ -134,9 +134,19 @@ class TriggerManager(Daemon):
             user = self.db.query(User).join(
                 Org).filter(User.id == user_id,
                             User.active == True).one()  # noqa
+            self._user = user
             self.user = DictWrapper(id=user.id,
                                     name=user.username,
                                     org=user.org.name)
+
+    def _roles(self):
+        user_roles = dict([(role.servers, role.as_user)
+                           for role in self._user.roles])
+        for group in self._user.groups:
+            user_roles.update(dict([(role.servers, role.as_user)
+                                    for role in group.roles]))
+        roles = {'org': self._user.org.name, 'roles': user_roles}
+        return roles
 
     def choose(self):
         kwargs = vars(self.args)
@@ -240,10 +250,9 @@ class TriggerManager(Daemon):
             self.db.commit()
             self.db.begin()
 
-            roles = {'org': self.user.org, 'roles': {'*': '@'}}
             msg = Master(self.user.name).command('dispatch',
                                                  tasks=remote_tasks,
-                                                 roles=roles,
+                                                 roles=self._roles(),
                                                  includes=[],
                                                  attachments=[],
                                                  env=env)
@@ -279,10 +288,9 @@ class TriggerManager(Daemon):
             atts = []
             remote_task = dict(attachments=atts, body=task.full_script)
             remote_task['target'] = task.target
-            roles = {'org': self.user.org, 'roles': {'*': '@'}}
             msg = Master(self.user.name).command('dispatch',
                                                  tasks=[remote_task],
-                                                 roles=roles,
+                                                 roles=self._roles(),
                                                  includes=[],
                                                  attachments=[],
                                                  env=task.env_in)

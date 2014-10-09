@@ -203,10 +203,12 @@ whoami
                 self.lib_plugins = []
                 self.job_plugins = []
 
+        env = {'NEXT_NODE': ['host2', 'host9']}
+        queue = Mock(return_value=Mock(get=lambda *args: [env, None]))
         session = JobSession(
             Ctx(), 'user', SESSION,
             {'target': '*', 'body': "\ntest_1\nexport NEXT_NODE='host2'\n\n"},
-            remote_user_map, Mock(), Mock(), None)
+            remote_user_map, queue(), queue(), None)
 
         ret_data1 = [
             ['PIPE', 'JOB_ID', 'admin', '["STDOUT", "BLA"]'],

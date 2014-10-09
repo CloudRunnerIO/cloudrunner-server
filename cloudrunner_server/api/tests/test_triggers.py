@@ -103,9 +103,9 @@ class TestTriggers(base.BaseRESTTestCase):
                          resp.body)
         self.assertEqual(scheduler.add.call_args_list,
                          [call('testuser',
-                               period='* 0 * * *',
-                               name='trigger_new',
-                               url=url)])
+                               'trigger_new',
+                               '* 0 * * *',
+                               url)])
         self.assertRedisInc('jobs:create')
         self.assertRedisPub('jobs:create', 3)
 
@@ -150,9 +150,9 @@ class TestTriggers(base.BaseRESTTestCase):
         self.assertRedisPub(None, None)
 
         self.assertEqual(resp_json, {"error":
-                         {"msg": "Value not present: ''source''",
-                          "field": "'source'"
-                          }},
+                                     {"msg": "Value not present: ''source''",
+                                      "field": "'source'"
+                                      }},
                          resp.body)
 
     @patch('cloudrunner_server.api.v0_9.controllers.'

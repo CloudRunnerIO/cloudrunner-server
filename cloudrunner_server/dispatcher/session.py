@@ -22,7 +22,7 @@ import time
 from cloudrunner.core.parser import has_params
 from cloudrunner.core.exceptions import (ConnectionError, InterruptExecution,
                                          InterruptStep)
-from cloudrunner.core.message import (M, Ready, StdOut, StdErr,
+from cloudrunner.core.message import (M, Ready, StdOut, StdErr, FileExport,
                                       Finished, Events, Job, Term, JobTarget,
                                       InitialMessage,
                                       PipeMessage,
@@ -73,11 +73,11 @@ class JobSession(Thread):
             self._run()
         except Exception, ex:
             LOG.exception(ex)
-            self.env_out.put(self.env)
+            self.env_out.put((self.env, None))
 
     def _run(self):
         try:
-            env = self.env_in.get(True, self.global_timeout)
+            env, file_exports = self.env_in.get(True, self.global_timeout)
         except Empty:
             LOG.warn("Timeout waiting for previous task to finish")
             return
@@ -118,10 +118,11 @@ class JobSession(Thread):
         if 'attachments' in self.kwargs:
             try:
                 # process runtime includes
-                for lib in self.kwargs['attachments']:
-                    attachments.append(lib)
+                attachments.append(self.kwargs['attachments'])
             except Exception, ex:
                 LOG.exception(ex)
+        if file_exports:
+            attachments.append(file_exports)
 
         ts = self._create_ts()
         message = InitialMessage(session_id=self.session_id,
@@ -171,7 +172,7 @@ class JobSession(Thread):
                                           **dict(zip(names, _reply[1:])))
                     self._reply(message)
                 else:
-                    self.session_id, msg_ret = _reply
+                    self.session_id, msg_ret, file_exports = _reply
                     break
 
             new_env = {}
@@ -232,7 +233,7 @@ class JobSession(Thread):
                                       result=result,
                                       env=env)
             self._reply(message)
-            self.env_out.put(env)
+            self.env_out.put((env, file_exports))
 
         self.session_event.set()
         # Wait for all other threads to finish consuming session data
@@ -255,6 +256,7 @@ class JobSession(Thread):
 
         self.manager.register_session(self.session_id)
         job_event = Event()
+        file_exports = {}
         remote_user_map = request.pop('remote_user_map')
         # Call for nodes
         job_queue = self.manager.backend.consume_queue('in_messages',
@@ -362,7 +364,6 @@ class JobSession(Thread):
                     continue
 
                 state['status'] = job_rep.control
-
                 if isinstance(job_rep, Finished):
                     state['data']['ret_code'] = job_rep.result['ret_code']
                     state['data']['env'] = job_rep.result['env']
@@ -382,6 +383,9 @@ class JobSession(Thread):
                            job_rep.run_as,
                            job_rep.hdr.peer,
                            '', job_rep.output)
+                elif isinstance(job_rep, FileExport):
+                    file_name = '%s_%s' % (job_rep.hdr.peer, job_rep.file_name)
+                    file_exports[file_name] = job_rep.content
                 elif isinstance(job_rep, Events):
                     LOG.info("Polling events for %s" % self.session_id)
                 # else:
@@ -437,7 +441,7 @@ class JobSession(Thread):
                                      stdout=n['data'].get('stdout', ''),
                                      stderr=n['data'].get('stderr', ''),
                                      ret_code=n['data'].get('ret_code', -255))
-                                for k, n in node_map.items()]
+                                for k, n in node_map.items()], file_exports
 
     def _create_ts(self):
         ts = time.mktime(time.gmtime())

@@ -21,7 +21,7 @@ class TestLogs(base.BaseRESTTestCase):
         super(TestLogs, self).setUp()
 
     def test_list_logs(self):
-        self.redis.pipeline().execute.return_value = [(('111111111', 1000),)]
+        self.redis.pipeline().execute.return_value = [(('1111111111', 1000),)]
         tasks = {
             'etag': 1000,
             'groups': [
@@ -47,7 +47,7 @@ class TestLogs(base.BaseRESTTestCase):
             'Cr-Token': 'PREDEFINED_TOKEN', 'Cr-User': 'testuser'})
         self.assertEqual(resp.status_int, 200, resp.status_int)
         resp_json = resp.json
-        self.assertEqual(resp_json['tasks'], tasks, resp_json)
+        self.assertEqual(resp_json['tasks'], tasks)
 
     def test_get_log(self):
         log = {

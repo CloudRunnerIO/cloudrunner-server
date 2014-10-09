@@ -102,8 +102,9 @@ class Library(HookController):
             parent = parent + "/"
         else:
             parent = None
-        folder = Folder.visible(request, repository, parent=parent).join(
-            Repository).filter(Folder.full_name == name)
+        folder = Folder.visible(request, repository, parent=parent).filter(
+            Folder.full_name == name)
+
         folder = folder.one()
 
         subfolders = Folder.visible(

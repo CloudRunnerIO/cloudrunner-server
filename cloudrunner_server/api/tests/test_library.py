@@ -22,11 +22,11 @@ class TestLibrary(base.BaseRESTTestCase):
     def test_list_repos(self):
         cr_data = {'repositories': [
             {'owner': 'testuser',
-             'is_link': None,
+             'type': None,
              'name': 'cloudrunner',
              'private': False},
             {'owner': 'testuser',
-             'is_link': None,
+             'type': None,
              'name': 'empty_repo',
              'private': False}]}
 
@@ -39,7 +39,7 @@ class TestLibrary(base.BaseRESTTestCase):
 
     def test_create_repo(self):
         resp = self.app.post('/rest/library/repo',
-                             "name=newrepo&private=0,is_link=1"
+                             "name=newrepo&private=0&type=cloudrunner"
                              "&folder=cloudrunner/folder1/",
                              headers={
                                  'Cr-Token': 'PREDEFINED_TOKEN',
@@ -51,7 +51,7 @@ class TestLibrary(base.BaseRESTTestCase):
 
     def test_create_repo_fail_name(self):
         resp = self.app.post('/rest/library/repo',
-                             "name=empty_repo&private=0,is_link=1"
+                             "name=empty_repo&private=0&type=cloudrunner"
                              "&folder=cloudrunner/folder1/",
                              headers={
                                  'Cr-Token': 'PREDEFINED_TOKEN',
@@ -82,8 +82,7 @@ class TestLibrary(base.BaseRESTTestCase):
         resp_json = json.loads(resp.body)
 
         self.assertEqual(resp_json,
-                         {'error': 'Cannot remove repo, not empty'},
-                         resp_json)
+                         {'error': {'msg': 'Cannot remove repo, not empty'}})
 
     def test_create_folder(self):
         resp = self.app.post('/rest/library/folder',
@@ -128,13 +127,13 @@ class TestLibrary(base.BaseRESTTestCase):
         cr_data = {'folders': [
                    {'owner': 'testuser',
                     'id': 4,
-                    'full_name':
-                    '/folder1/',
+                    'full_name': '/folder1/',
                     'name': '/folder1'}
                    ],
+                   'owner': 'testuser',
                    'scripts': []}
 
-        resp = self.app.get('/rest/library/browse/cloudrunner', headers={
+        resp = self.app.get('/rest/library/browse/cloudrunner/', headers={
             'Cr-Token': 'PREDEFINED_TOKEN', 'Cr-User': 'testuser'})
         self.assertEqual(resp.status_int, 200, resp.status_int)
         resp_json = json.loads(resp.body)
