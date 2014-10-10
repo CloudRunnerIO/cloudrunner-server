@@ -67,7 +67,8 @@ class RepositoryCreds(TableBase):
     auth_args = Column(String(500))
     repository_id = Column(Integer, ForeignKey(Repository.id))
 
-    repository = relationship(Repository)
+    repository = relationship(Repository, backref=backref('credentials',
+                                                          cascade="delete"))
 
 
 class Folder(TableBase):

@@ -25,9 +25,10 @@ from cloudrunner_server.api.hooks.perm_hook import PermHook
 from cloudrunner_server.api.hooks.signal_hook import SignalHook
 from cloudrunner_server.api.util import JsonOutput as O
 from cloudrunner_server.api.model import (Repository, Script, Folder, Revision,
-                                          Org)
+                                          RepositoryCreds, Org)
 
 LOG = logging.getLogger()
+AVAILABLE_REPO_TYPES = set(['cloudrunner', 'github', 'bitbucket', 'dropbox'])
 
 
 class Library(HookController):
@@ -49,12 +50,23 @@ class Library(HookController):
     def repository_create(self, name=None, **kwargs):
         name = name or kwargs['name']
         private = bool(kwargs.get('private'))
+        _type = kwargs.get('type')
+        if _type not in (AVAILABLE_REPO_TYPES):
+            return O.error(msg="Repo type [%s] not available" % _type)
+
         org = request.db.query(Org).filter(
             Org.name == request.user.org).one()
         repository = Repository(name=name, private=private,
+                                type=_type,
                                 owner_id=request.user.id,
                                 org=org)
         request.db.add(repository)
+        if _type != 'cloudrunner':
+            key = kwargs.get('key')
+            secret = kwargs.get('secret')
+            creds = RepositoryCreds(provider=_type, auth_user=key,
+                                    auth_pass=secret, repository=repository)
+            request.db.add(creds)
         # Create root folder for repo
         root = Folder(name="/", full_name="/", repository=repository,
                       owner_id=request.user.id)
@@ -102,6 +114,13 @@ class Library(HookController):
             parent = parent + "/"
         else:
             parent = None
+        repo = Repository.visible(request).filter(
+            Repository.name == repository).first()
+        if not repo:
+            return O.error(msg="Repo not found")
+        if repo.type != 'cloudrunner':
+            return O.error(msg="External repos are not browsable")
+
         folder = Folder.visible(request, repository, parent=parent).filter(
             Folder.full_name == name)
 
