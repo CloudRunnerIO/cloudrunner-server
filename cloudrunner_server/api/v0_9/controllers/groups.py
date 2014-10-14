@@ -68,7 +68,7 @@ class Groups(object):
             return O.error(msg="Group is not available")
 
         for role in rm_roles:
-            as_user, _, servers = role.partition("@")
+            as_user, _, servers = role.rpartition("@")
             if not as_user or not servers:
                 continue
             roles = [r for r in group.roles if r.as_user == as_user and
@@ -78,7 +78,7 @@ class Groups(object):
         request.db.commit()
 
         for role in add_roles:
-            as_user, _, servers = role.partition("@")
+            as_user, _, servers = role.rpartition("@")
             if not as_user or not servers:
                 continue
             r = Role(as_user=as_user, servers=servers, group=group)

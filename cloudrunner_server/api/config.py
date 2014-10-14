@@ -37,6 +37,7 @@ app = {
         'sse': SseRenderer,
         'library': LibraryRenderer
     },
+    'guess_content_type_from_ext': False,
     'debug': DEBUG,
     'errors': {
         '__force_dict__': True
@@ -83,6 +84,7 @@ logging = {
     'loggers': {
         'root': {'level': 'INFO', 'handlers': ['console']},
         'simpleapp': {'level': 'DEBUG', 'handlers': ['console']},
+        'pecan.core': {'level': 'INFO', 'handlers': ['console']},
         'pecan.commands.serve': {'level': 'DEBUG', 'handlers': ['console']},
         'sqlalchemy.engine': {'level': 'WARN', 'handlers': ['db']},
         'py.warnings': {'handlers': ['console']},

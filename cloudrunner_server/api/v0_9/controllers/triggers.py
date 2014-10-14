@@ -25,9 +25,11 @@ from cloudrunner_server.api.hooks.db_hook import DbHook
 from cloudrunner_server.api.hooks.perm_hook import PermHook
 from cloudrunner_server.api.hooks.signal_hook import SignalHook
 from cloudrunner_server.api.model import (Job, User, Script, Permission,
+                                          Folder, Revision, Repository,
                                           SOURCE_TYPE)
 from cloudrunner_server.api.util import (JsonOutput as O,
                                          Wrap)
+from cloudrunner_server.plugins.repository.base import PluginRepoBase
 from cloudrunner_server.triggers.manager import TriggerManager
 
 schedule_manager = conf.schedule_manager
@@ -53,7 +55,7 @@ class TriggerSwitch(HookController):
         man = TriggerManager()
         results = []
         for trig in q.all():
-            if not trig.target:
+            if not trig.target_path:
                 LOG.warning("Empty trigger: %s" % trig.name)
                 continue
 
@@ -71,7 +73,7 @@ class TriggerSwitch(HookController):
             env = urlparse.parse_qs(trig.arguments)
             env.update(kwargs)
             res = man.execute(user_id=u.id,
-                              script_name=trig.target.full_path(),
+                              script_name=trig.target_path,
                               job=trig,
                               env=env, **kwargs)
             d = dict(id=trig.id, name=trig.name)
@@ -94,11 +96,12 @@ class Triggers(HookController):
             triggers = []
             query = Job.visible(request)
             triggers = [t.serialize(
-                skip=['owner_id', 'target_id'],
+                skip=['key', 'owner_id', 'target_path'],
                 rel=[('owner.username', 'owner'),
-                     ('target.name', 'script'),
-                     ('target.folder.repository.name', 'repository'),
-                     ('target.folder.full_name', 'path')])
+                     ('target_path', 'script',
+                      lambda s: not s or s.rsplit('/', 1)[-1]),
+                     ('target_path', 'script_dir',
+                      lambda s: not s or s.rsplit('/', 1)[0])])
                 for t in query.all()]
             return O.triggers(_list=sorted(triggers,
                                            key=lambda t: t['name'].lower()))
@@ -107,11 +110,12 @@ class Triggers(HookController):
             try:
                 job = Job.visible(request).filter(Job.id == job_id).one()
                 return O.job(**job.serialize(
-                    skip=['key', 'owner_id', 'target_id'],
+                    skip=['key', 'owner_id', 'target_path'],
                     rel=[('owner.username', 'owner'),
-                         ('target.name', 'script'),
-                         ('target.folder.repository.name', 'repository'),
-                         ('target.folder.full_name', 'path')]))
+                         ('target_path', 'script',
+                          lambda s: not s or s.rsplit('/', 1)[-1]),
+                         ('target_path', 'script_dir',
+                          lambda s: not s or s.rsplit('/', 1)[0])]))
             except exc.NoResultFound, ex:
                 LOG.error(ex)
                 request.db.rollback()
@@ -125,11 +129,11 @@ class Triggers(HookController):
         if not Job.valid_name(name):
             return O.error(msg="Invalid name: %s" % name, field="name")
         source = kwargs['source']
-        target = kwargs['target']
-        if target:
-            target = target.lstrip('/')
+        target_path = kwargs['target']
         args = kwargs['arguments']
         tags = kwargs.get('tags') or []
+
+        # create target cached copy
 
         try:
             source = int(source)
@@ -137,12 +141,7 @@ class Triggers(HookController):
         except:
             return O.error(msg="Invalid source: %s" % source)
         job = Job(name=name, owner_id=request.user.id, enabled=True,
-                  source=source,
-                  arguments=args)
-
-        script = Script.find(request, target).first()
-        if script:
-            job.target = script
+                  source=source, arguments=args, target_path=target_path)
 
         request.db.add(job)
         request.db.commit()
@@ -212,13 +211,75 @@ class Triggers(HookController):
                 except:
                     request.db.rollback()
                     return O.error(msg="Invalid source", field='source')
+
             if 'target' in kwargs:
-                target = kwargs.pop('target').lstrip('/')
-                script = Script.find(request, target).first()
-                if script:
-                    job.target = script
-                else:
+                target = kwargs.pop('target')
+                repo_name, path, script_name, rev = Script.parse(target)
+                repo = Repository.visible(request).filter(
+                    Repository.name == repo_name).first()
+                if not repo:
                     return O.error(msg="Invalid target", field='target')
+
+                job.target_path = "/" + target.lstrip('/')
+
+                script = Script.find(
+                    request, '/'.join([repo_name, path, script_name])).first()
+                if repo.type == 'cloudrunner':
+                    if not script:
+                        return O.error(msg="Invalid target", field='target')
+                else:
+                    plugin = PluginRepoBase.find(repo.type)
+                    if not plugin:
+                        return O.error(
+                            msg="Cannot find plugin for %s repo" % repo.type,
+                            field='target')
+                    plugin = plugin(repo.credentials.auth_user,
+                                    repo.credentials.auth_pass)
+                    content, last_modified, rev = plugin.contents(
+                        "/".join([path, script_name]), rev=rev)
+                    if content is None:
+                        return O.error(
+                            msg="Cannot load script content for %s" % target,
+                            field='target')
+
+                    if not script:
+                        root = '/'
+                        parent = Folder.visible(request, repo_name).first()
+                        for folder in path.split('/'):
+                            if not folder.strip():
+                                continue
+                            f = Folder.visible(request,
+                                               repo_name, root).first()
+                            if not f:
+                                f = Folder(name=folder,
+                                           full_name='%s%s/' % (root,
+                                                                folder),
+                                           parent=parent,
+                                           repository_id=repo.id,
+                                           owner_id=request.user.id)
+                                request.db.add(f)
+
+                            root = f.full_name
+                            parent = f
+                        script = Script(name=script_name, folder=parent,
+                                        created_at=last_modified,
+                                        owner_id=request.user.id)
+                        request.db.add(script)
+                        rev = Revision(version=rev, content=content,
+                                       created_at=last_modified,
+                                       script=script)
+                        request.db.add(rev)
+                    else:
+                        exists = script.contents(request, rev=rev)
+                        if not exists:
+                            rev = Revision(version=rev, content=content,
+                                           created_at=last_modified,
+                                           script=script)
+                            request.db.add(rev)
+                        elif rev == '__LAST__':
+                            exists.content = content
+                            exists.created_at = last_modified
+                            request.db.add(exists)
 
             changes = []
             for k, v in kwargs.items():

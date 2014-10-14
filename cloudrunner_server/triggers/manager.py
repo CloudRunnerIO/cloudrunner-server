@@ -35,6 +35,8 @@ from cloudrunner.util.logconfig import configure_loggers
 from cloudrunner.util.shell import colors
 from cloudrunner_server.api.model import *  # noqa
 from cloudrunner_server.api.server import Master
+from cloudrunner_server.plugins.repository.base import (PluginRepoBase,
+                                                        NotModified)
 from cloudrunner_server.util.db import checkout_listener
 from cloudrunner_server.util.cache import CacheRegistry
 from cloudrunner_server.api.util import JsonOutput as O
@@ -201,9 +203,12 @@ class TriggerManager(Daemon):
                     started_by_id = job
                 else:
                     started_by_id = job.id
+            sections = parser.parse_sections(script_content)
+            if not sections:
+                return O.error(msg="Empty script")
+
             LOG.info("Execute %s by %s" % (script_name or job,
                                            self.user.name))
-            sections = parser.parse_sections(script_content)
             for i, section in enumerate(sections):
                 timeout = section.args.get('timeout', timeout)
                 parts = [section.body]
@@ -314,24 +319,50 @@ class TriggerManager(Daemon):
             scr_ = rev
             rev = None
         if rev and (rev.isdigit() or len(rev) == 8):
-            # rev = int(rev)
             pass
         else:
             scr_ = path
-        is_ext = False
-        if is_ext:
-            return None
-        else:
+        repo_name, _, full_path = scr_.partition("/")
+        repo = Repository.visible(self).filter(
+            Repository.name == repo_name).one()
+        try:
+            q = Script.load(self, scr_)
+            s = q.one()
+
             if rev:
-                rev = int(rev)
+                return s.contents(self, rev=rev)
+        except:
+            LOG.error("Cannot find %s" % scr_)
+            LOG.warn("%s" % q)
+            raise
+        if repo.type != 'cloudrunner':
+            plugin = PluginRepoBase.find(repo.type)
+            if not plugin:
+                LOG.warn("No plugin found for repo %s" % (repo.type,))
+                return None
+            plugin = plugin(repo.credentials.auth_user,
+                            repo.credentials.auth_pass)
             try:
-                q = Script.load(self, scr_)
-                s = q.one()
-            except:
-                LOG.error("Cannot find %s" % scr_)
-                LOG.warn("%s" % q)
-                raise
-            return s.contents(self, rev=rev)
+                contents, last_modified, rev = plugin.contents(
+                    full_path, rev=rev,
+                    last_modified=s.contents(self).created_at)
+                exists = s.contents(self, rev=rev)
+                if not exists:
+                    exists = Revision(created_at=last_modified,
+                                      version=rev, script=s,
+                                      content=contents)
+                else:
+                    exists.content = contents
+                    exists.created_at = last_modified
+                self.db.add(exists)
+
+                self.db.commit()
+                self.db.begin()
+                return exists
+            except NotModified:
+                return s.contents(self)
+        else:
+            return s.contents(self)
 
         return None
 

@@ -17,7 +17,7 @@ from sqlalchemy.sql.expression import func
 from sqlalchemy import (Column, Integer, String, DateTime, Boolean, Text,
                         ForeignKey, UniqueConstraint,
                         or_, event, select)
-from sqlalchemy.orm import relationship, backref
+from sqlalchemy.orm import relationship, backref, aliased
 from .base import TableBase
 from .users import User, Org
 
@@ -55,6 +55,9 @@ class Repository(TableBase):
             or_(Repository.owner_id == ctx.user.id)
         )
 
+    def editable(self, ctx):
+        return self.owner_id == int(ctx.user.id)
+
 
 class RepositoryCreds(TableBase):
     __tablename__ = 'repository_creds'
@@ -67,8 +70,10 @@ class RepositoryCreds(TableBase):
     auth_args = Column(String(500))
     repository_id = Column(Integer, ForeignKey(Repository.id))
 
-    repository = relationship(Repository, backref=backref('credentials',
-                                                          cascade="delete"))
+    repository = relationship(Repository,
+                              backref=backref('credentials',
+                                              cascade="delete",
+                                              uselist=False))
 
 
 class Folder(TableBase):
@@ -104,8 +109,9 @@ class Folder(TableBase):
                     Repository.private != True)  # noqa
             )
         if parent:
-            q = q.join(Folder.parent,
-                       aliased=True).filter(Folder.full_name == parent)
+            parent_tbl = aliased(Folder)
+            q = q.join(parent_tbl, parent_tbl.id == Folder.parent_id).filter(
+                parent_tbl.full_name == parent)
         return q
 
     @staticmethod
@@ -132,7 +138,6 @@ class Revision(TableBase):
     version = Column(String(20))
     draft = Column(Boolean)
     content = Column(Text)
-    ext_source = Column(String(500))
 
     script_id = Column(Integer, ForeignKey('scripts.id'))
 
@@ -185,7 +190,7 @@ class Script(TableBase):
             _rev = ctx.db.query(Revision).filter(
                 Revision.script_id == self.id,
                 func.coalesce(Revision.draft, 0) != 1  # noqa
-                ).order_by(Revision.id.desc()).first()
+                ).order_by(Revision.created_at.desc()).first()
         if _rev:
             return _rev
         else:
@@ -204,11 +209,11 @@ class Script(TableBase):
         return q
 
     @staticmethod
-    def find(ctx, path):
-        repository, _, path = path.partition("/")
+    def find(ctx, full_path):
+        repository, _, path = full_path.lstrip('/').partition("/")
         folder, _, script = path.rpartition("/")
 
-        folder = "/" + folder + "/"
+        folder = "/" + folder.strip('/') + "/"
         q = Script.visible(ctx, repository, folder).filter(
             Script.name == script)
 
@@ -239,3 +244,15 @@ class Script(TableBase):
     @staticmethod
     def valid_name(name):
         return re.match(VALID_NAME, name)
+
+    @staticmethod
+    def parse(full_path):
+        path = full_path.lstrip('/')
+        repo, _, scr_path = path.partition('/')
+        path, _, script = scr_path.rpartition('/')
+        script, _, rev = script.rpartition('@')
+        if not script:
+            script = rev
+            rev = None
+
+        return repo, path, script, rev

@@ -26,6 +26,7 @@ from cloudrunner_server.api.hooks.signal_hook import SignalHook
 from cloudrunner_server.api.util import JsonOutput as O
 from cloudrunner_server.api.model import (Repository, Script, Folder, Revision,
                                           RepositoryCreds, Org)
+from cloudrunner_server.plugins.repository.base import PluginRepoBase
 
 LOG = logging.getLogger()
 AVAILABLE_REPO_TYPES = set(['cloudrunner', 'github', 'bitbucket', 'dropbox'])
@@ -39,11 +40,31 @@ class Library(HookController):
     @expose('json', generic=True)
     @wrap_command(Repository)
     def repo(self, *args, **kwargs):
-        repos = Repository.visible(request).all()
-        return O.repositories(_list=sorted([r.serialize(
-            skip=['id', 'org_id', 'owner_id'],
-            rel=[('owner.username', 'owner')]) for r in repos]),
-            key=lambda l: l['name'])
+        if not args:
+            repos = Repository.visible(request).all()
+            return O.repositories(_list=sorted([r.serialize(
+                skip=['id', 'org_id', 'owner_id'],
+                rel=[('owner.username', 'owner')]) for r in repos]),
+                key=lambda l: l['name'])
+        else:
+            repo_name = args[0]
+            repo = Repository.visible(request).filter(
+                Repository.name == repo_name).first()
+            if repo.type == 'cloudrunner' or not repo.editable(request):
+                return O.repository(repo.serialize(
+                    skip=['id', 'org_id', 'owner_id'],
+                    rel=[('owner.username', 'owner')]))
+            else:
+                return O.repository(repo.serialize(
+                    skip=['id', 'org_id', 'owner_id'],
+                    rel=[('owner.username', 'owner'),
+                         ('credentials.auth_user', 'key'),
+                         ('credentials.auth_pass', 'secret')]))
+
+    @expose('json')
+    def repo_plugins(self, *args, **kwargs):
+        return O.plugins(_list=['cloudrunner'] +
+                         [p.type for p in PluginRepoBase.__subclasses__()])
 
     @repo.when(method='POST', template='json')
     @repo.wrap_create()
@@ -75,12 +96,19 @@ class Library(HookController):
     @repo.when(method='PUT', template='json')
     @repo.wrap_update()
     def repository_update(self, name=None, **kwargs):
-        new_name = kwargs['name']
+        new_name = kwargs['new_name']
         private = bool(kwargs['private'])
-        repository = Repository.visible(request).filter(
+        repository = Repository.own(request).filter(
             Repository.name == name).one()
         repository.name = new_name
         repository.private = private
+        if repository.type != 'cloudrunner':
+            key = kwargs.get('key')
+            secret = kwargs.get('secret')
+            if secret:
+                repository.credentials.auth_user = key
+                repository.credentials.auth_pass = secret
+
         request.db.add(repository)
 
     @repo.when(method='DELETE', template='json')
@@ -118,12 +146,11 @@ class Library(HookController):
             Repository.name == repository).first()
         if not repo:
             return O.error(msg="Repo not found")
-        if repo.type != 'cloudrunner':
-            return O.error(msg="External repos are not browsable")
+        # if repo.type != 'cloudrunner':
+        #   return O.error(msg="External repos are not browsable")
 
         folder = Folder.visible(request, repository, parent=parent).filter(
             Folder.full_name == name)
-
         folder = folder.one()
 
         subfolders = Folder.visible(
@@ -143,7 +170,7 @@ class Library(HookController):
         return O.contents(folders=folders, scripts=scripts,
                           owner=folder.owner.username)
 
-    @expose('json')
+    @expose('json', content_type='*')
     @wrap_command(Script)
     def revisions(self, repository, *args, **kwargs):
         path = "/".join(args)
@@ -164,15 +191,13 @@ class Library(HookController):
             script=scr.name,
             owner=scr.owner.username,
             revisions=[r.serialize(
-                       skip=['id', 'ext_source',
-                             'script_id', 'draft', 'content'])
+                       skip=['id', 'script_id', 'draft', 'content'])
                        for r in scr.history
                        if not r.draft])
 
     @expose('json', generic=True)
     @wrap_command(Script)
     def script(self, repository, *args, **kwargs):
-
         path = "/".join(args)
         path.rstrip("/")
         if not path.startswith("/"):

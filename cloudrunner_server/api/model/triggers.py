@@ -25,7 +25,7 @@ from cloudrunner_server.api.util import random_token
 
 from .base import TableBase
 from .users import User, Org
-from .library import Script
+from .library import Revision
 
 SOURCE_TYPE = Enum('N/A', 'CRON', 'ENV', 'LOG_CONTENT', 'EXTERNAL')
 VALID_NAME = re.compile(r"^[\w\-. ]+$")
@@ -46,14 +46,14 @@ class Job(TableBase):
     key = Column(String(32), default=lambda:
                  random_token(length=32,
                               chars=letters + digits))
-
+    target_path = Column(String(500))
     private = Column(Boolean, default=False)
     share_url = Column(String(500))
 
-    target_id = Column(Integer, ForeignKey('scripts.id'))
+    revision_id = Column(Integer, ForeignKey('revisions.id'))
     owner_id = Column(Integer, ForeignKey('users.id'))
 
-    target = relationship(Script)
+    content = relationship(Revision)
     owner = relationship(User)
 
     @staticmethod
