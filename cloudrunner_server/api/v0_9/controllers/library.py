@@ -69,8 +69,8 @@ class Library(HookController):
     @repo.when(method='POST', template='json')
     @repo.wrap_create()
     def repository_create(self, name=None, **kwargs):
-        name = name or kwargs['name']
-        private = bool(kwargs.get('private'))
+        private = (bool(kwargs.get('private'))
+                   and not kwargs.get('private') in ['0', 'false', 'False'])
         _type = kwargs.get('type')
         if _type not in (AVAILABLE_REPO_TYPES):
             return O.error(msg="Repo type [%s] not available" % _type)
@@ -96,11 +96,13 @@ class Library(HookController):
     @repo.when(method='PUT', template='json')
     @repo.wrap_update()
     def repository_update(self, name=None, **kwargs):
-        new_name = kwargs['new_name']
-        private = bool(kwargs['private'])
+        new_name = kwargs.get('new_name')
+        private = (bool(kwargs.get('private'))
+                   and not kwargs.get('private') in ['0', 'false', 'False'])
         repository = Repository.own(request).filter(
             Repository.name == name).one()
-        repository.name = new_name
+        if new_name:
+            repository.name = new_name
         repository.private = private
         if repository.type != 'cloudrunner':
             key = kwargs.get('key')
@@ -170,7 +172,7 @@ class Library(HookController):
         return O.contents(folders=folders, scripts=scripts,
                           owner=folder.owner.username)
 
-    @expose('json', content_type='*')
+    @expose('json')
     @wrap_command(Script)
     def revisions(self, repository, *args, **kwargs):
         path = "/".join(args)
