@@ -29,7 +29,7 @@ Requires:      m2crypto
 Requires:      python-zmq >= 13.0
 Requires:      python-httplib2
 Requires:      python-setuptools
-Requires:      cloudrunner >= 0.5
+Requires:      cloudrunner >= 1.0
 Requires:      python-crontab
 Requires:      python-redis
 Requires:      python-sqlalchemy >= 0.7
