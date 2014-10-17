@@ -287,15 +287,17 @@ class RegReader(RegBase):
         return True
 
     def content_filter(self, data):
-        if data and self.body_filter:
-            for item in data:
+        if not data:
+            return
+        for item in data:
+            if self.body_filter:
                 filtered = [line for line in item[1]
                             if self.body_filter.search(line)]
                 if filtered:
                     yield (item[0], filtered)
 
-        else:
-            yield data
+            else:
+                yield item
 
     def apply_filters(self, pattern=None, **kwargs):
         def list_check(v, x):
