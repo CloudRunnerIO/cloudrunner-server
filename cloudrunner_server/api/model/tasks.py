@@ -22,7 +22,6 @@ from .users import User, Org
 from .library import Revision, Script, Folder
 from .triggers import Job
 
-
 from cloudrunner.util import Enum
 
 LOG_STATUS = Enum('Unknown', 'Running', 'Finished')
