@@ -95,7 +95,7 @@ class Folder(TableBase):
     owner = relationship(User)
     parent = relationship('Folder',
                           remote_side=[id],
-                          backref=backref('subfolders'))
+                          backref=backref('subfolders', cascade="delete"))
     scripts = relationship('Script')
     repository = relationship(Repository, backref=backref('folders'))
 
