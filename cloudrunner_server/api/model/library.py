@@ -213,7 +213,10 @@ class Script(TableBase):
         repository, _, path = full_path.lstrip('/').partition("/")
         folder, _, script = path.rpartition("/")
 
-        folder = "/" + folder.strip('/') + "/"
+        if folder:
+            folder = "/" + folder.strip('/') + "/"
+        else:
+            folder = '/'
         q = Script.visible(ctx, repository, folder).filter(
             Script.name == script)
 

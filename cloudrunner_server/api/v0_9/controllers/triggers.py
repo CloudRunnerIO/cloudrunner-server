@@ -53,9 +53,15 @@ class TriggerSwitch(HookController):
             Job.source == SOURCE_TYPE.EXTERNAL)
 
         env = {}
-        if request.method == 'POST':
-            if request.body:
-                env['__POST__'] = request.body
+
+        if request.params:
+            def _map(k):
+                elem = request.params.getall(k)
+                if len(elem) > 1:
+                    env[k] = elem
+                else:
+                    env[k] = elem[0]
+            map(_map, request.params)
         man = TriggerManager()
         results = []
         for trig in q.all():
@@ -74,8 +80,6 @@ class TriggerSwitch(HookController):
             hook = PermHook(dont_have=set(['is_super_admin']))
             hook.before(None)
 
-            env.update(urlparse.parse_qs(trig.arguments))
-            env.update(kwargs)
             res = man.execute(user_id=u.id,
                               script_name=trig.target_path,
                               job=trig,
@@ -225,7 +229,6 @@ class Triggers(HookController):
                     return O.error(msg="Invalid target", field='target')
 
                 job.target_path = "/" + target.lstrip('/')
-
                 script = Script.find(
                     request, '/'.join([repo_name, path, script_name])).first()
                 if repo.type == 'cloudrunner':
