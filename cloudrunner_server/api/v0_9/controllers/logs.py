@@ -119,7 +119,9 @@ class Logs(HookController):
                         status=LOG_STATUS.from_value(task.status),
                         timeout=task.timeout)
 
-            if task.is_visible(request):
+            if not task.script_content:
+                data['script'] = "### Script removed ###"
+            elif task.is_visible(request):
                 data['script'] = task.full_script
             else:
                 template = """
