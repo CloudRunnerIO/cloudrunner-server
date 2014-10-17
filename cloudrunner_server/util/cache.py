@@ -274,7 +274,7 @@ class RegReader(RegBase):
             for node, lines in node_lines.items():
                 log_info = log[node] = {}
                 log_info['result'] = meta.get(node)
-                log_info['lines'] = self.content_filter(lines)
+                log_info['lines'] = list(self.content_filter(lines))
 
         return new_score, output
 
@@ -288,11 +288,14 @@ class RegReader(RegBase):
 
     def content_filter(self, data):
         if data and self.body_filter:
-            for line in data:
-                return [line for line in data if
-                        self.body_filter.search(line)]
+            for item in data:
+                filtered = [line for line in item[1]
+                            if self.body_filter.search(line)]
+                if filtered:
+                    yield (item[0], filtered)
 
-        return data
+        else:
+            yield data
 
     def apply_filters(self, pattern=None, **kwargs):
         def list_check(v, x):

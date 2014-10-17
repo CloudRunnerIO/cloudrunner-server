@@ -146,7 +146,7 @@ class Logs(HookController):
 
     @expose('json', content_type="application/json")
     @expose('include/raw.html', content_type="text/plain")
-    def output(self, uuid=None, script=None, tags=None, tail=100, steps=None,
+    def output(self, uuid=None, script=None, tags=None, tail=100,
                nodes=None, show=None, template=None, content_type="text/html",
                **kwargs):
         try:
@@ -223,9 +223,8 @@ class Logs(HookController):
 
                 include = True
                 if pattern:
-                    has_lines = any([s for s in steps.values() if s['lines']])
-                    if not has_lines:
-                        include = False
+                    include = bool(any([data for data in log_data.values()
+                                        if data['lines']]))
                 if include:
                     outputs.append(dict(
                         created_at=task.created_at,
