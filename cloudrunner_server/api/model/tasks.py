@@ -80,6 +80,9 @@ class Task(TableBase):
         if self.owner_id == int(request.user.id):
             return True
 
+        if not self.script_content.script:
+            return False
+
         return not self.script_content.script.folder.repository.private
 
 

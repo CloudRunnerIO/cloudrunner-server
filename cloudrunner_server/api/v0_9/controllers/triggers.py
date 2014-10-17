@@ -52,6 +52,10 @@ class TriggerSwitch(HookController):
             Job.key == key,
             Job.source == SOURCE_TYPE.EXTERNAL)
 
+        env = {}
+        if request.method == 'POST':
+            if request.body:
+                env['__POST__'] = request.body
         man = TriggerManager()
         results = []
         for trig in q.all():
@@ -70,7 +74,7 @@ class TriggerSwitch(HookController):
             hook = PermHook(dont_have=set(['is_super_admin']))
             hook.before(None)
 
-            env = urlparse.parse_qs(trig.arguments)
+            env.update(urlparse.parse_qs(trig.arguments))
             env.update(kwargs)
             res = man.execute(user_id=u.id,
                               script_name=trig.target_path,
