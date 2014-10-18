@@ -51,7 +51,7 @@ class Nodes(object):
         if not n:
             return O.error(msg="Node not found")
         cert = CertController(conf.cr_config)
-        msg, crt_file = cert.sign_node(n.name)
+        msg, crt_file = cert.sign_node(n.name, ca=request.user.org)
         if not crt_file:
             LOG.error(msg)
             return O.error(msg="Cannot sign node")
@@ -65,7 +65,7 @@ class Nodes(object):
         if not n:
             return O.error(msg="Node not found")
         cert = CertController(conf.cr_config)
-        msgs = [m[1] for m in cert.revoke(n.name)]
+        msgs = [m[1] for m in cert.revoke(n.name, ca=request.user.org)]
         if ("Certificate for node [%s] revoked" % n.name not in msgs):
             LOG.error(msgs)
             return O.error(msg="Cannot revoke node")
