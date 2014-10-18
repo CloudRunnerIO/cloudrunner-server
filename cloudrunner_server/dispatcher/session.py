@@ -58,9 +58,11 @@ class JobSession(Thread):
         self.timeout = (self.task.timeout
                         or kwargs.get('timeout')
                         or self.manager.wait_timeout)
+        if self.timeout:
+            self.timeout = int(self.timeout)
         self.env_in = env_in
         self.env_out = env_out
-        self.global_timeout = timeout
+        self.global_timeout = self.timeout
         self.env = {}
 
     def _reply(self, message):
@@ -91,21 +93,14 @@ class JobSession(Thread):
             env = {}
         self.job_done = self.manager.backend.publish_queue('logger')
 
-        timeout = None
-
-        timeout = self.kwargs.get('timeout', None)
-        if timeout:
-            try:
-                timeout = int(timeout)
-            except:
-                timeout = None
-
-        if timeout == -1:
+        if self.timeout == -1:
             # Persistent job
             LOG.info("Persistent session [%s] started" % self.session_id)
-            timeout = MAX_INT
+            self.timeout = MAX_INT
         else:
-            LOG.info("Session [%s] started" % self.session_id)
+            LOG.info("Session [%s] started(timeout: %s)" % (
+                self.session_id,
+                self.timeout))
 
         user_org = (self.user, self.remote_user_map['org'])
         # Clean up
@@ -146,12 +141,6 @@ class JobSession(Thread):
                             condition)
                         raise
 
-            if self.task.timeout:
-                try:
-                    timeout = int(self.task.timeout)
-                except ValueError:
-                    pass
-
             self.update_target(env)
             #
             # Exec section
@@ -160,7 +149,7 @@ class JobSession(Thread):
                 self.task.target, dict(env=env, script=self.task.body,
                                        remote_user_map=self.remote_user_map,
                                        attachments=attachments),
-                timeout=timeout)
+                timeout=self.timeout)
             for _reply in section_it:
                 if _reply[0] == 'PIPE':
                     # reply: 'PIPE', self.session_id, ts, run_as, node_id,

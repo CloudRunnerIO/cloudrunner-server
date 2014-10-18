@@ -210,9 +210,11 @@ class TriggerManager(Daemon):
             LOG.info("Execute %s by %s" % (script_name or job,
                                            self.user.name))
             for i, section in enumerate(sections):
-                timeout = section.args.get('timeout', timeout)
                 parts = [section.body]
                 atts = []
+
+                if section.args.timeout:
+                    timeout = section.args.timeout[0]
 
                 if section.args.include:
                     for inc, scr_name in enumerate(section.args.include):
@@ -224,6 +226,8 @@ class TriggerManager(Daemon):
                 if section.args.append:
                     parts.extend(section.args.append)
                 remote_task = dict(attachments=atts, body="\n".join(parts))
+                if timeout:
+                    remote_task['timeout'] = timeout
                 task = Task(status=LOG_STATUS.Running,
                             group=group,
                             started_by_id=started_by_id,
@@ -232,6 +236,7 @@ class TriggerManager(Daemon):
                             revision_id=script.id,
                             lang=section.lang,
                             step=i + 1,
+                            timeout=timeout,
                             total_steps=len(sections),
                             full_script=remote_task['body'],
                             target=section.target)
