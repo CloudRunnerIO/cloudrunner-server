@@ -180,45 +180,53 @@ class BaseRESTTestCase(BaseTestCase):
         Session.add(wf4)
 
         r1_1 = Revision(draft=False, content="Version 6",
-                        script=wf1)
+                        script=wf1,
+                        created_at=datetime(2014, 1, 1, 11, 0, 0))
         Session.add(r1_1)
         Session.commit()
 
         r1_2 = Revision(draft=False, content="Version 7",
-                        script=wf1)
+                        script=wf1,
+                        created_at=datetime(2014, 1, 1, 12, 0, 0))
         Session.add(r1_2)
 
         r1_2draft = Revision(version='2.abc', draft=True,
                              content="Version 7 draft", script=wf1)
         Session.add(r1_2draft)
 
-        r2_1 = Revision(draft=False, content="Version 1", script=wf2)
+        r2_1 = Revision(draft=False, content="Version 1", script=wf2,
+                        created_at=datetime(2014, 1, 1, 6, 0, 0))
         Session.add(r2_1)
         Session.commit()
 
-        r2_2 = Revision(draft=False, content="Version 2", script=wf2)
+        r2_2 = Revision(draft=False, content="Version 2", script=wf2,
+                        created_at=datetime(2014, 1, 1, 7, 0, 0))
         Session.add(r2_2)
         Session.commit()
 
-        r2_3 = Revision(draft=False, content="Version 3", script=wf2)
+        r2_3 = Revision(draft=False, content="Version 3", script=wf2,
+                        created_at=datetime(2014, 1, 1, 8, 0, 0))
         Session.add(r2_3)
 
         Session.commit()
         r2_3draft = Revision(version='3.cde', draft=True,
-                             content="Version 3 Draft", script=wf2)
+                             content="Version 3 Draft", script=wf2,
+                             created_at=datetime(2014, 1, 1, 9, 0, 0))
         Session.add(r2_3draft)
         Session.commit()
 
         r2_4 = Revision(draft=False, content="Version 4 Final",
-                        script=wf2)
+                        script=wf2, created_at=datetime(2014, 1, 1, 10, 0, 0))
         Session.add(r2_4)
         Session.commit()
 
         job1 = Job(name="trigger1", enabled=True, source=1,
-                   arguments="* * * * *", target_id=1, owner_id=1)
+                   arguments="* * * * *", owner_id=1,
+                   target_path='cloudrunner/folder1/folder11/test2')
         Session.add(job1)
         job2 = Job(name="trigger2", enabled=True, source=2, arguments="JOB",
-                   target_id=3, owner_id=2)
+                   target_path='cloudrunner/folder1/test1',
+                   owner_id=2)
         Session.add(job2)
         Session.commit()
 
@@ -239,9 +247,14 @@ class BaseRESTTestCase(BaseTestCase):
                      approved_at=datetime.strptime('2014-11-01', '%Y-%m-%d'))
         Session.add(node3)
 
+        group = NodeGroup(name='one_two', org=org)
+        group.nodes.append(node1)
+        group.nodes.append(node2)
+        Session.add(group)
         task = Task(uuid='1111111111', owner=user, status=2,
                     exit_code=1, target='nodes', full_script='script',
                     env_in='{"key": "value"}', timeout=60, lang='python',
+                    script_content=r2_4,
                     created_at=datetime.strptime('2014-01-01', '%Y-%m-%d'))
         Session.add(task)
         Session.commit()

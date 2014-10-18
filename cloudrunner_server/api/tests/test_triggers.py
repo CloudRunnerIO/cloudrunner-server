@@ -23,27 +23,25 @@ class TestTriggers(base.BaseRESTTestCase):
     def test_list_jobs(self):
         response = [
             {'name': 'trigger1',
-             'script': 'test1',
+             'script': 'test2',
              'enabled': True,
              'private': False,
              'source': 1,
-             'arguments': '* * * * *',
-             'owner': 'testuser',
-             'path': '/folder1/',
+             'script_dir': 'cloudrunner/folder1/folder11',
              'share_url': None,
-             'id': 1,
-             'repository': 'cloudrunner'},
+             'owner': 'testuser',
+             'arguments': '* * * * *',
+             'id': 1},
             {'name': 'trigger2',
-             'script': 'test1',
              'enabled': True,
              'private': False,
              'source': 2,
              'arguments': 'JOB',
              'owner': 'testuser2',
-             'path': '/folder2/',
              'share_url': None,
-             'id': 2,
-             'repository': 'private'}
+             'script_dir': 'cloudrunner/folder1',
+             'script': 'test1',
+             'id': 2}
         ]
 
         resp = self.app.get('/rest/triggers/jobs',
@@ -54,7 +52,6 @@ class TestTriggers(base.BaseRESTTestCase):
         resp_json = json.loads(resp.body)
 
         for trig in resp_json['triggers']:
-            trig.pop('key')
             trig.pop('created_at')
         self.assertEqual(resp_json['triggers'],
                          response, resp_json['triggers'])
@@ -66,18 +63,17 @@ class TestTriggers(base.BaseRESTTestCase):
         resp_json = json.loads(resp.body)
 
         resp_json['job'].pop('created_at')
-        self.assertEqual(resp_json['job'], {"name": "trigger1",
-                                            "script": "test1",
-                                            "enabled": True,
-                                            "private": False,
-                                            "source": 1,
-                                            "arguments": "* * * * *",
-                                            "owner": "testuser",
-                                            "share_url": None,
-                                            "path": "/folder1/",
-                                            "id": 1,
-                                            "repository": "cloudrunner"},
-                         resp.body)
+        self.assertEqual(resp_json['job'],
+                         {"name": "trigger1",
+                          "script": "test2",
+                          "enabled": True,
+                          "private": False,
+                          "source": 1,
+                          "script_dir": "cloudrunner/folder1/folder11",
+                          "share_url": None,
+                          "owner": "testuser",
+                          "id": 1,
+                          "arguments": "* * * * *"})
 
     @patch('cloudrunner_server.api.v0_9.controllers.'
            'triggers.schedule_manager')

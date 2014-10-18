@@ -38,11 +38,9 @@ class TestLogs(base.BaseRESTTestCase):
                     'taskgroup_id': None,
                     'owner': 'testuser',
                     'total_steps': None,
-                    'revision': None,
-                    'name':
-                    None
+                    'revision': '4',
+                    'name': 'cloudrunner/folder1/folder11/test2'
                 }]}
-
         resp = self.app.get('/rest/logs/all', headers={
             'Cr-Token': 'PREDEFINED_TOKEN', 'Cr-User': 'testuser'})
         self.assertEqual(resp.status_int, 200, resp.status_int)
@@ -64,7 +62,6 @@ class TestLogs(base.BaseRESTTestCase):
                   'target': 'nodes'
               }
         }
-
         resp = self.app.get('/rest/logs/get?log_uuid=1111111111', headers={
             'Cr-Token': 'PREDEFINED_TOKEN', 'Cr-User': 'testuser'})
         self.assertEqual(resp.status_int, 200, resp.status_int)

@@ -13,7 +13,7 @@
 #  *******************************************************/
 
 from sqlalchemy import (Column, Integer, String, DateTime, Boolean, Text,
-                        ForeignKey, UniqueConstraint)
+                        ForeignKey, UniqueConstraint, Table)
 from sqlalchemy.sql.expression import func
 from sqlalchemy.orm import relationship
 from .base import TableBase
@@ -49,3 +49,30 @@ class Node(TableBase):
     @staticmethod
     def signed(ctx):
         return Node.visible(ctx).filter(Node.approved == True)  # noqa
+
+
+node2group_rel = Table('node2group', TableBase.metadata,
+                       Column('node_id', Integer, ForeignKey('nodes.id')),
+                       Column('group_id', Integer, ForeignKey('nodegroups.id'))
+                       )
+
+
+class NodeGroup(TableBase):
+    __tablename__ = 'nodegroups'
+    __table_args__ = (
+        UniqueConstraint("name", 'org_id', name="name__org_id"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String(255))
+
+    org_id = Column(Integer, ForeignKey(Org.id))
+    org = relationship(Org, backref='servers')
+
+    nodes = relationship(Node, secondary=node2group_rel, backref="groups")
+
+    @staticmethod
+    def visible(ctx):
+        return ctx.db.query(NodeGroup).join(Org).filter(
+            Org.name == ctx.user.org
+        )

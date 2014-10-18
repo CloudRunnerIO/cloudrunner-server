@@ -79,7 +79,8 @@ class TestDispatch(base.BaseTestCase):
                            {'node': "NODE6",
                             'remote_user': 'root',
                             'ret_code': 1,
-                            'env': {'NEXT_NODE': "host9"}}]
+                            'env': {'NEXT_NODE': "host9"}}],
+                []
             ]
         ]
 
@@ -95,7 +96,7 @@ class TestDispatch(base.BaseTestCase):
                      'attachments': [],
                      'env': {'NEXT_NODE': ['host2', 'host9']},
                      'script': "\ntest_1\nexport NEXT_NODE='host2'\n\n"},
-                    timeout=None)]
+                    timeout=120)]
 
             self.assertEqual(
                 session.exec_section.call_args_list, expected)

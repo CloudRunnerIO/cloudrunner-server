@@ -146,7 +146,6 @@ class TestLibrary(base.BaseRESTTestCase):
             headers={'Cr-Token': 'PREDEFINED_TOKEN', 'Cr-User': 'testuser'})
         self.assertEqual(resp.status_int, 200, resp.status_int)
         resp_json = json.loads(resp.body)
-
         result = {"script": {
                   "content": "Version 4 Final",
                   "owner": "testuser",

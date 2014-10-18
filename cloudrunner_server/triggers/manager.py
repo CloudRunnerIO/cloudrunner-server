@@ -240,7 +240,7 @@ class TriggerManager(Daemon):
                             total_steps=len(sections),
                             full_script=remote_task['body'],
                             target=section.target)
-                remote_task['target'] = section.target
+                remote_task['target'] = self._expand_target(section.target)
                 if i == 0:
                     task.env_in = json.dumps(env)
 
@@ -259,7 +259,6 @@ class TriggerManager(Daemon):
 
             self.db.commit()
             self.db.begin()
-
             msg = Master(self.user.name).command('dispatch',
                                                  tasks=remote_tasks,
                                                  roles=self._roles(),
@@ -315,6 +314,17 @@ class TriggerManager(Daemon):
             LOG.exception(ex)
             self.db.rollback()
         return 1
+
+    def _expand_target(self, target):
+        targets = [t.strip() for t in target.split(" ")]
+        groups = self.db.query(NodeGroup).filter(
+            NodeGroup.name.in_(targets)).all()
+        expanded_nodes = set(targets)
+        for g in groups:
+            for n in g.nodes:
+                expanded_nodes.add(n.name)
+
+        return " ".join(expanded_nodes)
 
     def _parse_script_name(self, path):
         path = path.lstrip("/")

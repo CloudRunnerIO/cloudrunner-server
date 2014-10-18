@@ -39,12 +39,17 @@ class TestNodes(base.BaseRESTTestCase):
                 'meta': {'ID': 'NODE3'},
                 'approved_at': '2014-11-01 00:00:00',
                 'name': 'node3',
-                'approved': True}]}
+                'approved': True}],
+            'groups': [
+                {'name': 'one_two',
+                 'members': ['node1', 'node2']
+                 }]
+        }
 
         resp = self.app.get('/rest/manage/nodes', headers={
             'Cr-Token': 'PREDEFINED_TOKEN', 'Cr-User': 'testuser'})
         self.assertEqual(resp.status_int, 200, resp.status_int)
-        resp_json = json.loads(resp.body)
+        resp_json = json.loads(resp.body)['items']
         self.assertEqual(resp_json, nodes, resp_json)
 
     @patch('cloudrunner_server.api.v0_9.controllers.nodes.CertController')
@@ -74,7 +79,8 @@ class TestNodes(base.BaseRESTTestCase):
     @patch('cloudrunner_server.api.v0_9.controllers.nodes.CertController')
     def test_revoke_nodes(self, cert):
         cert().revoke = Mock(
-            return_value=('', 'Certificate for node [node1] revoked'))
+            return_value=([1, ''],
+                          [2, 'Certificate for node [node1] revoked']))
 
         resp = self.app.delete('/rest/manage/nodes/node1',
                                headers={'Cr-Token': 'PREDEFINED_TOKEN',

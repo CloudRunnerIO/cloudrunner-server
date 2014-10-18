@@ -92,6 +92,18 @@ class TriggerSwitch(HookController):
         return O.result(runs=results, trigger=trigger)
 
 
+def _get_dir(path):
+    if path:
+        return path.rsplit('/', 1)[0]
+    return ''
+
+
+def _get_script(path):
+    if path:
+        return path.rsplit('/', 1)[-1]
+    return ''
+
+
 class Triggers(HookController):
 
     __hooks__ = [SignalHook(), ErrorHook(), DbHook(),
@@ -104,12 +116,10 @@ class Triggers(HookController):
             triggers = []
             query = Job.visible(request)
             triggers = [t.serialize(
-                skip=['key', 'owner_id', 'target_path'],
+                skip=['key', 'owner_id', 'target_path', 'revision_id'],
                 rel=[('owner.username', 'owner'),
-                     ('target_path', 'script',
-                      lambda s: not s or s.rsplit('/', 1)[-1]),
-                     ('target_path', 'script_dir',
-                      lambda s: not s or s.rsplit('/', 1)[0])])
+                     ('target_path', 'script', _get_script),
+                     ('target_path', 'script_dir', _get_dir)])
                 for t in query.all()]
             return O.triggers(_list=sorted(triggers,
                                            key=lambda t: t['name'].lower()))
@@ -118,7 +128,7 @@ class Triggers(HookController):
             try:
                 job = Job.visible(request).filter(Job.id == job_id).one()
                 return O.job(**job.serialize(
-                    skip=['key', 'owner_id', 'target_path'],
+                    skip=['key', 'owner_id', 'target_path', 'revision_id'],
                     rel=[('owner.username', 'owner'),
                          ('target_path', 'script',
                           lambda s: not s or s.rsplit('/', 1)[-1]),
