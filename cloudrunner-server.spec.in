@@ -7,7 +7,7 @@
 %define unmanaged_name cloudrunner_server
 
 Name:       cloudrunner-server
-Version:    1.1
+Version:    $REV
 Release:    5.cloudr%{?dist}
 Summary:    CloudRunner Server for running scripts in cloud environment
 Group:      Cloud tools

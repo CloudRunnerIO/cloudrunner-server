@@ -1,26 +1,9 @@
 REV := $(shell ./scripts/rpm/getrev.sh .)
-REV_MAJ := $(shell ./scripts/rpm/getrev.sh |cut -d"." -f1)
-REV_MIN := $(shell ./scripts/rpm/getrev.sh |cut -d"." -f2)
-REV_PATCH := $(shell ./scripts/rpm/getrev.sh |cut -d"." -f3)
-REV_HUMAN := $(shell ./scripts/rpm/getrev.sh |cut -d"." -f4)
 # Remove - and . from branch - we cannot add them into Revision
 BRANCH := $(shell ./scripts/rpm/getbranch.sh | sed 's|-|_|' | sed 's|\.||')
 
-VERSION := $(shell  grep VERSION cloudrunner_server/version.py | cut -d "=" -f2 | sed -e "s|'||g" )
-
-
-ifeq ($(BRANCH), master)
-    REV_FULL=$(REV).$(BRANCH)
-else
-
-ifdef REV_HUMAN
-    REV_FULL=$(REV_PATCH).$(REV_HUMAN)
-else
-    REV_FULL=$(REV_PATCH).$(BRANCH)
-endif
-
-endif
-
+VERSION := $(shell ./scripts/rpm/getrev.sh | cut -d "." -f 1-3 )
+RELEASE := $(shell ./scripts/rpm/getrev.sh | cut -d "." -f 4 )
 
 SRC=src/
 PY=`python -c 'import sys; print sys.version[:3]'`
@@ -49,10 +32,8 @@ rpm: sdist
 	rm -rf ~/rpmbuild/SRPMS/cloudrunner-server*.src.rpm
 	cp dist/cloudrunner_server*.tar.gz ~/rpmbuild/SOURCES/
 	cp cloudrunner-server.spec.in cloudrunner-server.spec
-	sed -i 's/^Release:.*/Release:        $(REV_FULL)%{?dist}/g' cloudrunner-server.spec
+	sed -i 's/^Release:.*/Release:        $(RELEASE)%{?dist}/g' cloudrunner-server.spec
 	sed -i 's/^Version:.*/Version:        $(VERSION)/g' cloudrunner-server.spec
-
-#	sed -i 's/^Release:.*/Release:        $(REV).$(BRANCH)%{?dist}/g' cloudrunner-server.spec
 	rpmbuild -ba cloudrunner-server.spec
 	rm cloudrunner-server.spec
 
