@@ -24,7 +24,6 @@ sdist: clean
 	rm -rf dist/cloudrunner-server*.tar.gz
 	$(__python) setup.py sdist
 
-
 .PHONY: rpm
 rpm: sdist
 	rm -rf ~/rpmbuild/SOURCES/cloudrunner_server*.tar.gz
