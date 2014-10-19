@@ -18,7 +18,6 @@ default_target: all
 all: clean
 	$(__python) setup.py build
 
-
 .PHONY: sdist
 sdist: clean
 	rm -rf dist/cloudrunner-server*.tar.gz
