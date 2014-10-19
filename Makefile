@@ -13,7 +13,6 @@ __python=$(shell V=$$(python -V 2>&1 | awk '{ print $$2 }' | sed 's/\(.*\)\..*/\
 .PHONY : default_target
 default_target: all
 
-
 .PHONY: all
 all: clean
 	$(__python) setup.py build
