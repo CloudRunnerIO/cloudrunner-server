@@ -55,7 +55,7 @@ setup(
         ]
     },
     classifiers=[
-        'Development Status :: 3 - Alpha',
+        'Development Status :: 4 - Beta',
         'Environment :: Console',
         'Environment :: Plugins',
         'Environment :: Web Environment',
