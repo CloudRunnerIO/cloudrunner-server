@@ -216,7 +216,9 @@ class JobSession(Thread):
             LOG.exception(ex)
         finally:
             time.sleep(.5)
-            message = FinishedMessage(session_id=self.session_id,
+            ts = self._create_ts()
+            message = FinishedMessage(ts=ts,
+                                      session_id=self.session_id,
                                       user=self.user,
                                       org=self.remote_user_map['org'],
                                       result=result,

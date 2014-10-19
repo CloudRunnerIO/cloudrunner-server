@@ -114,7 +114,7 @@ class TriggerManager(Daemon):
                              bold=1)
             exit(1)
 
-    def _prepare_ctx(self, user_id=None, recreate=False):
+    def _prepare_db(self, user_id=None, recreate=False):
         if hasattr(self, 'db'):
             return
         db_path = CONFIG.db
@@ -132,22 +132,24 @@ class TriggerManager(Daemon):
         host, port = redis_host.split(':')
         self.redis = redis.Redis(host=host, port=port, db=0)
 
-        if user_id:
-            user = self.db.query(User).join(
-                Org).filter(User.id == user_id,
-                            User.active == True).one()  # noqa
-            self._user = user
-            self.user = DictWrapper(id=user.id,
-                                    name=user.username,
-                                    org=user.org.name)
+    def get_user_ctx(self, user_id):
+        user = self.db.query(User).join(
+            Org).filter(User.id == user_id,
+                        User.active == True).one()  # noqa
+        return DictWrapper(
+            db=self.db,
+            _user=user,
+            user=DictWrapper(id=user.id,
+                             name=user.username,
+                             org=user.org.name))
 
-    def _roles(self):
+    def _roles(self, ctx):
         user_roles = dict([(role.servers, role.as_user)
-                           for role in self._user.roles])
-        for group in self._user.groups:
+                           for role in ctx._user.roles])
+        for group in ctx._user.groups:
             user_roles.update(dict([(role.servers, role.as_user)
                                     for role in group.roles]))
-        roles = {'org': self._user.org.name, 'roles': user_roles}
+        roles = {'org': ctx._user.org.name, 'roles': user_roles}
         return roles
 
     def choose(self):
@@ -157,10 +159,11 @@ class TriggerManager(Daemon):
 
     def execute(self, user_id=None, script_name=None, content=None,
                 parent_uuid=None, job=None, **kwargs):
-        self._prepare_ctx(user_id=user_id)
+        self._prepare_db(user_id=user_id)
         self.db.begin()
         remote_tasks = []
         local_tasks = []
+        ctx = self.get_user_ctx(user_id)
         try:
             tags = kwargs.get('tags', [])
             if tags:
@@ -168,7 +171,7 @@ class TriggerManager(Daemon):
             timeout = kwargs.get('timeout', 0)
 
             if not content:
-                script = self._parse_script_name(script_name)
+                script = self._parse_script_name(ctx, script_name)
                 if script:
                     script_content = script.content
                 else:
@@ -208,7 +211,7 @@ class TriggerManager(Daemon):
                 return O.error(msg="Empty script")
 
             LOG.info("Execute %s by %s" % (script_name or job,
-                                           self.user.name))
+                                           ctx.user.name))
             for i, section in enumerate(sections):
                 parts = [section.body]
                 atts = []
@@ -218,7 +221,7 @@ class TriggerManager(Daemon):
 
                 if section.args.include:
                     for inc, scr_name in enumerate(section.args.include):
-                        s = self._parse_script_name(scr_name)
+                        s = self._parse_script_name(ctx, scr_name)
                         parts.insert(inc, s.content)
 
                 if section.args.attach:
@@ -232,7 +235,7 @@ class TriggerManager(Daemon):
                             group=group,
                             started_by_id=started_by_id,
                             parent_id=parent_id,
-                            owner_id=self.user.id,
+                            owner_id=ctx.user.id,
                             revision_id=script.id,
                             lang=section.lang,
                             step=i + 1,
@@ -259,12 +262,12 @@ class TriggerManager(Daemon):
 
             self.db.commit()
             self.db.begin()
-            msg = Master(self.user.name).command('dispatch',
-                                                 tasks=remote_tasks,
-                                                 roles=self._roles(),
-                                                 includes=[],
-                                                 attachments=[],
-                                                 env=env)
+            msg = Master(ctx.user.name).command('dispatch',
+                                                tasks=remote_tasks,
+                                                roles=self._roles(ctx),
+                                                includes=[],
+                                                attachments=[],
+                                                env=env)
             if not isinstance(msg, Queued):
                 return
 
@@ -272,7 +275,7 @@ class TriggerManager(Daemon):
             LOG.info("TASK UUIDs: %s" % msg.task_ids)
             for i, job_id in enumerate(msg.task_ids):
                 for tag in tags:
-                    cache.associate(self.user.org, tag, job_id)
+                    cache.associate(ctx.user.org, tag, job_id)
                 # Update
                 task = local_tasks[i]
                 task.uuid = job_id
@@ -288,10 +291,12 @@ class TriggerManager(Daemon):
 
     def resume(self, user_id=None, task_uuid=None):
         try:
-            self._prepare_ctx(user_id=user_id)
+            self._prepare_db(user_id=user_id)
             self.db.begin()
-            task = Task.visible(self).filter(Task.uuid == task_uuid).one()
+            ctx = self.get_user_ctx(user_id)
+            task = Task.visible(ctx).filter(Task.uuid == task_uuid).one()
             task.id = None
+            task.started_by_id = None
             self.db.expunge(task)
             make_transient(task)
             atts = []
@@ -302,13 +307,13 @@ class TriggerManager(Daemon):
             except:
                 pass
             remote_task = dict(attachments=atts, body=task.full_script)
-            remote_task['target'] = task.target
-            msg = Master(self.user.name).command('dispatch',
-                                                 tasks=[remote_task],
-                                                 roles=self._roles(),
-                                                 includes=[],
-                                                 attachments=[],
-                                                 env=env)
+            remote_task['target'] = self._expand_target(task.target)
+            msg = Master(ctx.user.name).command('dispatch',
+                                                tasks=[remote_task],
+                                                roles=self._roles(ctx),
+                                                includes=[],
+                                                attachments=[],
+                                                env=env)
             if not isinstance(msg, Queued):
                 return
             task.created_at = datetime.now()
@@ -332,7 +337,8 @@ class TriggerManager(Daemon):
 
         return " ".join(expanded_nodes)
 
-    def _parse_script_name(self, path):
+    @staticmethod
+    def _parse_script_name(ctx, path):
         path = path.lstrip("/")
         rev = None
         scr_, _, rev = path.rpartition("@")
@@ -344,14 +350,14 @@ class TriggerManager(Daemon):
         else:
             scr_ = path
         repo_name, _, full_path = scr_.partition("/")
-        repo = Repository.visible(self).filter(
+        repo = Repository.visible(ctx).filter(
             Repository.name == repo_name).one()
         try:
-            q = Script.load(self, scr_)
+            q = Script.load(ctx, scr_)
             s = q.one()
 
             if rev:
-                return s.contents(self, rev=rev)
+                return s.contents(ctx, rev=rev)
         except:
             LOG.error("Cannot find %s" % scr_)
             LOG.warn("%s" % q)
@@ -366,8 +372,8 @@ class TriggerManager(Daemon):
             try:
                 contents, last_modified, rev = plugin.contents(
                     full_path, rev=rev,
-                    last_modified=s.contents(self).created_at)
-                exists = s.contents(self, rev=rev)
+                    last_modified=s.contents(ctx).created_at)
+                exists = s.contents(ctx, rev=rev)
                 if not exists:
                     exists = Revision(created_at=last_modified,
                                       version=rev, script=s,
@@ -375,20 +381,20 @@ class TriggerManager(Daemon):
                 else:
                     exists.content = contents
                     exists.created_at = last_modified
-                self.db.add(exists)
+                ctx.db.add(exists)
 
-                self.db.commit()
-                self.db.begin()
+                ctx.db.commit()
+                ctx.db.begin()
                 return exists
             except NotModified:
-                return s.contents(self)
+                return s.contents(ctx)
         else:
-            return s.contents(self)
+            return s.contents(ctx)
 
         return None
 
     def run(self, **kwargs):
-        self._prepare_ctx()
+        self._prepare_db()
         LOG.info('Listening for events')
 
         pubsub = self.redis.pubsub()
@@ -479,17 +485,21 @@ class TriggerManager(Daemon):
             group = task.group
             jobs = self.db.query(Job).filter(Job.id.in_(job_ids)).all()
             for job in jobs:
-                if filter(lambda t: t.started_by == job, group.tasks):
+
+                if task.started_by and filter(lambda t: t.started_by == job,
+                                              group.tasks):
                     # LOG.warn("Circular invocation of Trigger: %s" % job.name)
                     continue
+                ctx = self.get_user_ctx(job.owner_id)
                 kwargs = {'env': env}
                 if task.owner_id == job.owner_id:
                     # Allow env passing
                     kwargs['pass_env'] = True
                 job_uuid = self.execute(
-                    user_id=job.owner_id, script_name=job.target.full_path(),
+                    user_id=ctx.user.id,
+                    script_name=job.target_path,
                     parent_uuid=uuid, job=job, **kwargs)
-                LOG.info("Executed %s/%s" % (job_uuid, job.target.full_path()))
+                LOG.info("Executed %s/%s" % (job_uuid, job.target_path))
         except Exception, ex:
             LOG.exception(ex)
 

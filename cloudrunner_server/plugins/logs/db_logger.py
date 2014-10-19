@@ -97,7 +97,7 @@ class DbLogger(LoggerPluginBase):
         elif msg.control == "FINISHEDMESSAGE":
             self._finalize(msg)
             with self.cache.writer(msg.org, msg.session_id) as cache:
-                cache.store_meta(msg.result)
+                cache.store_meta(msg.result, msg.ts)
 
             if msg.env:
                 for k, v in msg.env.items():

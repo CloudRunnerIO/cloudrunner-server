@@ -155,10 +155,16 @@ class RegWriter(RegBase):
         self.redis.publish(self.id, 'update')
         self.redis.set(self.id, ts)
 
-    def store_meta(self, result):
+    def store_meta(self, result, ts):
+        nodes_key = self._get_rel_id(self.key, 'nodes')
+        uuid_key = self._get_rel_id("UU")
         for node in result:
             rel_key = self._get_rel_id('M', self.key, node)
             self.redis.hmset(rel_key, result[node])
+            self.redis.sadd(nodes_key, node)
+            node_2_uuid_key = self._get_rel_id("N2U", node)
+            self.redis.zadd(node_2_uuid_key, self.id, ts)
+        self.redis.zadd(uuid_key, self.id, ts)
 
     def notify(self, what):
         self.redis.set(what, time.mktime(time.gmtime()))

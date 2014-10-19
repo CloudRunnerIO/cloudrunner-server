@@ -12,9 +12,10 @@
 #  * without the express permission of CloudRunner.io
 #  *******************************************************/
 
-from sqlalchemy.sql.expression import func
-from sqlalchemy import (Column, String, Integer, DateTime, ForeignKey, Text)
+from sqlalchemy import (Column, String, Integer, DateTime, ForeignKey, Text,
+                        distinct)
 from sqlalchemy.orm import relationship, backref, joinedload
+from sqlalchemy.sql.expression import func
 
 
 from .base import TableBase
@@ -31,6 +32,16 @@ class TaskGroup(TableBase):
     __tablename__ = 'taskgroups'
 
     id = Column(Integer, primary_key=True)
+
+    @staticmethod
+    def unique(ctx):
+        return ctx.db.query(distinct(TaskGroup.id)).join(
+            Task, User, Org).filter(Org.name == ctx.user.org)
+
+    @staticmethod
+    def visible(ctx):
+        return ctx.db.query(TaskGroup).join(
+            Task, User, Org).filter(Org.name == ctx.user.org)
 
 
 class Task(TableBase):

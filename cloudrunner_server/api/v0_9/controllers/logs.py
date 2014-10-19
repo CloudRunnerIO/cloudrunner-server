@@ -12,21 +12,22 @@
 #  * without the express permission of CloudRunner.io
 #  *******************************************************/
 
+from datetime import datetime
 import json
 import logging
 from pecan import expose, request
 from pecan.core import override_template
 from pecan.hooks import HookController
 import re
-from sqlalchemy.orm import exc, joinedload
+from sqlalchemy.orm import exc
 from sqlalchemy import func
 
 from cloudrunner_server.api.hooks.error_hook import ErrorHook
 from cloudrunner_server.api.hooks.db_hook import DbHook
 from cloudrunner_server.api.hooks.perm_hook import PermHook
 from cloudrunner_server.api.hooks.redis_hook import RedisHook
-from cloudrunner_server.api.model import (Script, Task, Tag, Revision,
-                                          LOG_STATUS, SOURCE_TYPE)
+from cloudrunner_server.api.model import (Script, Task, TaskGroup, Tag,
+                                          Revision, LOG_STATUS, SOURCE_TYPE)
 from cloudrunner_server.api.util import JsonOutput as O
 from cloudrunner_server.util.cache import CacheRegistry
 
@@ -42,20 +43,13 @@ class Logs(HookController):
     @expose('json')
     def all(self, start=None, end=None, tags=None, etag=None):
         start = int(start or 0) or 0
-        etag = etag or 0
+        if etag:
+            etag = float(etag)
+        else:
+            etag = 0
         end = int(end or PAGE_SIZE)
         if end - start > 100:
             return O.error(msg="Page size cannot be bigger than 100")
-
-        tasks = Task.visible(request).filter(
-            Task.parent_id == None).options(
-            joinedload(Task.children)).order_by(Task.id.desc())  # noqa
-
-        if tags:
-            tag_names = [tag.strip() for tag in re.split('[\s,;]', tags)
-                         if tag.strip()]
-            tasks = tasks.filter(Tag.name.in_(tag_names)).group_by(
-                Task.id).having(func.count(Task.id) == len(tag_names))
 
         cache = CacheRegistry(redis=request.redis)
         max_score = 0
@@ -66,15 +60,31 @@ class Logs(HookController):
             else:
                 max_score, uuids = c.get_uuid_by_score(min_score=0)
 
-        tasks = tasks.filter(Task.uuid.in_(uuids))
+        groups = TaskGroup.unique(request).order_by(Task.created_at.desc())
+        ts = None
+        if etag:
+            ts = datetime.utcfromtimestamp(etag)
+            groups = groups.filter(Task.created_at >= ts)
+        if uuids:
+            groups = groups.filter(Task.uuid.in_(uuids))
+        group_ids = groups.all()[start:end]
+        tasks = Task.visible(request).filter(
+            Task.taskgroup_id.in_([g[0] for g in group_ids]))
 
-        tasks = sorted(tasks.all()[start:end], key=lambda t: t.id)
+        if tags:
+            tag_names = [tag.strip() for tag in re.split('[\s,;]', tags)
+                         if tag.strip()]
+            tasks = tasks.filter(Tag.name.in_(tag_names)).group_by(
+                Task.id).having(func.count(Task.id) == len(tag_names))
+
+        # tasks = sorted(tasks.all(), key=lambda t: t.parent_id, reverse=True)
+        tasks = tasks.all()
 
         task_list = []
         task_map = {}
 
-        def walk(t):
-            ser = t.serialize(
+        def serialize(t):
+            return t.serialize(
                 skip=['id', 'owner_id', 'revision_id',
                       'started_by_id', 'full_script', 'timeout', 'env_in',
                       'env_out'],
@@ -85,13 +95,15 @@ class Logs(HookController):
                      ('started_by.source', 'source',
                       lambda x:SOURCE_TYPE.from_value(x) if x else ''),
                      ('owner.username', 'owner')])
+
+        def walk(t):
+            ser = serialize(t)
             task_map[t.id] = ser
             if not t.parent_id:
                 task_list.append(ser)
                 task_map[t.id] = ser
             else:
                 parent = task_map.get(t.parent_id)
-
                 if parent:
                     parent.setdefault("subtasks", []).append(ser)
             for sub in t.children:
@@ -99,7 +111,6 @@ class Logs(HookController):
 
         for t in tasks:
             walk(t)
-
         return O.tasks(etag=max_score,
                        groups=sorted(task_list, key=lambda t: t['created_at'],
                                      reverse=True))
@@ -126,9 +137,9 @@ class Logs(HookController):
             else:
                 template = """
 ###
-### Workflow: %s
-### Owner: %s
-###"""
+# Workflow: %s
+# Owner: %s
+# """
                 data['script'] = (template %
                                   (task.script_content.script.full_path(),
                                    task.owner.username)
