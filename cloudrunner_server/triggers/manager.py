@@ -295,6 +295,12 @@ class TriggerManager(Daemon):
             self.db.expunge(task)
             make_transient(task)
             atts = []
+            env = {}
+            try:
+                if task.env_in:
+                    env = json.loads(task.env_in)
+            except:
+                pass
             remote_task = dict(attachments=atts, body=task.full_script)
             remote_task['target'] = task.target
             msg = Master(self.user.name).command('dispatch',
@@ -302,7 +308,7 @@ class TriggerManager(Daemon):
                                                  roles=self._roles(),
                                                  includes=[],
                                                  attachments=[],
-                                                 env=task.env_in)
+                                                 env=env)
             if not isinstance(msg, Queued):
                 return
             task.created_at = datetime.now()
