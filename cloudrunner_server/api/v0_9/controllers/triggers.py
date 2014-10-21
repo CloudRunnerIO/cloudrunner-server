@@ -27,8 +27,7 @@ from cloudrunner_server.api.hooks.signal_hook import SignalHook
 from cloudrunner_server.api.model import (Job, User, Script, Permission,
                                           Folder, Revision, Repository,
                                           SOURCE_TYPE)
-from cloudrunner_server.api.util import (JsonOutput as O,
-                                         Wrap)
+from cloudrunner_server.api.util import (JsonOutput as O, Wrap, flatten_params)
 from cloudrunner_server.plugins.repository.base import PluginRepoBase
 from cloudrunner_server.triggers.manager import TriggerManager
 
@@ -52,16 +51,8 @@ class TriggerSwitch(HookController):
             Job.key == key,
             Job.source == SOURCE_TYPE.EXTERNAL)
 
-        env = {}
+        env = flatten_params(request.params)
 
-        if request.params:
-            def _map(k):
-                elem = request.params.getall(k)
-                if len(elem) > 1:
-                    env[k] = elem
-                else:
-                    env[k] = elem[0]
-            map(_map, request.params)
         man = TriggerManager()
         results = []
         for trig in q.all():

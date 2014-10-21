@@ -54,3 +54,16 @@ class Wrap(object):
     def __init__(self, **kwargs):
         for k, v in kwargs.items():
             setattr(self, k, v)
+
+
+def flatten_params(params):
+    d = {}
+    if params:
+        def _map(k):
+            elem = params.getall(k)
+            if len(elem) > 1:
+                d[k] = elem
+            else:
+                d[k] = elem[0]
+        map(_map, params)
+    return d

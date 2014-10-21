@@ -23,10 +23,11 @@ from cloudrunner_server.api.hooks.error_hook import ErrorHook
 from cloudrunner_server.api.hooks.db_hook import DbHook
 from cloudrunner_server.api.hooks.perm_hook import PermHook
 from cloudrunner_server.api.hooks.signal_hook import SignalHook
-from cloudrunner_server.api.util import JsonOutput as O
+from cloudrunner_server.api.util import (JsonOutput as O, flatten_params)
 from cloudrunner_server.api.model import (Repository, Script, Folder, Revision,
                                           RepositoryCreds, Org)
 from cloudrunner_server.plugins.repository.base import PluginRepoBase
+from cloudrunner_server.triggers.manager import TriggerManager
 
 LOG = logging.getLogger()
 AVAILABLE_REPO_TYPES = set(['cloudrunner', 'github', 'bitbucket', 'dropbox'])
@@ -309,6 +310,31 @@ class Library(HookController):
         if not scr:
             return O.error(msg="Script '%s' not found" % name)
         request.db.delete(scr)
+
+    @expose('json', generic=True)
+    @wrap_command(Script, method='execute')
+    def run(self, repository, *args, **kwargs):
+        path = "/".join(args)
+        path.strip("/")
+
+        path, _, script = path.rpartition('/')
+
+        script, _, rev = script.rpartition('@')
+        if not script:
+            script = rev
+            rev = None
+
+        env = flatten_params(request.params)
+        full_path = "/".join([repository, path, script])
+        if rev:
+            full_path = "%s@%s" % (full_path, rev)
+        man = TriggerManager()
+        res = man.execute(user_id=request.user.id,
+                          script_name=full_path,
+                          job=None,
+                          env=env, **kwargs)
+
+        return O.result(**res)
 
     @expose('json', generic=True)
     @wrap_command(Folder)
