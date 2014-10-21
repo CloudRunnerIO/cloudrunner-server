@@ -130,10 +130,8 @@ class Triggers(HookController):
                 return O.job(**job.serialize(
                     skip=['key', 'owner_id', 'target_path', 'revision_id'],
                     rel=[('owner.username', 'owner'),
-                         ('target_path', 'script',
-                          lambda s: not s or s.rsplit('/', 1)[-1]),
-                         ('target_path', 'script_dir',
-                          lambda s: not s or s.rsplit('/', 1)[0])]))
+                         ('target_path', 'script', _get_script),
+                         ('target_path', 'script_dir', _get_dir)]))
             except exc.NoResultFound, ex:
                 LOG.error(ex)
                 request.db.rollback()
