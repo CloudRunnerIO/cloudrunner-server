@@ -86,8 +86,9 @@ class CronScheduler(object):
                 return (False, "Job with the name %s exists" % name)
 
             comment = Job._prepare_job_meta(user, name)
-            url = url.replace('&', '\&').replace('$', '\$')
-            cmd = 'curl %s >/dev/null 2>&1' % url
+            url = url.replace('&', '\&').replace('$', '\$').replace('%', '\%')
+            url = url.replace('"', '\"')
+            cmd = 'curl "%s" >/dev/null 2>&1' % url
 
             cron = _cron.new(command=cmd, comment=comment)
             try:
