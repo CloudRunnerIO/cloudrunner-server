@@ -78,7 +78,7 @@ class CronScheduler(object):
 
         return jobs
 
-    def add(self, user, name, period, auth_token, **kwargs):
+    def add(self, user, name, period, url, **kwargs):
         try:
             _cron = self.crontab()
             name = name.replace(SEPARATOR, '_')
@@ -86,8 +86,8 @@ class CronScheduler(object):
                 return (False, "Job with the name %s exists" % name)
 
             comment = Job._prepare_job_meta(user, name)
-            cmd = kwargs.get("exec", "# CR Job scheduler: exec not passed")
-            cmd = 'curl %s' % cmd.replace('&', '\&').replace('$', '\$')
+            url = url.replace('&', '\&').replace('$', '\$')
+            cmd = 'curl %s >/dev/null 2>&1' % url
 
             cron = _cron.new(command=cmd, comment=comment)
             try:

@@ -17,6 +17,7 @@ import logging
 from httplib2 import Http, urllib, urlparse
 from pecan import conf, expose, request
 from pecan.hooks import HookController
+from sqlalchemy import or_
 from sqlalchemy.orm import exc
 
 from cloudrunner_server.api.decorators import wrap_command
@@ -49,10 +50,10 @@ class TriggerSwitch(HookController):
         q = request.db.query(Job).join(User, Permission).filter(
             Job.name == trigger,
             Job.key == key,
-            Job.source == SOURCE_TYPE.EXTERNAL)
+            or_(Job.source == SOURCE_TYPE.EXTERNAL,
+                Job.source == SOURCE_TYPE.CRON))
 
         env = flatten_params(request.params)
-
         man = TriggerManager()
         results = []
         for trig in q.all():
@@ -163,6 +164,7 @@ class Triggers(HookController):
         if source == SOURCE_TYPE.CRON:
             # CRON
             tags.extend(["Scheduler", name])
+
             kw['tags'] = ",".join([urllib.quote(t) for t in tags])
             success, res = schedule_manager.add(request.user.username,
                                                 name, args, url % kw)
