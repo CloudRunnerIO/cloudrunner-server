@@ -85,7 +85,7 @@ class Logs(HookController):
 
         def serialize(t):
             return t.serialize(
-                skip=['id', 'owner_id', 'revision_id',
+                skip=['owner_id', 'revision_id',
                       'started_by_id', 'full_script', 'timeout', 'env_in',
                       'env_out'],
                 rel=[('taskgroup_id', 'group'),
@@ -104,7 +104,8 @@ class Logs(HookController):
                 task_map[t.id] = ser
             else:
                 parent = task_map.get(t.parent_id)
-                if parent:
+                if parent and not any([s for s in parent.get("subtasks", [])
+                                       if s['id'] == ser['id']]):
                     parent.setdefault("subtasks", []).append(ser)
             for sub in t.children:
                 walk(sub)
