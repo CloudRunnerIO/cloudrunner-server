@@ -15,7 +15,7 @@
 from functools import wraps, partial
 import logging
 from sqlalchemy.exc import IntegrityError
-from pecan import request, response  # noqa
+from pecan import request, response, core
 
 from cloudrunner_server.api.util import JsonOutput as O
 
@@ -98,6 +98,9 @@ def wrap_command(model=None, model_name=None, method=None, key_error=None,
                     # generic
                     msg = "Duplicate entry into database. Check data"
                 return O.error(msg=msg, reason='duplicate')
+
+            except core.exc.HTTPNotModified:
+                raise
 
             except Exception, ex:
                 if hasattr(request, 'db'):

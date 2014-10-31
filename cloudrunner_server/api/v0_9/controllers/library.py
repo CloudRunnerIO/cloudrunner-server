@@ -13,8 +13,9 @@
 #  *******************************************************/
 
 import logging
+import pytz
 
-from pecan import expose, request
+from pecan import expose, request, response, redirect
 from pecan.hooks import HookController
 
 from cloudrunner.core.parser import parse_sections
@@ -214,6 +215,16 @@ class Library(HookController):
                              path).filter(Script.name == script).first()
         if scr:
             rev = scr.contents(request, **kwargs)
+            if rev:
+                if request.if_modified_since:
+                    req_modified = request.if_modified_since
+                    script_modified = pytz.utc.localize(rev.created_at)
+                    if req_modified == script_modified:
+                        return redirect(code=304)
+                else:
+                    response.last_modified = rev.created_at.strftime('%c')
+                    response.cache_control.private = True
+                    response.cache_control.max_age = 1
             return O.script(name=scr.name,
                             created_at=scr.created_at,
                             owner=scr.owner.username,
