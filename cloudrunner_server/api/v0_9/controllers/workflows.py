@@ -54,14 +54,15 @@ class Workflows(HookController):
             includes = []
             atts = []
             options = {}
-            for arg, vals in s.args.items():
-                if arg in ('include-before', 'include-after'):
-                    includes.extend([dict(path=scr_name, where=WHERE[arg])
-                                     for scr_name in vals])
-                elif arg == 'attach':
-                    atts.extend([dict(path=scr_name) for scr_name in vals])
-                else:
-                    options[arg] = vals
+            if s.args:
+                for arg, vals in s.args.items():
+                    if arg in ('include-before', 'include-after'):
+                        includes.extend([dict(path=scr_name, where=WHERE[arg])
+                                         for scr_name in vals])
+                    elif arg == 'attach':
+                        atts.extend([dict(path=scr_name) for scr_name in vals])
+                    else:
+                        options[arg] = vals
 
             section = dict(content=s.body,
                            targets=[t.strip() for t in s.target.split(' ')
