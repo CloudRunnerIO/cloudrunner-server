@@ -102,7 +102,7 @@ class TriggerManager(Daemon):
         try:
             argcomplete.autocomplete(self.arg_parser)
         except Exception, ex:
-            LOG.error(ex)
+            LOG.warn(ex)
             pass
 
         if hasattr(self.args, 'pidfile'):
@@ -219,15 +219,18 @@ class TriggerManager(Daemon):
                 if section.args.timeout:
                     timeout = section.args.timeout[0]
 
-                if section.args.include:
-                    for inc, scr_name in enumerate(section.args.include):
+                ins = 0
+                for arg, scr_name in section.args.items():
+                    if arg == 'include-before':
                         s = self._parse_script_name(ctx, scr_name)
-                        parts.insert(inc, s.content)
+                        parts.insert(ins, s.content)
+                        ins += 1
+                    if arg == 'include-after':
+                        s = self._parse_script_name(ctx, scr_name)
+                        parts.insert(ins, s.content)
 
                 if section.args.attach:
                     atts = section.args.attach
-                if section.args.append:
-                    parts.extend(section.args.append)
                 remote_task = dict(attachments=atts, body="\n".join(parts))
                 if timeout:
                     remote_task['timeout'] = timeout

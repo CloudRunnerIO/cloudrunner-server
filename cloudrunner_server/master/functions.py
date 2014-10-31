@@ -601,6 +601,8 @@ class CertController(DbMixin):
 
     @yield_wrap
     def clear_req(self, nodes, **kwargs):
+        if not isinstance(nodes, (list, tuple)):
+            nodes = [nodes]
         for node in nodes:
             try:
                 ca = kwargs.get('ca')

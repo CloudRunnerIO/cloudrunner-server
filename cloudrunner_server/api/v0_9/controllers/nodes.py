@@ -138,12 +138,17 @@ class Nodes(object):
     @check_policy('is_admin')
     @nodes.wrap_modify()
     def revoke(self, node):
-        n = Node.visible(request).filter(Node.name == node,
-                                         Node.approved == True).first()  # noqa
+        n = Node.visible(request).filter(Node.name == node).first()
         if not n:
             return O.error(msg="Node not found")
         cert = CertController(conf.cr_config)
-        msgs = [m[1] for m in cert.revoke(n.name, ca=request.user.org)]
-        if ("Certificate for node [%s] revoked" % n.name not in msgs):
-            LOG.error(msgs)
-            return O.error(msg="Cannot revoke node")
+        if n.approved:
+            msgs = [m[1] for m in cert.revoke(n.name, ca=request.user.org)]
+            if ("Certificate for node [%s] revoked" % n.name not in msgs):
+                LOG.error(msgs)
+                return O.error(msg="Cannot revoke node")
+        else:
+            msgs = [m[1] for m in cert.clear_req(n.name, ca=request.user.org)]
+            if ("Request for node [%s] deleted" % n.name not in msgs):
+                LOG.error(msgs)
+                return O.error(msg="Cannot delete node request")
