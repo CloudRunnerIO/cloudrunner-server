@@ -159,7 +159,13 @@ class Library(HookController):
 
         subfolders = Folder.visible(
             request, repository, parent=name).all()
-        scripts = request.db.query(Script).join(Folder).filter(
+        scripts = request.db.query(Script).join(Folder).join(Revision)
+
+        show_versions = (bool(kwargs.get('show_versions'))
+                         and not kwargs.get('show_versions')
+                         in ['0', 'false', 'False'])
+
+        scripts = scripts.filter(
             Script.folder == folder,
             Folder.full_name == name).all()
 
@@ -167,8 +173,23 @@ class Library(HookController):
             skip=['repository_id', 'parent_id', 'owner_id'],
             rel=[('owner.username', 'owner')]) for f in subfolders]
 
+        def order(lst):
+            return [r.version for r in sorted([item for item in lst],
+                                              key=lambda x: x.created_at,
+                                              reverse=True)
+                    if not r.draft]
+
+        def rev(lst):
+            return [r.version for r in sorted([item for item in lst],
+                                              key=lambda x: x.created_at,
+                                              reverse=True)
+                    if not r.draft][0]
+
+        rels = [('owner.username', 'owner'), ('history', 'version', rev)]
+        if show_versions:
+            rels.append(('history', 'versions', order))
         scripts = sorted([s.serialize(skip=['folder_id', 'owner_id'],
-                                      rel=[('owner.username', 'owner')])
+                                      rel=rels)
                           for s in scripts],
                          key=lambda s: (s['mime_type'], s['name']))
         return O.contents(folders=folders, scripts=scripts,

@@ -102,6 +102,10 @@ class Workflows(HookController):
         new_content = flatten_workflow(workflow)
         path = '/'.join(args)
         script = Script.find(request, path).one()
+        if kwargs.get('new_name'):
+            if not Script.valid_name(kwargs['new_name']):
+                return O.error(msg="Invalid script name")
+            script.name = kwargs['new_name']
         rev = Revision(content='\n'.join(new_content), script_id=script.id)
         request.db.add(rev)
 
