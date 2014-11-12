@@ -68,7 +68,8 @@ class Auth(HookController):
         return O.login(user=username,
                        token=token.value,
                        expire=token.expires_at,
-                       org=user.org.name)
+                       org=user.org.name,
+                       perms=permissions)
 
     @expose('json')
     def logout(self):
