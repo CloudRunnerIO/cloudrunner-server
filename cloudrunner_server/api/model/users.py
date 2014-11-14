@@ -17,7 +17,7 @@ from sqlalchemy.sql.expression import func
 from sqlalchemy import (
     Table, Column, Boolean, Integer, String, Text, DateTime,
     ForeignKey, UniqueConstraint, Enum)
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, backref
 import uuid
 
 from .base import TableBase
@@ -161,3 +161,32 @@ class Token(TableBase):
     expires_at = Column(DateTime)
     value = Column(String(TOKEN_LENGTH), default=random_token)
     scope = Column(Enum('LOGIN', 'TRIGGER', 'EXECUTE'))
+
+
+class ApiKey(TableBase):
+    __tablename__ = 'apikeys'
+
+    id = Column(Integer, primary_key=True)
+    value = Column(String(100), unique=True,
+                   default=lambda ctx: uuid.uuid4().hex)
+
+    user_id = Column(Integer, ForeignKey('users.id'))
+
+    user = relationship('User', backref="apikeys")
+
+
+class UsageTier(TableBase):
+    __tablename__ = 'usagetiers'
+
+    id = Column(Integer, primary_key=True)
+    total_repos = Column(Integer)
+    user_repos = Column(Integer)
+    external_repos = Column(Boolean)
+    nodes = Column(Integer)
+    users = Column(Integer)
+    groups = Column(Integer)
+    roles = Column(Integer)
+
+    org_id = Column(Integer, ForeignKey(Org.id))
+
+    org = relationship(Org, backref=backref("usage_tier", uselist=False))

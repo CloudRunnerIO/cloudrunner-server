@@ -15,7 +15,7 @@
 import logging
 from pecan import expose, request  # noqa
 
-from cloudrunner_server.api.model import Group, Org, User
+from cloudrunner_server.api.model import Group, Org, User, ApiKey, UsageTier
 from cloudrunner_server.api.util import JsonOutput as O
 from cloudrunner_server.api.policy.decorators import check_policy
 from cloudrunner_server.api.decorators import wrap_command
@@ -111,3 +111,34 @@ class Users(object):
             return O.error(msg="User not found")
 
         request.db.delete(user)
+
+    @expose('json', generic=True)
+    @wrap_command(ApiKey)
+    def apikeys(self, *args):
+        keys = request.db.query(ApiKey).join(User).filter(
+            User.id == request.user.id).all()
+        return O.keys([k.serialize(skip=['id', 'user_id']) for k in keys])
+
+    @apikeys.when(method='POST', template='json')
+    @apikeys.wrap_create()
+    def apikeys_create(self, *args):
+        key = ApiKey(user_id=request.user.id)
+        request.db.add(key)
+        request.db.commit()
+        return O.key(**key.serialize(skip=['id', 'user_id']))
+
+    @apikeys.when(method='DELETE', template='json')
+    @apikeys.wrap_delete()
+    def apikeys_delete(self, apikey, *args):
+        key = request.db.query(ApiKey).join(User).filter(
+            User.id == request.user.id, ApiKey.value == apikey).one()
+        request.db.delete(key)
+
+    @expose('json', generic=True)
+    @wrap_command(UsageTier)
+    def usage_quotas(self, *args):
+        tier = request.db.query(UsageTier).join(Org).filter(
+            Org.name == request.user.org).first()
+        if tier:
+            return O.limits(**tier.serialize(skip=['id', 'org_id']))
+        return O.limits()

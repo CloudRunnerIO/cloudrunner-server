@@ -215,6 +215,10 @@ class TriggerManager(Daemon):
             for i, section in enumerate(sections):
                 parts = [section.body]
                 atts = []
+                if i == 0:
+                    if section.env and section.env._items:
+                        # Pre-fill section static env
+                        env = section.env._items.update(env)
 
                 if section.args.timeout:
                     timeout = section.args.timeout[0]

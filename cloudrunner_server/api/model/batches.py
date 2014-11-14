@@ -15,29 +15,23 @@
 from sqlalchemy import (Column, Integer, String, DateTime, Text,
                         Boolean, ForeignKey, Table)
 from sqlalchemy.orm import relationship, backref
+from sqlalchemy.sql.expression import func
 from .base import TableBase
 from .library import Script
 from .users import Org
-
-
-script2batch_rel = Table('script2batch', TableBase.metadata,
-                         Column(
-                             'script_id', Integer, ForeignKey('scripts.id')),
-                         Column('batch_id', Integer, ForeignKey('batches.id'))
-                         )
 
 
 class Batch(TableBase):
     __tablename__ = 'batches'
 
     id = Column(Integer, primary_key=True)
-    created_at = Column(DateTime)
+    created_at = Column(DateTime, default=func.now())
     enabled = Column(Boolean, default=True)
     private = Column(Boolean)
 
-    scripts = relationship(Script, secondary=script2batch_rel,
-                           backref=backref("batches"))
-    conditions = relationship('Condition', backref='batch', uselist=False)
+    source_id = Column(Integer, ForeignKey(Script.id))
+
+    source = relationship(Script, backref=backref('batch', uselist=False))
 
     @staticmethod
     def visible(ctx):
@@ -46,20 +40,35 @@ class Batch(TableBase):
         )
 
 
+class ScriptStep(TableBase):
+    __tablename__ = 'scriptsteps'
+
+    id = Column(Integer, primary_key=True)
+    root = Column(Boolean)
+    as_sudo = Column(Boolean)
+    version = Column(String(40))
+
+    batch_id = Column(Integer, ForeignKey(Batch.id))
+    script_id = Column(Integer, ForeignKey(Script.id))
+
+    batch = relationship(Batch, backref=backref("scripts", cascade="delete"))
+    script = relationship(Script, backref=backref('script_steps'))
+
+
 class Condition(TableBase):
     __tablename__ = 'conditions'
 
     id = Column(Integer, primary_key=True)
     type = Column(String(50))
     arguments = Column(Text)
-    source_id = Column(Integer, ForeignKey(Script.id))
-    dest_id = Column(Integer, ForeignKey(Script.id))
-    src_version = Column(String(40))
-    dst_version = Column(String(40))
+    src_id = Column(Integer, ForeignKey(ScriptStep.id))
+    dst_id = Column(Integer, ForeignKey(ScriptStep.id))
 
     batch_id = Column(Integer, ForeignKey(Batch.id))
 
-    source = relationship(Script, backref='src_conditions',
-                          foreign_keys=[source_id])
-    destination = relationship(Script, backref='dst_conditions',
-                               foreign_keys=[dest_id])
+    source = relationship(ScriptStep, backref='src_conditions',
+                          foreign_keys=[src_id])
+    destination = relationship(ScriptStep, backref='dst_conditions',
+                               foreign_keys=[dst_id])
+    batch = relationship(Batch, backref=backref('conditions',
+                                                cascade="delete"))
