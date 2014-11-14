@@ -251,7 +251,7 @@ class Library(HookController):
                             owner=scr.owner.username,
                             content=rev.content,
                             version=rev.version,
-                            sudo=scr.allow_sudo,
+                            allow_sudo=scr.allow_sudo,
                             mime=scr.mime_type)
         else:
             return O.error(msg="Not found")
