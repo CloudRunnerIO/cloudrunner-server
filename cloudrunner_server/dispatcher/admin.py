@@ -22,7 +22,7 @@ from sqlalchemy.orm import scoped_session, sessionmaker
 from cloudrunner.core.exceptions import ConnectionError
 from cloudrunner.core.message import (ADMIN_TOWER, M, Control)
 from cloudrunner_server.util.db import checkout_listener
-from cloudrunner_server.api.model import metadata, Node, Org
+from cloudrunner_server.api.model import metadata, Node, NodeTag, Org
 from cloudrunner_server.master.functions import (CertController,
                                                  CertificateExists)
 from cloudrunner_server.plugins.auth.base import NodeVerifier
@@ -110,10 +110,11 @@ class Admin(Thread):
             return [req.node, req.data or 'ECHO']
         if req.control == 'REGISTER':
             try:
+                tags = []
                 node = Node(name=req.node, meta=json.dumps(req.meta))
                 try:
-                    valid, msg, org = self.ccont.validate_request(req.node,
-                                                                  req.data)
+                    valid, msg, org, tags = self.ccont.validate_request(
+                        req.node, req.data)
                     if not valid:
                         LOG.info("Request validation result: %s" % msg)
                 except CertificateExists, cex:
@@ -138,6 +139,11 @@ class Admin(Thread):
                 if org:
                     org_ = self.db.query(Org).filter(Org.name == org).one()
                     node.org = org_
+
+                for tag in tags:
+                    t = NodeTag(value=tag)
+                    self.db.add(t)
+                    node.tags.append(t)
 
                 if not self.ccont.can_approve(req.node):
                     node.approved = False

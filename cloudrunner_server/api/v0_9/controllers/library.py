@@ -177,7 +177,7 @@ class Library(HookController):
             return [r.version for r in sorted([item for item in lst],
                                               key=lambda x: x.created_at,
                                               reverse=True)
-                    if not r.draft]
+                    if not r.draft][-20:]  # last 20 versions
 
         def rev(lst):
             return [r.version for r in sorted([item for item in lst],
@@ -251,6 +251,7 @@ class Library(HookController):
                             owner=scr.owner.username,
                             content=rev.content,
                             version=rev.version,
+                            sudo=scr.allow_sudo,
                             mime=scr.mime_type)
         else:
             return O.error(msg="Not found")

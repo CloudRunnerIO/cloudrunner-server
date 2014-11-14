@@ -43,7 +43,8 @@ class Nodes(object):
             groups = NodeGroup.visible(request).all()
             return O.items(nodes=[n.serialize(
                 skip=['id', 'org_id'],
-                rel=[('meta', 'meta', json.loads)])
+                rel=[('meta', 'meta', json.loads),
+                     ('tags', 'tags', lambda lst: [x.value for x in lst])])
                 for n in nodes],
                 groups=[g.serialize(
                     skip=['id', 'org_id'],

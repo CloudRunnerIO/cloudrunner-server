@@ -15,7 +15,7 @@
 from sqlalchemy import (Column, Integer, String, DateTime, Boolean, Text,
                         ForeignKey, UniqueConstraint, Table)
 from sqlalchemy.sql.expression import func
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, backref
 from .base import TableBase
 from .users import Org
 
@@ -76,3 +76,13 @@ class NodeGroup(TableBase):
         return ctx.db.query(NodeGroup).join(Org).filter(
             Org.name == ctx.user.org
         )
+
+
+class NodeTag(TableBase):
+    __tablename__ = 'nodetags'
+
+    id = Column(Integer, primary_key=True)
+    value = Column(String(255))
+
+    node_id = Column(Integer, ForeignKey(Node.id))
+    node = relationship(Node, backref=backref("tags", cascade="delete"))

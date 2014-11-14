@@ -21,7 +21,7 @@ from cloudrunner_server.api.hooks.error_hook import ErrorHook
 from cloudrunner_server.api.hooks.db_hook import DbHook
 from cloudrunner_server.api.hooks.perm_hook import PermHook
 from cloudrunner_server.api.decorators import wrap_command
-from cloudrunner_server.api.model import Script, Revision
+from cloudrunner_server.api.model import Script, Revision, Folder
 from cloudrunner_server.api.util import JsonOutput as O
 from cloudrunner_server.triggers.manager import _parse_script_name
 
@@ -71,13 +71,46 @@ class Workflows(HookController):
                            include_before=include_before,
                            include_after=include_after,
                            attachments=atts,
+                           env=s.env._items,
                            timeout=s.timeout)
             data.append(section)
 
         return O.workflow(rev=revision.version, sections=data)
 
     @workflow.when(method='POST', template='json')
-    @wrap_command(Script, model_name='Workflow')
+    @workflow.wrap_create(model_name='Workflow')
+    def create(self, *args, **kwargs):
+        if not args:
+            return O.error(msg="Path not provided")
+
+        workflow = request.json['workflow']
+
+        content = flatten_workflow(workflow)
+        path = '/'.join(args)
+        full_path, _, name = path.rpartition('/')
+        if not Script.valid_name(name):
+            return O.error(msg="Invalid script name")
+
+        repo, _, folder_path = full_path.partition('/')
+        if not folder_path.startswith('/'):
+            folder_path = "/" + folder_path
+        folder_path = folder_path + "/"
+        folder = Folder.editable(request, repo, folder_path).first()
+        if not folder:
+            return O.error("Folder not found")
+        script = Script(name=name,
+                        mime_type='text/workflow',
+                        owner_id=request.user.id,
+                        folder=folder)
+        request.db.add(script)
+        request.db.commit()
+        request._model_id = script.id
+
+        rev = Revision(content='\n'.join(content), script_id=script.id)
+        request.db.add(rev)
+
+    @workflow.when(method='PATCH', template='json')
+    @workflow.wrap_update(model_name='Workflow')
     def preview(self, *args, **kwargs):
         if not args:
             return O.error(msg="Path not provided")
@@ -90,7 +123,7 @@ class Workflows(HookController):
         return O.script(path=path, content="\n".join(new_content))
 
     @workflow.when(method='PUT', template='json')
-    @wrap_command(Script, model_name='Workflow')
+    @workflow.wrap_update(model_name='Workflow')
     def save(self, *args, **kwargs):
         if not args:
             return O.error(msg="Path not provided")
@@ -114,7 +147,7 @@ class Workflows(HookController):
 def flatten_workflow(workflow, expand=False):
     new_content = []
     header = ("#! switch [%(targets)s] %(include_before)s %(include_after)s "
-              "%(attachments)s %(timeout)s")
+              "%(attachments)s %(env)s %(timeout)s")
     for section in workflow['sections']:
         targets = " ".join(section['targets'])
         timeout = section['timeout'] or ''
@@ -130,6 +163,12 @@ def flatten_workflow(workflow, expand=False):
                          for i in section.get('include_after', [])]
         attachments = ['--attach=%s' % i['path']
                        for i in section['attachments']]
+        section['env'] = {'X': "123", "Y": "@#43"}
+        if section.get("env"):
+            env = " ".join(['%s="%s"' % (k, v)
+                            for k, v in section["env"].items()])
+        else:
+            env = ""
 
         if expand:
             parts = []
@@ -155,7 +194,8 @@ def flatten_workflow(workflow, expand=False):
                                 include_before=" ".join(include_before),
                                 include_after=" ".join(include_after),
                                 attachments=" ".join(attachments),
-                                timeout=timeout)
+                                timeout=timeout,
+                                env=env)
 
         new_content.append(_header)
         if shebang_lang:

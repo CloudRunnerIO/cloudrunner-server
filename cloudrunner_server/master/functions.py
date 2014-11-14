@@ -264,10 +264,10 @@ class CertController(DbMixin):
             else:
                 ca = DEFAULT_ORG
         elif not ca:
-                messages.append((
-                    ERR, "CA is mandatory for "
-                    "signing a node"))
-                return messages, None
+            messages.append((
+                ERR, "CA is mandatory for "
+                "signing a node"))
+            return messages, None
 
         csr_file_name = os.path.join(self.ca_path, 'reqs',
                                      '.'.join([ca, node, 'csr']))
@@ -367,6 +367,7 @@ class CertController(DbMixin):
             if is_signed:
                 db_node = self.db.query(Node).join(Org).filter(
                     Node.name == node, Org.name == ca).first()
+
                 if db_node:
                     db_node.approved = True
                     db_node.approved_at = datetime.now()
@@ -428,10 +429,15 @@ class CertController(DbMixin):
         subj = csr.get_subject()
         CN = subj.CN
         ca = None
+        _tags = subj.get_entries_by_nid(m.m2.NID_givenName)
+
+        tags = [str(t.get_data()) for t in _tags]
+        for _t in _tags:
+            del _t
 
         try:
             if CN != node_id:
-                return False, 'CN is different than node ID', None
+                return False, 'CN is different than node ID', None, None
 
             if self.config.security.use_org:
                 for verifier in NodeVerifier.__subclasses__():
@@ -446,11 +452,11 @@ class CertController(DbMixin):
             else:
                 ca = DEFAULT_ORG
             if not ca:
-                return False, 'ORG cannot be determined', None
+                return False, 'ORG cannot be determined', None, None
             if not VALID_NAME.match(CN):
-                return False, 'Invalid node name', None
+                return False, 'Invalid node name', None, None
             if self.config.security.use_org and not VALID_NAME.match(ca):
-                return False, 'Invalid org name', None
+                return False, 'Invalid org name', None, None
 
             csr_file_name = os.path.join(self.ca_path, 'reqs',
                                          '.'.join([ca, node_id, 'csr']))
@@ -469,7 +475,7 @@ class CertController(DbMixin):
             del subj
             del csr
 
-        return True, CN, ca
+        return True, CN, ca, tags
 
     def _check_cert2req(self, crt_file, req):
         """

@@ -26,6 +26,7 @@ from .manage import Manage
 from .status import EntityStatus
 from .triggers import Triggers, TriggerSwitch
 from .workflows import Workflows
+from .batches import Batches
 
 from cloudrunner_server.api import VERSION
 from cloudrunner_server.api.client import redis_client as r
@@ -65,6 +66,7 @@ class RestApi(object):
     auth = Auth()
     dispatch = secure(Dispatch(), 'authorize')
     workflows = secure(Workflows(), 'authorize')
+    batches = secure(Batches(), 'authorize')
     library = secure(Library(), 'authorize')
     triggers = secure(Triggers(), 'authorize')
     logs = secure(Logs(), 'authorize')

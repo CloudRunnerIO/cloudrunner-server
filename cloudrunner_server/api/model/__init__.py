@@ -17,6 +17,7 @@ from sqlalchemy import create_engine, event
 from sqlalchemy.orm import scoped_session, sessionmaker
 
 from .base import metadata
+from .batches import *  # noqa
 from .nodes import *  # noqa
 from .users import *  # noqa
 from .library import *  # noqa

@@ -176,6 +176,8 @@ class Script(TableBase):
     folder_id = Column(Integer, ForeignKey(Folder.id))
     created_at = Column(DateTime, default=func.now())
     mime_type = Column(String(255), default="text/plain")
+    allow_sudo = Column(Boolean)
+
     owner_id = Column(Integer, ForeignKey(User.id))
 
     folder = relationship(Folder)
