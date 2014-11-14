@@ -163,7 +163,6 @@ def flatten_workflow(workflow, expand=False):
                          for i in section.get('include_after', [])]
         attachments = ['--attach=%s' % i['path']
                        for i in section['attachments']]
-        section['env'] = {'X': "123", "Y": "@#43"}
         if section.get("env"):
             env = " ".join(['%s="%s"' % (k, v)
                             for k, v in section["env"].items()])
