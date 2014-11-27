@@ -22,7 +22,8 @@ from sqlalchemy.orm import scoped_session, sessionmaker
 from cloudrunner.core.exceptions import ConnectionError
 from cloudrunner.core.message import (ADMIN_TOWER, M, Control)
 from cloudrunner_server.util.db import checkout_listener
-from cloudrunner_server.api.model import metadata, Node, NodeTag, Org
+from cloudrunner_server.api.model import (metadata, Node, NodeTag,
+                                          Org, ApiKey, User)
 from cloudrunner_server.master.functions import (CertController,
                                                  CertificateExists)
 from cloudrunner_server.plugins.auth.base import NodeVerifier
@@ -30,13 +31,14 @@ from cloudrunner_server.plugins.auth.base import NodeVerifier
 LOG = logging.getLogger('Control Tower')
 
 
-class OrgVerifier(NodeVerifier):
+class ApiKeyVerifier(NodeVerifier):
 
     def __init__(self, config):
         pass
 
     def verify(self, node, subject, **kwargs):
-        org = self.db.query(Org).filter(Org.uid == subject.OU).first()
+        org = self.db.query(Org).join(User, ApiKey).filter(
+            ApiKey.value == subject.OU).first()
         if org:
             return org.name
 
@@ -65,7 +67,7 @@ class Admin(Thread):
             # For tests: re-create tables
             metadata.create_all(engine)
         self.db = session
-        OrgVerifier.db = session
+        ApiKeyVerifier.db = session
 
     def run(self):
         # Endpoint to receive commands from nodes
@@ -132,6 +134,7 @@ class Admin(Thread):
                         self.db.commit()
                         return Control(req.node, 'APPROVED', cert_or_msg)
                     else:
+                        self.db.rollback()
                         return Control(req.node, 'REJECTED', cert_or_msg)
 
                 if not valid:

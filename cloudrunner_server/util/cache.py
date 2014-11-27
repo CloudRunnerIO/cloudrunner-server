@@ -12,13 +12,20 @@
 #  * without the express permission of CloudRunner.io
 #  *******************************************************/
 from __future__ import print_function
-from collections import Iterable, OrderedDict
+try:
+    from collections import OrderedDict
+except ImportError:
+    # python 2.6 or earlier, use backport
+    from ordereddict import OrderedDict
+from collections import Iterable
 from functools import partial
+import json
 import logging
 from contextlib import contextmanager
 import redis as r
 import re
-import time
+
+from cloudrunner.util import timestamp
 
 LOG = logging.getLogger('REDIS CACHE')
 REL_MAP_KEY = "MAPKEYS"
@@ -167,8 +174,12 @@ class RegWriter(RegBase):
         self.redis.zadd(uuid_key, self.id, ts)
 
     def notify(self, what):
-        self.redis.set(what, time.mktime(time.gmtime()))
+        self.redis.set(what, timestamp())
         # self.redis.incr(what)
+
+    def final(self, msgid=None, **kwargs):
+        msg = dict(id=msgid, **kwargs)
+        self.redis.publish("task:end", json.dumps(msg))
 
 
 class RegReader(RegBase):

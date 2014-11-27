@@ -19,7 +19,7 @@ from sqlalchemy.sql.expression import func
 from sqlalchemy import (Column, Boolean, Integer, String, DateTime,
                         ForeignKey, UniqueConstraint,
                         or_)
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, backref
 
 from cloudrunner_server.api.util import random_token
 
@@ -27,8 +27,21 @@ from .base import TableBase
 from .users import User, Org
 from .library import Revision
 
-SOURCE_TYPE = Enum('N/A', 'CRON', 'ENV', 'LOG_CONTENT', 'EXTERNAL')
+SOURCE_TYPE = Enum('N/A', 'CRON', 'EXTERNAL')
 VALID_NAME = re.compile(r"^[\w\-. ]+$")
+
+
+class TriggerType(TableBase):
+    __tablename__ = 'trigger_types'
+
+    id = Column(Integer, primary_key=True)
+    created_at = Column(DateTime, default=func.now())
+    name = Column(String(256), index=True)
+    type = Column(String(256), index=True)
+    arguments = Column(String(1000))
+
+    task_id = Column(Integer, ForeignKey('tasks.id'))
+    task = relationship('Task', backref=backref('trigger', uselist=False))
 
 
 class Job(TableBase):

@@ -1,10 +1,11 @@
 from functools import wraps
+import json
 import logging
 import redis
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import scoped_session, sessionmaker
 
-from cloudrunner.core.message import EnvBroadcast
+from cloudrunner.util import timestamp
 from cloudrunner_server.api.model import *  # noqa
 from cloudrunner_server.plugins.logs.base import LoggerPluginBase
 from cloudrunner_server.util.cache import CacheRegistry
@@ -53,18 +54,29 @@ class DbLogger(LoggerPluginBase):
         org = msg.org
         result = msg.result
         try:
-            task = self.db.query(Task).join(User, Org).filter(
-                Task.uuid == session_id,
-                Org.name == org).one()
-            task.status = LOG_STATUS.Finished
-
+            task = self.db.query(Task).join(User, Org).join(
+                Run, Task.runs).filter(
+                    Run.uuid == session_id, Org.name == org).one()
+            run = [r for r in task.runs if r.uuid == session_id][0]
             success = True
+            run.exec_end = timestamp()
+            task.exec_end = timestamp()
+            if msg.env:
+                run.env_out = json.dumps(msg.env)
             for node, ret in result.items():
                 success = success and (str(ret['ret_code']) == '0')
+                rnode = RunNode(name=node, exit_code=ret['ret_code'],
+                                as_user=ret['remote_user'], run=run)
+                self.db.add(rnode)
             if success:
-                task.exit_code = 0
+                run.exit_code = 0
             else:
-                task.exit_code = 1
+                run.exit_code = 1
+            if all([r.exit_code != -99 for r in task.runs]):
+                task.status = LOG_STATUS.Finished
+                task.exit_code = int(any([bool(r.exit_code)
+                                          for r in task.runs]))
+            self.db.add(run)
             self.db.add(task)
             self.db.commit()
         except Exception, ex:
@@ -87,22 +99,13 @@ class DbLogger(LoggerPluginBase):
                 return
             with self.cache.writer(msg.org, msg.session_id) as cache:
                 cache.store_log(msg.node, msg.ts, log, io)
-            if msg.stdout:
-                self.r.publish('output:%s' %
-                               msg.stdout, msg.session_id)
-            if msg.stderr:
-                self.r.publish('output:%s' %
-                               msg.stderr, msg.session_id)
 
         elif msg.control == "FINISHEDMESSAGE":
             self._finalize(msg)
             with self.cache.writer(msg.org, msg.session_id) as cache:
                 cache.store_meta(msg.result, msg.ts)
 
-            if msg.env:
-                for k, v in msg.env.items():
-                    pub_msg = EnvBroadcast(msg.session_id, k, v)
-                    self.r.publish('env:%s' % k, pub_msg._)
+            cache.final(msg.session_id, env=msg.env)
             cache.notify("logs")
 
         elif msg.control == "INITIALMESSAGE":

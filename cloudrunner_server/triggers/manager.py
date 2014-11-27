@@ -28,7 +28,8 @@ except ImportError:
 
 from cloudrunner import CONFIG_LOCATION, LOG_DIR
 from cloudrunner.core import parser
-from cloudrunner.core.message import Queued, DictWrapper, EnvBroadcast
+from cloudrunner.core.message import Queued, DictWrapper
+from cloudrunner.util import timestamp
 from cloudrunner.util.config import Config
 from cloudrunner.util.daemon import Daemon
 from cloudrunner.util.logconfig import configure_loggers
@@ -158,11 +159,13 @@ class TriggerManager(Daemon):
         getattr(self, action)(**kwargs)
 
     def execute(self, user_id=None, script_name=None, content=None,
-                parent_uuid=None, job=None, **kwargs):
+                parent_uuid=None, trigger=None, **kwargs):
+        LOG.info("Starting %s " % script_name)
         self._prepare_db(user_id=user_id)
         self.db.begin()
         remote_tasks = []
-        local_tasks = []
+        local_runs = []
+        batch_id = None
         ctx = self.get_user_ctx(user_id)
         try:
             tags = kwargs.get('tags', [])
@@ -187,6 +190,18 @@ class TriggerManager(Daemon):
             if env and not isinstance(env, dict):
                 kwargs['env'] = env = json.loads(env)
 
+            if script.script and script.script.mime_type == 'text/batch':
+                batch = script.script.batch
+                if not batch:
+                    return O.error("Workflow seems to be a Batch, "
+                                   "but no Batch found")
+                script_step = next((s for s in batch.scripts if s.root), None)
+                script = script_step.script
+                if not script:
+                    return O.error("Batch step points to invalid script")
+                script = _parse_script_name(ctx, script.full_path())
+                script_content = script.content
+                batch_id = batch.id
             parent = None
             parent_id = None
             if parent_uuid:
@@ -198,20 +213,40 @@ class TriggerManager(Daemon):
                 group = parent.group
             else:
                 group = TaskGroup()
+                group.batch_id = batch_id
                 self.db.add(group)
 
-            started_by_id = None
-            if job:
-                if isinstance(job, int):
-                    started_by_id = job
+            triggered_by = None
+            if trigger:
+                if isinstance(trigger, int):
+                    triggered_by = self.db.query(TriggerType).filter(
+                        TriggerType.id == trigger).first()
+                    if triggered_by:
+                        triggered_by = triggered_by[0]
+                    else:
+                        triggered_by = None
                 else:
-                    started_by_id = job.id
+                    triggered_by = trigger
             sections = parser.parse_sections(script_content)
+
             if not sections:
                 return O.error(msg="Empty script")
 
             LOG.info("Execute %s by %s" % (script_name or job,
                                            ctx.user.name))
+
+            task = Task(status=LOG_STATUS.Running,
+                        group=group,
+                        parent_id=parent_id,
+                        owner_id=ctx.user.id,
+                        revision_id=script.id,
+                        exec_start=timestamp(),
+                        timeout=timeout,
+                        trigger=triggered_by)
+            self.db.add(task)
+            for tag in tags:
+                task.tags.append(Tag(name=tag))
+
             for i, section in enumerate(sections):
                 parts = [section.body]
                 atts = []
@@ -224,51 +259,48 @@ class TriggerManager(Daemon):
                     timeout = section.args.timeout[0]
 
                 ins = 0
-                for arg, scr_name in section.args.items():
+                for arg, scr_names in section.args.items():
                     if arg == 'include-before':
-                        s = _parse_script_name(ctx, scr_name)
-                        parts.insert(ins, s.content)
-                        ins += 1
+                        for scr in scr_names:
+                            s = _parse_script_name(ctx, scr)
+                            parts.insert(ins, s.content)
+                            ins += 1
                     if arg == 'include-after':
-                        s = _parse_script_name(ctx, scr_name)
-                        parts.insert(ins, s.content)
+                        for scr in scr_names:
+                            s = _parse_script_name(ctx, scr)
+                            parts.insert(ins, s.content)
 
                 if section.args.attach:
                     atts = section.args.attach
                 remote_task = dict(attachments=atts, body="\n".join(parts))
                 if timeout:
                     remote_task['timeout'] = timeout
-                task = Task(status=LOG_STATUS.Running,
-                            group=group,
-                            started_by_id=started_by_id,
-                            parent_id=parent_id,
-                            owner_id=ctx.user.id,
-                            revision_id=script.id,
-                            lang=section.lang,
-                            step=i + 1,
-                            timeout=timeout,
-                            total_steps=len(sections),
-                            full_script=remote_task['body'],
-                            target=section.target)
                 remote_task['target'] = self._expand_target(section.target)
-                if i == 0:
-                    task.env_in = json.dumps(env)
 
-                for tag in tags:
-                    task.tags.append(Tag(name=tag))
+                run = Run(task=task,
+                          lang=section.args.lang,
+                          exec_start=timestamp(),
+                          exec_user_id=ctx.user.id,
+                          target=section.target,
+                          exit_code=-99,
+                          timeout=timeout,
+                          step_index=i,
+                          full_script=section.body,)
+                if i == 0:
+                    run.env_in = json.dumps(env)
+
                 self.db.add(task)
-                self.db.commit()
-                self.db.begin()
-                parent_id = task.id
                 remote_tasks.append(remote_task)
-                local_tasks.append(task)
+                local_runs.append(run)
+                self.db.add(run)
+
+            self.db.commit()
+            self.db.begin()
 
             if not remote_tasks:
                 self.db.rollback()
                 return
 
-            self.db.commit()
-            self.db.begin()
             msg = Master(ctx.user.name).command('dispatch',
                                                 tasks=remote_tasks,
                                                 roles=self._roles(ctx),
@@ -284,10 +316,10 @@ class TriggerManager(Daemon):
                 for tag in tags:
                     cache.associate(ctx.user.org, tag, job_id)
                 # Update
-                task = local_tasks[i]
-                task.uuid = job_id
-                self.db.add(task)
-            self.db.commit()
+                run = local_runs[i]
+                run.uuid = job_id
+            if msg.task_ids:
+                self.db.commit()
             return O.task_ids(_list=msg.task_ids)
 
         except Exception, ex:
@@ -327,6 +359,7 @@ class TriggerManager(Daemon):
             task.uuid = msg.task_ids[0]
             self.db.add(task)
             self.db.commit()
+            self.db.begin()
 
         except Exception, ex:
             LOG.exception(ex)
@@ -356,10 +389,7 @@ class TriggerManager(Daemon):
 
         for job in jobs:
             pattern = None
-            if job.source == SOURCE_TYPE.ENV:
-                pattern = "env:%s" % job.arguments
-            elif job.source == SOURCE_TYPE.LOG_CONTENT:
-                pattern = "output:%s" % job.arguments
+            pubsub.psubscribe("task:*")
             if pattern:
                 patterns[job.id] = pattern
                 pubsub.psubscribe(pattern)
@@ -379,10 +409,6 @@ class TriggerManager(Daemon):
                                 Job.id == job_id).first()
                             if job:
                                 pattern = None
-                                if job.source == SOURCE_TYPE.ENV:
-                                    pattern = "env:%s" % job.arguments
-                                elif job.source == SOURCE_TYPE.LOG_CONTENT:
-                                    pattern = "output:%s" % job.arguments
                                 if pattern:
                                     patterns[job.id] = pattern
                                     pubsub.psubscribe(pattern)
@@ -403,22 +429,46 @@ class TriggerManager(Daemon):
                             if pattern:
                                 pubsub.punsubscribe(pattern)
                     # Processing triggers
-                    elif target == 'output':
-                        job_ids = [job_id for job_id, pat in patterns.items()
-                                   if pat == item['pattern']]
-                        if job_ids:
-                            uuid = item['data']
-                            self._process(job_ids, target, action, uuid)
-                    elif target == 'env':
-                        job_ids = [job_id for job_id, pat in patterns.items()
-                                   if pat == item['pattern']]
-                        if job_ids:
-                            msg = EnvBroadcast.build(item['data'])
-                            if not msg:
+                    elif target == 'task':
+                        job_data = json.loads(item['data'])
+                        kwargs['env'] = job_data.get('env', {})
+                        task = self.db.query(Task).join(Run).filter(
+                            Run.uuid == job_data['id']).first()
+                        if (not task or not task.group.batch or
+                                task.status != LOG_STATUS.Finished):
+                                # Intermediate step - skip
+                            continue
+                        src_script_step = [
+                            s for s in task.group.batch.scripts
+                            if s.script == task.script_content.script]
+                        conditions = [c for c in task.group.batch.conditions
+                                      if c.source in src_script_step]
+                        passed = [c for c in conditions
+                                  if c.evaluate(job_data)]
+                        seen = []
+                        for p in passed:
+                            script_name = p.destination.script.full_path()
+                            if p.destination.version:
+                                script_name = "%s@%s" % (script_name,
+                                                         p.destination.version)
+                            if p.destination.id in seen:
                                 continue
-                            self._process(job_ids, target, action,
-                                          msg.session_id,
-                                          env={msg.key: msg.value})
+                            seen.append(p.destination.id)
+                            trigger = TriggerType(
+                                name="Internal",
+                                type=p.type,
+                                arguments=p.arguments)
+                            self.db.begin()
+                            self.db.add(trigger)
+                            self.db.commit()
+                            job_uuid = self.execute(
+                                user_id=task.owner.id,
+                                script_name=script_name,
+                                parent_uuid=task.uuid,
+                                trigger=trigger,
+                                **kwargs)
+                            LOG.info("Executed %s/%s" % (
+                                job_uuid, script_name))
                     else:
                         LOG.warn("Unrecognized pattern: %s" % item['pattern'])
             except Exception, ex:
@@ -426,33 +476,6 @@ class TriggerManager(Daemon):
             except KeyboardInterrupt:
                 break
         LOG.info('Exited main thread')
-
-    def _process(self, job_ids, target, action, uuid, env=None):
-        LOG.info('Processing event[%s:%s] from %s, triggered jobs: %s' % (
-            target, action, uuid, job_ids))
-
-        try:
-            task = self.db.query(Task).filter(Task.uuid == uuid).one()
-            group = task.group
-            jobs = self.db.query(Job).filter(Job.id.in_(job_ids)).all()
-            for job in jobs:
-
-                if task.started_by and filter(lambda t: t.started_by == job,
-                                              group.tasks):
-                    # LOG.warn("Circular invocation of Trigger: %s" % job.name)
-                    continue
-                ctx = self.get_user_ctx(job.owner_id)
-                kwargs = {'env': env}
-                if task.owner_id == job.owner_id:
-                    # Allow env passing
-                    kwargs['pass_env'] = True
-                job_uuid = self.execute(
-                    user_id=ctx.user.id,
-                    script_name=job.target_path,
-                    parent_uuid=uuid, job=job, **kwargs)
-                LOG.info("Executed %s/%s" % (job_uuid, job.target_path))
-        except Exception, ex:
-            LOG.exception(ex)
 
 
 def _parse_script_name(ctx, path):

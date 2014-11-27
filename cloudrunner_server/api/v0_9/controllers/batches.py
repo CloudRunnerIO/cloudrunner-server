@@ -82,7 +82,8 @@ class Batches(HookController):
                         batch=batch_obj)
         request.db.add(script)
         request.db.commit()
-        rev = Revision(content=json.dumps(batch), script_id=script.id)
+        rev = Revision(content=json.dumps(batch, indent=4),
+                       script_id=script.id)
         request.db.add(rev)
 
         if batch_obj.warnings:
@@ -119,7 +120,8 @@ class Batches(HookController):
         if script.batch:
             request.db.delete(script.batch)
         script.batch = batch_obj
-        rev = Revision(content=json.dumps(batch), script_id=script.id)
+        rev = Revision(content=json.dumps(batch, indent=2),
+                       script_id=script.id)
         request.db.add(rev)
 
         if batch_obj.warnings:

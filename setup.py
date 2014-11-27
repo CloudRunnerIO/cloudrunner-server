@@ -14,18 +14,22 @@
 
 import sys
 
+common = []
+
 if sys.version_info < (2, 7):
     # 2.6 fix for unit tests
     # http://bugs.python.org/issue15881#msg170215
     import multiprocessing  # noqa
+    common = ['ordereddict']
 
 from distutils.core import setup
 from setuptools import find_packages
 
 from cloudrunner_server.version import VERSION
 
-common = ['cloudrunner>=1.0', 'pecan', 'pytz', 'pyzmq',
-          'sqlalchemy', 'httplib2', 'M2Crypto', 'redis', 'msgpack-python']
+common = common + ['cloudrunner>=1.0', 'pecan', 'pytz', 'pyzmq',
+                   'sqlalchemy', 'httplib2', 'M2Crypto', 'redis',
+                   'msgpack-python']
 requirements = common + ['python-crontab']
 test_requirements = common + ['nose>=1.0', 'mock', 'coverage', 'flake8']
 
@@ -73,4 +77,3 @@ setup(
         'Topic :: Software Development :: Libraries :: Python Modules',
     ],
 )
-

@@ -13,7 +13,7 @@
 #  *******************************************************/
 
 from sqlalchemy import (Column, Integer, String, DateTime, Text,
-                        Boolean, ForeignKey, Table)
+                        Boolean, ForeignKey)
 from sqlalchemy.orm import relationship, backref
 from sqlalchemy.sql.expression import func
 from .base import TableBase
@@ -72,3 +72,6 @@ class Condition(TableBase):
                                foreign_keys=[dst_id])
     batch = relationship(Batch, backref=backref('conditions',
                                                 cascade="delete"))
+
+    def evaluate(self, ctx):
+        return True

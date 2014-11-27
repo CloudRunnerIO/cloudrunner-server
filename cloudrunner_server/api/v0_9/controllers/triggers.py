@@ -168,14 +168,6 @@ class Triggers(HookController):
             kw['tags'] = ",".join([urllib.quote(t) for t in tags])
             success, res = schedule_manager.add(request.user.username,
                                                 name, args, url % kw)
-        elif source == SOURCE_TYPE.ENV:
-            # ENV
-            # Regiter at publisher
-            pass
-        elif source == SOURCE_TYPE.LOG_CONTENT:
-            # LOG
-            # Regiter at publisher
-            pass
         elif source == SOURCE_TYPE.EXTERNAL:
             # EXTERNAL
             tags.extend(["External", "Trigger", name])
@@ -365,14 +357,6 @@ class Triggers(HookController):
                     # CRON
                     success, res = schedule_manager.delete(
                         user=request.user.username, name=job.name)
-                elif job.source == SOURCE_TYPE.ENV:
-                    # ENV
-                    # Regiter at publisher
-                    pass
-                elif job.source == SOURCE_TYPE.LOG_CONTENT:
-                    # LOG
-                    # Regiter at publisher
-                    pass
                 elif job.source == SOURCE_TYPE.EXTERNAL:
                     # EXTERNAL
                     pass

@@ -29,6 +29,7 @@ from cloudrunner.core.message import (M, Ready, StdOut, StdErr, FileExport,
                                       FinishedMessage,
                                       SafeDictWrapper)
 from cloudrunner.core.message import StatusCodes
+from cloudrunner.util import timestamp
 from cloudrunner.util.string import stringify
 from cloudrunner.util.string import stringify1
 
@@ -66,7 +67,7 @@ class JobSession(Thread):
         self.env = {}
 
     def _reply(self, message):
-        seq = int(time.mktime(time.gmtime()))
+        seq = timestamp()
         message.seq_no = seq
         self.job_done.send(message._)
 
@@ -435,7 +436,7 @@ class JobSession(Thread):
                                 for k, n in node_map.items()], file_exports
 
     def _create_ts(self):
-        ts = time.mktime(time.gmtime())
+        ts = timestamp()
         millis = round(time.time() % 1, 3)
         ts += millis
         return ts
