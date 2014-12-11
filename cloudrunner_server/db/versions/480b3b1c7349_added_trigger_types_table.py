@@ -26,7 +26,10 @@ def upgrade():
     )
     op.create_index(op.f('ix_trigger_types_name'), 'trigger_types', ['name'], unique=False)
     op.create_index(op.f('ix_trigger_types_type'), 'trigger_types', ['type'], unique=False)
-    op.drop_column(u'tasks', 'started_by_id')
+    try:
+        op.drop_column(u'tasks', 'started_by_id')
+    except:
+        pass
     ### end Alembic commands ###
 
 

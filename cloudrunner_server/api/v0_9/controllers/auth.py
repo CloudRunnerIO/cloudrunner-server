@@ -14,9 +14,11 @@
 
 import logging
 import time
-from pecan import expose, request
+from pecan import conf, expose, request
 from pecan.hooks import HookController
+from sqlalchemy.exc import IntegrityError
 
+from cloudrunner_server.api.decorators import wrap_command
 from cloudrunner_server.api.hooks.db_hook import DbHook
 from cloudrunner_server.api.hooks.error_hook import ErrorHook
 from cloudrunner_server.api.util import JsonOutput as O
@@ -97,3 +99,19 @@ class Auth(HookController):
                 # Remove expired tokens
                 r.zremrangebyscore(key, 0, ts_now)
         return O.error(msg="Cannot logout")
+
+    @expose('json')
+    @wrap_command(User, method='create')
+    def register(self, username=None, password=None, email=None):
+        user = User(username=username, password=password, email=email,
+                    active=bool(getattr(conf, "auto_register", False)))
+
+        request.db.add(user)
+        try:
+            request.db.commit()
+        except IntegrityError, ierr:
+            print ierr.orig, type(ierr)
+            request.db.rollback()
+            return O.error(msg="Duplicate", reason="duplicate")
+        except:
+            raise

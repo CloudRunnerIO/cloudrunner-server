@@ -19,8 +19,8 @@ def upgrade():
     op.drop_column('nodes', 'key_file')
     op.drop_column('nodes', 'cert_file')
     op.drop_column('nodes', 'csr_subject')
-    op.drop_constraint(u'cert_file', 'nodes', type_='unique')
-    op.drop_constraint(u'key_file', 'nodes', type_='unique')
+    #op.drop_constraint(u'cert_file', 'nodes', type_='unique')
+    #op.drop_constraint(u'key_file', 'nodes', type_='unique')
     ### end Alembic commands ###
 
 

@@ -63,7 +63,8 @@ class Batches(HookController):
         repo, _, folder_path = full_path.partition('/')
         if not folder_path.startswith('/'):
             folder_path = "/" + folder_path
-        folder_path = folder_path + "/"
+        if folder_path != "/":
+            folder_path = folder_path + "/"
         folder = Folder.editable(request, repo, folder_path).first()
 
         if not folder:

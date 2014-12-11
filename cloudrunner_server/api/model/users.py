@@ -49,7 +49,7 @@ class User(TableBase):
     username = Column(String(100), unique=True)
     first_name = Column(String(100))
     last_name = Column(String(100))
-    email = Column(String(100))
+    email = Column(String(100), unique=True)
     position = Column(String(100))
     department = Column(String(100))
     password = Column(String(128))

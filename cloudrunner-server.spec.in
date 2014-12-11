@@ -105,8 +105,13 @@ rm -rf %{buildroot}
 
 %post
 if [ -n "$(command -v alembic)" ]; then
+	VER=$(alembic current --head-only 2>&1 | tail -1)
 	cd %{python_sitelib}/cloudrunner_server/db/
-	alembic upgrade head || echo "DB upgrade failed"
+	if [ "$VER" == "None" ]; then
+		 %{__python} create_new.py
+	else
+		alembic upgrade head || echo "DB upgrade failed"
+	fi
 fi
 
 %postun
