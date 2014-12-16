@@ -171,9 +171,8 @@ class Auth(HookController):
             raise
         # send validation email
 
-        ACTION_URL = "%s/index.html#activate&org=%s&key=%s" % (
-            conf.DASH_SERVER_URL.rstrip('/'),
-            org.uid, key.value)
+        ACTION_URL = "%s/index.html#activate/%s" % (
+            conf.DASH_SERVER_URL.rstrip('/'), key.value)
         html = render('email/activate.html',
                       dict(ACTION_URL=ACTION_URL))
         requests.post(
@@ -188,15 +187,21 @@ class Auth(HookController):
 
     @expose('json')
     @wrap_command(User, method='create', model_name='Account')
-    def verify(self, org=None, key=None, **kwargs):
+    def activate(self, **kwargs):
         if request.method != "POST":
             return O.none()
+        if not kwargs:
+            kwargs = request.json
+        key = kwargs['code']
         user = request.db.query(User).join(Org, ApiKey).filter(
-            Org.uid == org, ApiKey.value == key).one()
+            ApiKey.value == key).one()
         user.active = True
         api_key = request.db.query(ApiKey).filter(ApiKey.value == key).one()
+        new_key = ApiKey(user=user)
+
         request.db.delete(api_key)
         request.db.add(user)
+        request.db.add(new_key)
 
     @expose('json')
     @wrap_command(User, method='update', model_name='Password')
