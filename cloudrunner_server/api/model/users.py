@@ -61,7 +61,7 @@ class User(TableBase):
 
     org_id = Column(Integer, ForeignKey('organizations.id'))
 
-    org = relationship('Org')
+    org = relationship('Org', backref=backref('users', cascade="delete"))
     permissions = relationship('Permission')
     roles = relationship('Role')
     tokens = relationship('Token', backref='user')
@@ -157,8 +157,9 @@ class Group(TableBase):
     org_id = Column(Integer, ForeignKey('organizations.id'))
     name = Column(String(100))
 
-    org = relationship('Org')
-    users = relationship('User', secondary=user2group_rel, backref="groups")
+    org = relationship('Org', backref=backref("groups", cascade="delete"))
+    users = relationship('User', secondary=user2group_rel,
+                         backref=backref("groups"))
 
     @staticmethod
     def visible(ctx):
