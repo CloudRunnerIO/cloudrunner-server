@@ -98,9 +98,6 @@ def install():
     config.update('General', 'auth_pass', admin_pass)
     config.reload()
 
-    if not config.security.use_org:
-        print "WARNING: Security::use_org is not set!"
-
     print "Keystone configuration completed"
 
 if __name__ == '__main__':

@@ -41,7 +41,7 @@ class Nodes(object):
         else:
             nodes = Node.visible(request).all()
             groups = NodeGroup.visible(request).all()
-            return O.items(nodes=[n.serialize(
+            return O._anon(nodes=[n.serialize(
                 skip=['id', 'org_id'],
                 rel=[('meta', 'meta', json.loads),
                      ('tags', 'tags', lambda lst: [x.value for x in lst])])
@@ -49,7 +49,8 @@ class Nodes(object):
                 groups=[g.serialize(
                     skip=['id', 'org_id'],
                     rel=[('nodes', 'members', _serialize)]
-                ) for g in groups])
+                ) for g in groups],
+                quota=dict(allowed=request.tier.nodes))
 
     @expose('json', generic=True)
     @check_policy('is_admin')

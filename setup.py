@@ -29,7 +29,7 @@ from cloudrunner_server.version import VERSION
 
 common = common + ['cloudrunner>=1.0', 'pecan', 'pytz', 'pyzmq',
                    'sqlalchemy', 'httplib2', 'M2Crypto', 'redis',
-                   'msgpack-python']
+                   'msgpack-python', 'requests']
 requirements = common + ['python-crontab']
 test_requirements = common + ['nose>=1.0', 'mock', 'coverage', 'flake8']
 

@@ -18,6 +18,7 @@ from sqlalchemy.exc import IntegrityError
 from pecan import request, response, core
 
 from cloudrunner_server.api.util import JsonOutput as O
+from cloudrunner_server.api.model.base import QuotaExceeded
 
 LOG = logging.getLogger()
 
@@ -98,6 +99,12 @@ def wrap_command(model=None, model_name=None, method=None, key_error=None,
                     # generic
                     msg = "Duplicate entry into database. Check data"
                 return O.error(msg=msg, reason='duplicate')
+
+            except QuotaExceeded, qe:
+                request.db.rollback()
+                if generic_error and callable(generic_error):
+                    return generic_error(qe)
+                return O.error(msg=qe.msg, model=qe.model)
 
             except core.exc.HTTPNotModified:
                 raise

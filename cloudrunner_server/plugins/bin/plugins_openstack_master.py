@@ -25,8 +25,6 @@ def install():
     config.update('Plugins', 'openstack',
                   'cloudrunner_server.plugins.auth.openstack_verifier')
     config.reload()
-    if not config.security.use_org:
-        print "WARNING: Security::use_org is not set!"
 
     print "Cloudrunner OpenStack configuration completed"
 

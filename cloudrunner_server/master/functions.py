@@ -29,7 +29,7 @@ import time
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import scoped_session, sessionmaker
 
-from cloudrunner.core.message import DEFAULT_ORG, TOKEN_SEPARATOR
+from cloudrunner.core.message import TOKEN_SEPARATOR
 from cloudrunner_server.plugins.auth.base import NodeVerifier
 from cloudrunner_server.api.model import *  # noqa
 from cloudrunner_server.util.db import checkout_listener
@@ -168,10 +168,7 @@ class CertController(DbMixin):
                 try:
                     csr = m.X509.load_request(os.path.join(_dir, req))
                     subj = csr.get_subject()
-                    if self.config.security.use_org and subj.OU:
-                        yield DATA, "%-40s %s" % (subj.CN, subj.OU)
-                    else:
-                        yield DATA, subj.CN
+                    yield DATA, "%-40s %s" % (subj.CN, subj.OU)
                     total_cnt += 1
                 except:
                     pass
@@ -192,10 +189,7 @@ class CertController(DbMixin):
                     if not node:
                         node = org
                         org = ''
-                    if self.config.security.use_org:
-                        yield DATA, "%-40s %s" % (node, org)
-                    else:
-                        yield DATA, node
+                    yield DATA, "%-40s %s" % (node, org)
                     total_cnt += 1
                 except Exception, ee:
                     print ee
@@ -256,14 +250,7 @@ class CertController(DbMixin):
 
         ca = kwargs.get('ca', None)
 
-        if not self.config.security.use_org:
-            if ca:
-                messages.append((
-                    ERR, "Although CA value is passed, "
-                    "it will be skipped for No-org setup."))
-            else:
-                ca = DEFAULT_ORG
-        elif not ca:
+        if not ca:
             messages.append((
                 ERR, "CA is mandatory for "
                 "signing a node"))
@@ -439,23 +426,20 @@ class CertController(DbMixin):
             if CN != node_id:
                 return False, 'CN is different than node ID', None, None
 
-            if self.config.security.use_org:
-                for verifier in NodeVerifier.__subclasses__():
-                    try:
-                        ca = verifier(
-                            self.config).verify(node_id, subj)
-                        if ca:
-                            break
-                    except Exception, ex:
-                        LOG.exception(ex)
-                        pass
-            else:
-                ca = DEFAULT_ORG
+            for verifier in NodeVerifier.__subclasses__():
+                try:
+                    ca = verifier(
+                        self.config).verify(node_id, subj)
+                    if ca:
+                        break
+                except Exception, ex:
+                    LOG.exception(ex)
+                    pass
             if not ca:
                 return False, 'ORG cannot be determined', None, None
             if not VALID_NAME.match(CN):
                 return False, 'Invalid node name', None, None
-            if self.config.security.use_org and not VALID_NAME.match(ca):
+            if not VALID_NAME.match(ca):
                 return False, 'Invalid org name', None, None
 
             csr_file_name = os.path.join(self.ca_path, 'reqs',
@@ -494,10 +478,7 @@ class CertController(DbMixin):
             crt = m.X509.load_cert(crt_file)
             subj = crt.get_subject()
             if req.verify(crt.get_pubkey()):
-                if self.config.security.use_org:
-                    return subj.O, subj.CN, crt.get_serial_number()
-                else:
-                    return 'DEFAULT', subj.CN, crt.get_serial_number()
+                return subj.O, subj.CN, crt.get_serial_number()
             else:
                 return False, None, None
         except Exception, ex:
@@ -562,20 +543,14 @@ class CertController(DbMixin):
     @yield_wrap
     def revoke(self, nodes, **kwargs):
         ca = kwargs.get('ca')
-        if self.config.security.use_org and not ca:
+        if not ca:
             yield ERR, "ORG param is required to revoke"
             return
-        if not ca:
-            ca = DEFAULT_ORG
         if not isinstance(nodes, (list, tuple)):
             nodes = [nodes]
         for node in nodes:
             try:
-                if ca:
-                    yield TAG, "Revoking certificate for %s:%s" % (ca, node)
-                else:
-                    ca = DEFAULT_ORG
-                    yield TAG, "Revoking certificate for ", node
+                yield TAG, "Revoking certificate for %s:%s" % (ca, node)
 
                 cert_fn = os.path.join(
                     self.ca_path, 'nodes', '%s.%s.crt' % (ca, node))
@@ -612,13 +587,10 @@ class CertController(DbMixin):
         for node in nodes:
             try:
                 ca = kwargs.get('ca')
-                if self.config.security.use_org and not ca:
+                if not ca:
                     yield ERR, "OEG param is required to revoke"
                     return
-                if ca:
-                    yield TAG, "Clearing requests for %s:%s" % (ca, node)
-                else:
-                    yield TAG, "Clearing requests for ", node
+                yield TAG, "Clearing requests for %s:%s" % (ca, node)
 
                 req_fn = os.path.join(
                     self.ca_path, 'reqs', '%s.%s.csr' % (ca, node))
@@ -1022,13 +994,6 @@ class ConfigController(object):
         self.config.update('Security', 'cert_pass', cert_password)
         self.config.reload()
 
-        if not self.config.security.use_org:
-            yield TAG, "Creating DEFAULT Organization"
-            try:
-                CertController(self.config).create_ca(DEFAULT_ORG)
-            except Exception, ex:
-                yield ERR, ex
-
         yield TAG, "IMPORTANT !!! READ CAREFULLY !!!"
         yield NOTE, 'Keep your CA key file(%s) in a secure place. ' \
             'It is needed to sign node certificates and to reissue ' \
@@ -1139,7 +1104,7 @@ class UserController(DbMixin):
         orgs = self.db.query(Org).all()
         yield DATA, [(o.name,
                       'Active' if o.active else 'Inactive',
-                      o.uid) for o in orgs]
+                      o.uid, o.tier.name) for o in orgs]
 
     @yield_wrap
     def permissions(self, username, **kwargs):
@@ -1161,11 +1126,20 @@ class UserController(DbMixin):
         yield DATA, 'Added with id: %s' % user.id
 
     @yield_wrap
-    def create_org(self, name, **kwargs):
-        org = Org(name=name)
+    def create_org(self, name, tier, **kwargs):
+        tier = self.db.query(UsageTier).filter(UsageTier.name == tier).one()
+        org = Org(name=name, tier=tier)
         self.db.add(org)
         self.db.commit()
         yield DATA, "Added"
+
+    @yield_wrap
+    def assign_tier(self, name, tier, **kwargs):
+        tier = self.db.query(UsageTier).filter(UsageTier.name == tier).one()
+        org = self.db.query(Org).filter(Org.name == name).one()
+        org.tier = tier
+        self.db.add(org)
+        self.db.commit()
 
     @yield_wrap
     def activate_org(self, name, **kwargs):
@@ -1240,3 +1214,34 @@ class UserController(DbMixin):
                 break
         else:
             yield DATA, "No permissions for user"
+
+
+class TierController(DbMixin):
+
+    def __init__(self, config, to_print=True):
+        self.set_context_from_config(config)
+
+    @yield_wrap
+    def list(self, **kwargs):
+        tiers = self.db.query(UsageTier).all()
+        yield DATA, [t.serialize() for t in tiers]
+
+    @yield_wrap
+    def create(self, **kwargs):
+        tier = UsageTier(**kwargs)
+        self.db.add(tier)
+        self.db.commit()
+        yield DATA, "Added"
+
+    @yield_wrap
+    def remove(self, name, **kwargs):
+        tier = self.db.query(UsageTier).filter(
+            UsageTier.name == name).first()
+        if not tier:
+            yield ERR, "Tier not found"
+            return
+
+        self.db.delete(tier)
+        self.db.commit()
+
+        yield DATA, "Removed"

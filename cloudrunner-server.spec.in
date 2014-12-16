@@ -32,6 +32,7 @@ Requires:      python-setuptools
 Requires:      cloudrunner >= 1.0
 Requires:      python-crontab
 Requires:      python-redis
+Requires:      python-requests
 Requires:      python-sqlalchemy >= 0.7
 Requires:      pytz
 Requires:      python-pecan

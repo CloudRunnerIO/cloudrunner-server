@@ -40,9 +40,10 @@ class Roles(object):
 
         map(append_roles, [group.roles for group in user.groups])
         roles.extend(user.roles)
-        return O.roles(_list=[r.serialize(
+        return O.roles(roles=[r.serialize(
             skip=['id', 'group_id', 'user_id'],
-            rel=([('group.name', 'group')])) for r in roles])
+            rel=([('group.name', 'group')])) for r in roles],
+            quota=dict(allowed=request.tier.roles))
 
     @check_policy('is_admin')
     @roles.when(method='POST', template='json')

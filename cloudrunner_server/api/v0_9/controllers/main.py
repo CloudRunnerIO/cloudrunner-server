@@ -33,6 +33,7 @@ from cloudrunner_server.api.client import redis_client as r
 from cloudrunner_server.api.util import (REDIS_AUTH_USER,
                                          REDIS_AUTH_TOKEN,
                                          REDIS_AUTH_PERMS,
+                                         REDIS_AUTH_TIER,
                                          Wrap)
 
 
@@ -51,11 +52,13 @@ class RestApi(object):
 
             user_info = r.hgetall(REDIS_AUTH_USER % username)
             permissions = r.smembers(REDIS_AUTH_PERMS % username)
+            tier_info = r.hgetall(REDIS_AUTH_TIER % username)
             request.user = Wrap(id=user_info['uid'],
                                 username=username,
                                 org=user_info['org'],
                                 token=token,
                                 permissions=permissions)
+            request.tier = Wrap(**tier_info)
             return True
         return False
 

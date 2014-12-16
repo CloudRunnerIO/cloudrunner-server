@@ -15,7 +15,7 @@
 import logging
 from pecan import expose, request  # noqa
 
-from cloudrunner_server.api.model import Group, Org, User, ApiKey, UsageTier
+from cloudrunner_server.api.model import Group, Org, User, ApiKey
 from cloudrunner_server.api.util import JsonOutput as O
 from cloudrunner_server.api.policy.decorators import check_policy
 from cloudrunner_server.api.decorators import wrap_command
@@ -42,7 +42,7 @@ class Users(object):
                 skip=['id', 'org_id', 'password'],
                 rel=[('groups.name', 'groups')])
                 for u in User.visible(request).all()]
-            return O.users(_list=users)
+            return O._anon(users=users, quota=dict(allowed=request.tier.users))
 
     @users.when(method='POST', template='json')
     @check_policy('is_admin')
@@ -133,12 +133,3 @@ class Users(object):
         key = request.db.query(ApiKey).join(User).filter(
             User.id == request.user.id, ApiKey.value == apikey).one()
         request.db.delete(key)
-
-    @expose('json', generic=True)
-    @wrap_command(UsageTier)
-    def usage_quotas(self, *args):
-        tier = request.db.query(UsageTier).join(Org).filter(
-            Org.name == request.user.org).first()
-        if tier:
-            return O.limits(**tier.serialize(skip=['id', 'org_id']))
-        return O.limits()

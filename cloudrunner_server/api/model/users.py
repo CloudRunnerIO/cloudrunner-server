@@ -16,7 +16,7 @@ from datetime import datetime, timedelta
 from sqlalchemy.sql.expression import func
 from sqlalchemy import (
     Table, Column, Boolean, Integer, String, Text, DateTime,
-    ForeignKey, UniqueConstraint, Enum)
+    ForeignKey, UniqueConstraint, Enum, event, select, distinct)
 from sqlalchemy.orm import relationship, backref
 import uuid
 
@@ -24,6 +24,7 @@ from .base import TableBase
 
 from cloudrunner.util.crypto import hash_token
 from cloudrunner_server.api.util import random_token
+from cloudrunner_server.api.model.base import QuotaExceeded
 
 TOKEN_LENGTH = 64
 
@@ -39,6 +40,9 @@ class Org(TableBase):
     cert_ca = Column(Text)
     cert_key = Column(Text)
     active = Column(Boolean)
+    tier_id = Column(Integer, ForeignKey('usagetiers.id'), nullable=False)
+
+    tier = relationship('UsageTier', backref=backref('orgs'))
 
 
 class User(TableBase):
@@ -96,6 +100,17 @@ class User(TableBase):
         return token
 
 
+@event.listens_for(User, 'before_insert')
+def user_before_insert(mapper, connection, target):
+    allowed = target.org.tier.users
+    current = connection.scalar(
+        select([func.count(distinct(User.id))]).where(
+            User.org_id == target.org.id))
+    if allowed <= current:
+        raise QuotaExceeded(msg="Quota exceeded(%d of %d used)" % (
+            current, allowed), model="User")
+
+
 class Permission(TableBase):
     __tablename__ = 'permissions'
     __table_args__ = (
@@ -105,6 +120,7 @@ class Permission(TableBase):
     id = Column(Integer, primary_key=True)
     name = Column(String(100))
     user_id = Column(Integer, ForeignKey('users.id'))
+    user = relationship('User')
 
 
 class Role(TableBase):
@@ -122,6 +138,7 @@ class Role(TableBase):
     as_user = Column(String(100))
     group_id = Column(Integer, ForeignKey('groups.id'))
     group = relationship('Group', backref='roles')
+    user = relationship('User')
 
 
 user2group_rel = Table('user2group', TableBase.metadata,
@@ -150,6 +167,17 @@ class Group(TableBase):
         )
 
 
+@event.listens_for(Group, 'before_insert')
+def group_before_insert(mapper, connection, target):
+    allowed = target.org.tier.groups
+    current = connection.scalar(
+        select([func.count(distinct(Group.id))]).where(
+            Group.org_id == target.org.id))
+    if allowed <= current:
+        raise QuotaExceeded(msg="Quota exceeded(%d of %d used)" % (
+            current, allowed), model="Group")
+
+
 class Token(TableBase):
     __tablename__ = 'tokens'
     __table_args__ = (
@@ -160,7 +188,7 @@ class Token(TableBase):
     user_id = Column(Integer, ForeignKey('users.id'))
     expires_at = Column(DateTime)
     value = Column(String(TOKEN_LENGTH), default=random_token)
-    scope = Column(Enum('LOGIN', 'TRIGGER', 'EXECUTE'))
+    scope = Column(Enum('LOGIN', 'TRIGGER', 'EXECUTE', 'RECOVER'))
 
 
 class ApiKey(TableBase):
@@ -179,6 +207,9 @@ class UsageTier(TableBase):
     __tablename__ = 'usagetiers'
 
     id = Column(Integer, primary_key=True)
+    name = Column(String(100))
+    title = Column(String(100))
+    description = Column(Text)
     total_repos = Column(Integer)
     user_repos = Column(Integer)
     external_repos = Column(Boolean)
@@ -186,7 +217,7 @@ class UsageTier(TableBase):
     users = Column(Integer)
     groups = Column(Integer)
     roles = Column(Integer)
-
-    org_id = Column(Integer, ForeignKey(Org.id))
-
-    org = relationship(Org, backref=backref("usage_tier", uselist=False))
+    max_timeout = Column(Integer)
+    max_concurrent_tasks = Column(Integer)
+    log_retention_days = Column(Integer)
+    cron_jobs = Column(Integer)

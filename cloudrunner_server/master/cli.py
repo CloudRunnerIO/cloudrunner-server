@@ -30,6 +30,7 @@ __PEND_NODES__ = None
 __CA__ = None
 __USERS__ = None
 __ORG__ = None
+__TIERS__ = None
 
 
 def main():
@@ -91,12 +92,11 @@ def main():
                            help='Node common names').completer = \
         _list_pending_nodes
 
-    if _eval_config().security.use_org:
-        sign_opts = cert_sign.add_mutually_exclusive_group(required=True)
-        sign_opts.add_argument('--ca', help='Node organization/Sub-CA name').\
-            completer = _list_sub_ca
-        sign_opts.add_argument('--auto', action='store_true',
-                               help='Get organization from client request')
+    sign_opts = cert_sign.add_mutually_exclusive_group(required=True)
+    sign_opts.add_argument('--ca', help='Node organization/Sub-CA name').\
+        completer = _list_sub_ca
+    sign_opts.add_argument('--auto', action='store_true',
+                           help='Get organization from client request')
 
     cert_ca = c_subcmd.add_parser('create_ca',
                                   help='Create an organization CA certificate')
@@ -123,10 +123,9 @@ def main():
     cert_revoke.add_argument('nodes', nargs="+", help='Node common names').\
         completer = _list_active_nodes
 
-    if _eval_config().security.use_org:
-        cert_revoke.add_argument('--ca', required=True,
-                                 help='Node organization/Sub-CA name').\
-            completer = _list_sub_ca
+    cert_revoke.add_argument('--ca', required=True,
+                             help='Node organization/Sub-CA name').\
+        completer = _list_sub_ca
 
     cert_revoke_ca = c_subcmd.add_parser('revoke_ca',
                                          help='Revoke existing Sub-CA')
@@ -150,9 +149,8 @@ def main():
     clear_req.add_argument('nodes', nargs="+", help='Node common names').\
         completer = _list_pending_nodes
 
-    if _eval_config().security.use_org:
-        clear_req.add_argument('--ca', help='Node organization/Sub-CA name',
-                               required=True).completer = _list_sub_ca
+    clear_req.add_argument('--ca', help='Node organization/Sub-CA name',
+                           required=True).completer = _list_sub_ca
 
     # Configure command
 
@@ -217,46 +215,66 @@ def main():
                     __USERS__.extend(u[1])
         return (c for c in __USERS__ if c.startswith(prefix))
 
-    if _eval_config().security.use_org:
-        def _list_org(prefix, parsed_args, **kwargs):
-            global __ORG__
-            if not __ORG__:
-                __ORG__ = []
-                _config = _eval_config()
-                for u in functions.UserController(_config,
-                                                  to_print=False).list_orgs():
-                    if u[0] == functions.DATA:
-                        __ORG__.extend(u[1])
-            return (c[0] for c in __ORG__ if c[0].startswith(prefix))
+    def _list_org(prefix, parsed_args, **kwargs):
+        global __ORG__
+        if not __ORG__:
+            __ORG__ = []
+            _config = _eval_config()
+            for u in functions.UserController(_config,
+                                              to_print=False).list_orgs():
+                if u[0] == functions.DATA:
+                    __ORG__.extend(u[1])
+        return (c[0] for c in __ORG__ if c[0].startswith(prefix))
 
-        orgs = commands.add_parser('org', parents=[_common],
-                                   help='Organization management')
-        orgs_actions = orgs.add_subparsers(dest='action',
-                                           help='Manage Organizations')
+    def _list_tiers(prefix, parsed_args, **kwargs):
+        global __TIERS__
+        if not __TIERS__:
+            __TIERS__ = []
+            _config = _eval_config()
+            for u in functions.TierController(_config,
+                                              to_print=False).list_tiers():
+                if u[0] == functions.DATA:
+                    __TIERS__.extend(u[1])
+        return (c[0] for c in __TIERS__ if c[0].startswith(prefix))
 
-        orgs_actions.add_parser('list',
-                                help='List all organizations')
+    orgs = commands.add_parser('org', parents=[_common],
+                               help='Organization management')
+    orgs_actions = orgs.add_subparsers(dest='action',
+                                       help='Manage Organizations')
 
-        org_add = orgs_actions.add_parser('create',
-                                          help='Create new organization')
-        org_add.add_argument('name', help='Organization name')
+    orgs_actions.add_parser('list',
+                            help='List all organizations')
 
-        org_remove = orgs_actions.add_parser('remove',
-                                             help='Remove organization/Sub-CA')
+    org_add = orgs_actions.add_parser('create',
+                                      help='Create new organization')
+    org_add.add_argument('name', help='Organization name')
+    org_add.add_argument('tier', help='Tier name')
 
-        org_remove.add_argument('name', help='Organization/Sub-CA name').\
-            completer = _list_org
+    org_remove = orgs_actions.add_parser('remove',
+                                         help='Remove organization/Sub-CA')
 
-        org_activate = orgs_actions.add_parser('activate',
-                                               help='Activate organization')
-        org_activate.add_argument('name', help='Organization name').\
-            completer = _list_org
+    org_remove.add_argument('name', help='Organization/Sub-CA name').\
+        completer = _list_org
 
-        org_deactivate = orgs_actions.add_parser(
-            'deactivate', help='Deactivate organization')
+    org_activate = orgs_actions.add_parser('activate',
+                                           help='Activate organization')
+    org_activate.add_argument('name', help='Organization name').\
+        completer = _list_org
 
-        org_deactivate.add_argument('name', help='Organization name').\
-            completer = _list_org
+    org_deactivate = orgs_actions.add_parser(
+        'deactivate', help='Deactivate organization')
+
+    org_deactivate.add_argument('name', help='Organization name').\
+        completer = _list_org
+
+    org_tier = orgs_actions.add_parser(
+        'assign_tier', help='Assign usage tier to Organization')
+
+    org_tier.add_argument('name', help='Organization name').\
+        completer = _list_org
+
+    org_tier.add_argument('tier', help='Tier name').\
+        completer = _list_tiers
 
     users = commands.add_parser('users', parents=[_common],
                                 help='User management')
@@ -273,8 +291,7 @@ def main():
 
     users_add.add_argument('username', help='User name')
     users_add.add_argument('password', help='Auth password')
-    if _eval_config().security.use_org:
-        users_add.add_argument('--org', required=True, help='Organization')
+    users_add.add_argument('--org', required=True, help='Organization')
 
     users_perm = users_actions.add_parser('add_perm',
                                           help='Create new auth permission')
@@ -303,22 +320,61 @@ def main():
 
     users_remove.add_argument('username', help='User name')
 
+    tiers = commands.add_parser('tiers', parents=[_common],
+                                help='Usage tier management')
+    tiers_actions = tiers.add_subparsers(dest='action',
+                                         help='Manage Usage Tiers')
+
+    tiers_actions.add_parser('list',
+                             help='List all usage tiers')
+
+    tier_add = tiers_actions.add_parser('create',
+                                        help='Create new usage tier')
+    tier_add.add_argument('name', help='Tier name')
+    tier_add.add_argument('title', help='Tier title')
+    tier_add.add_argument('description', help='Tier description',)
+    tier_add.add_argument('--total_repos', help='Tier total repos',
+                          required=True)
+    tier_add.add_argument('--user_repos', help='Tier user repos',
+                          required=True)
+    tier_add.add_argument('--external_repos', help='Tier external repos',
+                          required=True, action='store_true')
+    tier_add.add_argument('--nodes', help='Tier max nodes',
+                          required=True)
+    tier_add.add_argument('--users', help='Tier max users',
+                          required=True)
+    tier_add.add_argument('--groups', help='Tier max groups',
+                          required=True)
+    tier_add.add_argument('--roles', help='Tier max roles',
+                          required=True)
+    tier_add.add_argument('--max_timeout', help='Tier max timeout',
+                          required=True)
+    tier_add.add_argument('--max_concurrent_tasks', help='Tier max tasks',
+                          required=True)
+    tier_add.add_argument('--log_retention_days',
+                          help='Tier log retention days',
+                          required=True)
+    tier_add.add_argument('--cron_jobs', help='Tier cron jobs',
+                          required=True)
+
     try:
         argcomplete.autocomplete(parser)
     except:
         pass
 
     args = parser.parse_args()
-
-    action = args.action
+    kwargs = vars(args)
+    action = kwargs.pop("action")
+    controller = kwargs.pop("controller")
+    _config = kwargs.pop("config")
 
     class OrgController(object):
 
         def __init__(self, config):
             self.cont = functions.UserController(config)
 
-        def create(self, name, **kwargs):
-            return self.cont.create_org(name)
+        def create(self, name, tier, **kwargs):
+            return self.cont.create_org(name, tier)
 
         def activate(self, name, **kwargs):
             return self.cont.activate_org(name)
@@ -329,6 +385,9 @@ def main():
         def list(self, **kwargs):
             return self.cont.list_orgs()
 
+        def assign_tier(self, name, tier):
+            return self.cont.assign_tier(name, tier)
+
         def remove(self, name, **kwargs):
             return self.cont.remove_org(name)
 
@@ -336,8 +395,9 @@ def main():
                    'init': functions.ConfigController,
                    'config': functions.ConfigController,
                    'users': functions.UserController,
+                   'tiers': functions.TierController,
                    'org': OrgController}
-    config = Config(args.config or CONFIG_LOCATION)
+    config = Config(_config or CONFIG_LOCATION)
 
     printers = {
         functions.TAG: lambda *args: colors.yellow(*args, bold=1),
@@ -347,8 +407,8 @@ def main():
         functions.EMPTY: colors.blue,
     }
     try:
-        items = getattr(controllers[args.controller](config),
-                        action)(**vars(args))
+        items = getattr(controllers[controller](config),
+                        action)(**kwargs)
         if not items:
             return
         for line in items:

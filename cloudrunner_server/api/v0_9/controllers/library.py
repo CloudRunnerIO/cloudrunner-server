@@ -44,10 +44,13 @@ class Library(HookController):
     def repo(self, *args, **kwargs):
         if not args:
             repos = Repository.visible(request).all()
-            return O.repositories(_list=sorted([r.serialize(
+            return O._anon(repos=sorted([r.serialize(
                 skip=['id', 'org_id', 'owner_id'],
-                rel=[('owner.username', 'owner')]) for r in repos]),
-                key=lambda l: l['name'])
+                rel=[('owner.username', 'owner')]) for r in repos],
+                key=lambda l: l['name']),
+                quota=dict(total=request.tier.total_repos,
+                           user=request.tier.total_repos,
+                           external=request.tier.external_repos == "True"))
         else:
             repo_name = args[0]
             repo = Repository.visible(request).filter(

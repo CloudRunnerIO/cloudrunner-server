@@ -29,7 +29,6 @@ class TestCert(base.BaseDBTestCase):
         super(TestCert, cls).fixture_class()
         ccont = CertController(base.CONFIG, engine=cls.ENGINE)
         assert base.CONFIG.security.ca == '/tmp/cloudrunner-tests/ca.crt'
-        base.CONFIG.security.use_org = False
         base.CONFIG.security.auto_approve = True
         conf_ctrl = ConfigController(base.CONFIG)
         gen = conf_ctrl.create(overwrite=True)

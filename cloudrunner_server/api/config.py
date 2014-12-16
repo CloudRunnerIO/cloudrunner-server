@@ -63,6 +63,7 @@ cr_config = Config(CONFIG_LOCATION)
 schedule_manager = local_plugin_loader(cr_config.scheduler)()
 
 REST_SERVER_URL = cr_config.rest_api_url or "http://localhost/rest/"
+DASH_SERVER_URL = cr_config.dash_api_url or "http://localhost/"
 
 redis = {
     'host': 'localhost',

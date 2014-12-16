@@ -326,8 +326,7 @@ class JobSession(Thread):
                     continue
 
                 # Assert we have rep from the same organization
-                if (self.manager.config.security.use_org and
-                        job_rep.hdr.org != remote_user_map['org']):
+                if job_rep.hdr.org != remote_user_map['org']:
                     continue
 
                 state = node_map.setdefault(

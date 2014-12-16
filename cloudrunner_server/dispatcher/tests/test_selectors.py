@@ -192,7 +192,6 @@ whoami
                 self.backend = Mock()
 
                 self.config = Mock()
-                self.config.security = Mock(use_org=False)
 
         remote_user_map = {'org': 'DEFAULT', 'roles': {'*': '@'}}
 

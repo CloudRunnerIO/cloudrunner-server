@@ -212,10 +212,7 @@ class ZmqTransport(ServerTransportBackend):
 
     def _cert_changed(self, *args):
         # Reload certs
-        if self.config.security.use_org:
-            orgs = [ca[1] for ca in self.ccont.list_ca()]
-        else:
-            orgs = [DEFAULT_ORG]
+        orgs = [ca[1] for ca in self.ccont.list_ca()]
         for org in orgs:
             if org not in self.tenants:
                 LOGR.warn("Registering tenant %s" % org)
@@ -397,10 +394,7 @@ class ZmqTransport(ServerTransportBackend):
         elif msg.hdr.org not in self.tenants:
             LOGPUB.warn("Unrecognized node: %s" % msg)
         else:
-            if self.config.security.use_org:
-                LOGPUB.info("HB from %s@%s" % (msg.hdr.peer, msg.hdr.org))
-            else:
-                LOGPUB.info("HB from %s" % msg.hdr.peer)
+            LOGPUB.info("HB from %s@%s" % (msg.hdr.peer, msg.hdr.org))
 
             is_new = self.tenants[msg.hdr.org].push(msg.hdr.peer)
             if msg.control == 'HBR':
@@ -526,7 +520,7 @@ class ZmqTransport(ServerTransportBackend):
 
                     msg = M.build(packed)
                     if isinstance(msg, JobTarget):
-                        org_name = msg.hdr.org or DEFAULT_ORG
+                        org_name = msg.hdr.org
                         org_uid = translate(org_name)
                         if org_uid:
                             xpub_listener.send_multipart(
@@ -540,7 +534,7 @@ class ZmqTransport(ServerTransportBackend):
 
                     elif isinstance(msg, Fwd):
                         # Received forwarded packet?
-                        org_name = msg.hdr.org or DEFAULT_ORG
+                        org_name = msg.hdr.org
                         org_uid = translate(org_name)
                         if org_uid:
                             xpub_listener.send_multipart(
@@ -574,7 +568,7 @@ class ZmqTransport(ServerTransportBackend):
                     if not isinstance(msg, Fwd):
                         continue
                     # Received forwarded packet?
-                    org_name = msg.dest.org or DEFAULT_ORG
+                    org_name = msg.dest.org
                     org_uid = translate(org_name)
                     if org_uid:
                         xpub_listener.send_multipart(
@@ -828,9 +822,6 @@ class Router(Thread):
                 LOGR.error('NOT AUTHORIZED: %s : %r' % (msg.hdr.peer, msg))
                 return
 
-            if not self.config.security.use_org:
-                msg.hdr.org = DEFAULT_ORG
-
             LOGR.debug(
                 "Routing to: %r" % msg.route())
             router.send_multipart(msg.route())
@@ -914,17 +905,14 @@ class Router(Thread):
         threads.append(t)
         t.start()
 
-        if self.config.security.use_org:
-            verify_loc = []
-            ca_path = os.path.dirname(os.path.abspath(self.config.security.ca))
-            verify_loc.append(self.config.security.ca)
-            org_dir = os.path.join(ca_path, 'org')
-            for (dir, _, files) in os.walk(org_dir):
-                for _file in files:
-                    if _file.endswith('.ca.crt'):
-                        verify_loc.append(os.path.join(dir, _file))
-        else:
-            verify_loc = self.config.security.ca
+        verify_loc = []
+        ca_path = os.path.dirname(os.path.abspath(self.config.security.ca))
+        verify_loc.append(self.config.security.ca)
+        org_dir = os.path.join(ca_path, 'org')
+        for (dir, _, files) in os.walk(org_dir):
+            for _file in files:
+                if _file.endswith('.ca.crt'):
+                    verify_loc.append(os.path.join(dir, _file))
 
         self.master_repl = TLSZmqServerSocket(
             self.repl_sock,

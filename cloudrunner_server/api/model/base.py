@@ -19,7 +19,7 @@ from sqlalchemy.ext.declarative import declarative_base
 
 convention = {
     "ix": 'ix_%(column_0_label)s',
-    "uq": "uq_%(table_name)s_%(constraint_name)s",
+    "uq": "uq_%(table_name)s_%(column_0_name)s",
     "ck": "ck_%(table_name)s_%(column_0_name)s",
     "fk": "fk_%(table_name)s_%(column_0_name)s_%(referred_table_name)s",
     "pk": "pk_%(table_name)s"
@@ -27,7 +27,6 @@ convention = {
 
 metadata = MetaData(naming_convention=convention)
 
-metadata = MetaData()
 Base = declarative_base(metadata=metadata)
 
 
@@ -61,3 +60,11 @@ class TableBase(Base):
             else:
                 d[k] = v
         return d
+
+
+class QuotaExceeded(Exception):
+
+    def __init__(self, msg=None, model=None):
+        super(QuotaExceeded, self).__init__()
+        self.msg = msg
+        self.model = model

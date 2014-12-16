@@ -18,6 +18,7 @@ import string
 REDIS_AUTH_USER = 'X-Auth-Cached-User__%s'
 REDIS_AUTH_TOKEN = 'X-Auth-Cached-Token__%s'
 REDIS_AUTH_PERMS = 'X-Auth-Cached-Permissions__%s'
+REDIS_AUTH_TIER = 'X-Auth-Cached-Tier__%s'
 
 TOKEN_CHARS = string.letters + string.digits + '~_-'
 
@@ -30,6 +31,10 @@ class AttrGetterMeta(type):
 
 class JsonOutput(object):
     __metaclass__ = AttrGetterMeta
+
+    @staticmethod
+    def _anon(**kwargs):
+        return kwargs
 
     @staticmethod
     def _output(wrapper, *args, **kwargs):
