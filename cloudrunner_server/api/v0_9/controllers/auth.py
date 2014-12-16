@@ -51,8 +51,11 @@ class Auth(HookController):
         expire = int(kwargs.get('expire', DEFAULT_EXP))
         if not username and token:
             # Recover
-            t = request.db.query(Token).filter(Token.value == token,
-                                               Token.scope == 'RECOVER').one()
+            t = request.db.query(Token).filter(
+                Token.value == token, Token.scope == 'RECOVER').first()
+            if not t:
+                return O.error(msg="The recovery key is invalid "
+                               "or expired.")
             username = t.user.username
             t.user.set_password(password)
             request.db.add(t.user)
