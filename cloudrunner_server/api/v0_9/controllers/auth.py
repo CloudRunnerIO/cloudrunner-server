@@ -174,7 +174,7 @@ class Auth(HookController):
         ACTION_URL = "%s/index.html#activate/%s" % (
             conf.DASH_SERVER_URL.rstrip('/'), key.value)
         html = render('email/activate.html',
-                      dict(ACTION_URL=ACTION_URL))
+                      dict(ACTION_URL=ACTION_URL, KEY=key.value))
         requests.post(
             "https://api.mailgun.net/v2/cloudrunner.io/messages",
             auth=("api", "key-276qmsiyxi8z5tvie2bvxm2jhfxkhjh9"),
