@@ -117,8 +117,6 @@ class Admin(Thread):
                 try:
                     valid, msg, org, tags = self.ccont.validate_request(
                         req.node, req.data)
-                    if not valid:
-                        LOG.info("Request validation result: %s" % msg)
                 except CertificateExists, cex:
                     LOG.error("Certificate exists for node %s[%s]" % (
                         req.node, cex.org))
@@ -128,6 +126,7 @@ class Admin(Thread):
                         node = self.db.query(Node).join(Org).filter(
                             Node.name == req.node, Org.name == cex.org).one()
                         if node.approved:
+                            self.db.commit()
                             return Control(req.node, 'APPROVED', cert_or_msg)
                         node.approved = True
                         node.approved_at = datetime.now()
@@ -136,16 +135,17 @@ class Admin(Thread):
                     else:
                         self.db.rollback()
                         return Control(req.node, 'REJECTED', cert_or_msg)
-
-                if not valid:
-                    return Control(req.node, 'REJECTED', "INV_CSR")
+                else:
+                    if not valid:
+                        LOG.info("Request validation result: %s" % msg)
+                        self.db.rollback()
+                        return Control(req.node, 'REJECTED', "INV_CSR")
                 if org:
                     org_ = self.db.query(Org).filter(Org.name == org).one()
                     node.org = org_
 
                 for tag in tags:
                     t = NodeTag(value=tag)
-                    self.db.add(t)
                     node.tags.append(t)
 
                 if not self.ccont.can_approve(req.node):
