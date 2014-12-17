@@ -136,11 +136,13 @@ class Admin(Thread):
                     else:
                         self.db.rollback()
                         return Control(req.node, 'REJECTED', cert_or_msg)
-                else:
-                    if not valid:
-                        LOG.info("Request validation result: %s" % msg)
-                        self.db.rollback()
-                        return Control(req.node, 'REJECTED', "INV_CSR")
+                except Exception, ex:
+                    LOG.exception(ex)
+
+                if not valid:
+                    LOG.info("Request validation result: %s" % msg)
+                    self.db.rollback()
+                    return Control(req.node, 'REJECTED', "INV_CSR")
                 if org:
                     org_ = self.db.query(Org).filter(Org.name == org).one()
                     node.org = org_
