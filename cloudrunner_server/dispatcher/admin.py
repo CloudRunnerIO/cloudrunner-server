@@ -117,6 +117,7 @@ class Admin(Thread):
                 try:
                     valid, msg, org, tags = self.ccont.validate_request(
                         req.node, req.data)
+                    LOG.info("Validate req: %s:%s" % (org, valid))
                 except CertificateExists, cex:
                     LOG.error("Certificate exists for node %s[%s]" % (
                         req.node, cex.org))
@@ -161,11 +162,6 @@ class Admin(Thread):
                 else:
                     LOG.info("Request approved")
 
-                node.approved = approved
-                if approved:
-                    node.approved_at = datetime.now()
-                self.db.add(node)
-                self.db.commit()
                 if approved:
                     success, cert_or_msg = self.ccont.build_cert_chain(
                         req.node, org, req.data)
