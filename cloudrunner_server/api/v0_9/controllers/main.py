@@ -24,7 +24,7 @@ from .library import Library
 from .logs import Logs
 from .manage import Manage
 from .status import EntityStatus
-from .triggers import Triggers, TriggerSwitch
+from .jobs import Jobs
 from .workflows import Workflows
 from .batches import Batches
 
@@ -71,15 +71,12 @@ class RestApi(object):
     workflows = secure(Workflows(), 'authorize')
     batches = secure(Batches(), 'authorize')
     library = secure(Library(), 'authorize')
-    triggers = secure(Triggers(), 'authorize')
+    scheduler = secure(Jobs(), 'authorize')
     logs = secure(Logs(), 'authorize')
     manage = secure(Manage(), 'authorize')
 
     # SSE
     status = EntityStatus()
-
-    # SSE
-    fire = TriggerSwitch()
 
     # Docs
     html = HtmlDocs()

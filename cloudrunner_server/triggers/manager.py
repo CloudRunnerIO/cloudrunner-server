@@ -82,11 +82,8 @@ class TriggerManager(Daemon):
             'Run - start process in debug mode\n')
 
         exec_ = controllers.add_parser(
-            'execute', help='Start trigger monitoring service')
-        exec_.add_argument('script_name', help='Script name')
-        exec_.add_argument('-u', '--user_id', help='User Id', required=True)
-        exec_.add_argument('-c', '--config', help='Config file')
-        exec_.add_argument('-s', '--source_type', help='Source type')
+            'exec', help='Execute cron job')
+        exec_.add_argument('job_name', help='Job name')
         exec_.add_argument('-t', '--tags', help='Comma-separated tags')
         exec_.add_argument('-e', '--env', help='Environment')
 

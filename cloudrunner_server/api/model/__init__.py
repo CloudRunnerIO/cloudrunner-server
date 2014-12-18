@@ -22,7 +22,7 @@ from .nodes import *  # noqa
 from .users import *  # noqa
 from .library import *  # noqa
 from .tasks import *  # noqa
-from .triggers import *  # noqa
+from .jobs import *  # noqa
 
 from cloudrunner_server.util.db import checkout_listener
 
@@ -58,4 +58,3 @@ def rollback():
 def clear():
     # Session.remove()
     pass
-

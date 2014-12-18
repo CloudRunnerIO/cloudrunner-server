@@ -13,6 +13,7 @@
 #  *******************************************************/
 
 import re
+import uuid
 from sqlalchemy.sql.expression import func
 from sqlalchemy import (Column, Integer, String, DateTime, Boolean, Text,
                         ForeignKey, UniqueConstraint,
@@ -177,6 +178,7 @@ class Script(TableBase):
     created_at = Column(DateTime, default=func.now())
     mime_type = Column(String(255), default="text/plain")
     allow_sudo = Column(Boolean)
+    link_key = Column(String(50), default=lambda ctx: uuid.uuid4().hex)
 
     owner_id = Column(Integer, ForeignKey(User.id))
 

@@ -12,40 +12,20 @@
 #  * without the express permission of CloudRunner.io
 #  *******************************************************/
 
-import re
-from string import letters, digits
-from cloudrunner.util import Enum
+import uuid
 from sqlalchemy.sql.expression import func
-from sqlalchemy import (Column, Boolean, Integer, String, DateTime,
+from sqlalchemy import (Column, Boolean, Integer, String, DateTime, Text,
                         ForeignKey, UniqueConstraint,
                         or_)
 from sqlalchemy.orm import relationship, backref
-
-from cloudrunner_server.api.util import random_token
 
 from .base import TableBase
 from .users import User, Org
 from .library import Revision
 
-SOURCE_TYPE = Enum('N/A', 'CRON', 'EXTERNAL')
-VALID_NAME = re.compile(r"^[\w\-. ]+$")
-
-
-class TriggerType(TableBase):
-    __tablename__ = 'trigger_types'
-
-    id = Column(Integer, primary_key=True)
-    created_at = Column(DateTime, default=func.now())
-    name = Column(String(256), index=True)
-    type = Column(String(256), index=True)
-    arguments = Column(String(1000))
-
-    task_id = Column(Integer, ForeignKey('tasks.id'))
-    task = relationship('Task', backref=backref('trigger', uselist=False))
-
 
 class Job(TableBase):
-    __tablename__ = 'jobs'
+    __tablename__ = 'cronjobs'
     __table_args__ = (
         UniqueConstraint("name", "owner_id", name="name__owner_id"),
     )
@@ -54,20 +34,17 @@ class Job(TableBase):
     created_at = Column(DateTime, default=func.now())
     name = Column(String(256), index=True)
     enabled = Column(Boolean)
-    source = Column(Integer)
-    arguments = Column(String(1000))
-    key = Column(String(32), default=lambda:
-                 random_token(length=32,
-                              chars=letters + digits))
-    target_path = Column(String(500))
     private = Column(Boolean, default=False)
-    share_url = Column(String(500))
+    exec_period = Column(String(100))
+    params = Column(Text)
+    uid = Column(String(40), unique=True,
+                 default=lambda ctx: uuid.uuid4().hex)
 
     revision_id = Column(Integer, ForeignKey('revisions.id'))
     owner_id = Column(Integer, ForeignKey('users.id'))
 
-    content = relationship(Revision)
-    owner = relationship(User)
+    script = relationship(Revision, backref=backref("jobs"))
+    owner = relationship(User, backref=backref("jobs"))
 
     @staticmethod
     def visible(ctx):
@@ -90,7 +67,3 @@ class Job(TableBase):
         return ctx.db.query(Job).join(User).filter(
             Job.owner_id == ctx.user.id
         )
-
-    @staticmethod
-    def valid_name(name):
-        return re.match(VALID_NAME, name)

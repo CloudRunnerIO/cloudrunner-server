@@ -70,9 +70,9 @@ class CronScheduler(object):
         for cron_job in _cron:
             job = Job(cron_job)
             if filters:
-                for k, v in filters.items():
-                    if hasattr(job, k) and getattr(job, k, None) == v:
-                        jobs.append(job)
+                if all([getattr(job, k, None) == v
+                        for k, v in filters.items() if hasattr(job, k)]):
+                    jobs.append(job)
             else:
                 jobs.append(job)
 
@@ -88,7 +88,7 @@ class CronScheduler(object):
             comment = Job._prepare_job_meta(user, name)
             url = url.replace('&', '\&').replace('$', '\$').replace('%', '\%')
             url = url.replace('"', '\"')
-            cmd = 'curl "%s" >/dev/null 2>&1' % url
+            cmd = '%s >/dev/null 2>&1' % url
 
             cron = _cron.new(command=cmd, comment=comment)
             try:
