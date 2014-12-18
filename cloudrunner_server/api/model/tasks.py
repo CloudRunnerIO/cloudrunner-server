@@ -86,8 +86,7 @@ class Task(TableBase):
                     joinedload(Task.script_content).
                     joinedload(Revision.script).
                     joinedload(Script.folder).
-                    joinedload(Folder.repository),
-                    joinedload(Task.trigger)).filter(
+                    joinedload(Folder.repository)).filter(
                         Org.name == ctx.user.org)
 
     def is_visible(self, request):

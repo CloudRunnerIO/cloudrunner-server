@@ -12,7 +12,6 @@
 #  * without the express permission of CloudRunner.io
 #  *******************************************************/
 
-from httplib2 import Http, urllib, urlparse
 import json
 import logging
 import os
@@ -25,8 +24,7 @@ from cloudrunner_server.api.hooks.error_hook import ErrorHook
 from cloudrunner_server.api.hooks.db_hook import DbHook
 from cloudrunner_server.api.hooks.perm_hook import PermHook
 from cloudrunner_server.api.hooks.signal_hook import SignalHook
-from cloudrunner_server.api.model import (Job, Script,
-                                          Folder, Revision, Repository)
+from cloudrunner_server.api.model import (Job, Script, Repository, User)
 from cloudrunner_server.api.util import JsonOutput as O
 from cloudrunner_server.plugins.repository.base import PluginRepoBase
 
@@ -113,7 +111,8 @@ class Jobs(HookController):
         if not rev:
             return O.error("Invalid script/version")
 
-        job = Job(name=name, owner_id=request.user.id, enabled=True,
+        user = request.db.query(User).filter(User.id == request.user.id).one()
+        job = Job(name=name, owner=user, enabled=True,
                   params=json.dumps(params), script=rev, private=private,
                   exec_period=period)
 
@@ -148,29 +147,18 @@ class Jobs(HookController):
         _script = kwargs.get('script')
 
         if _script:
-            version = kwargs.get('version')
-            script = _script.strip("/")
-            _repo, _, script_path = script.partition("/")
-            _dir, _, script_name = script_path.rpartition("/")
+            _repo, _dir, script_name, version = Script.parse(_script)
             repo = Repository.visible(request).filter(
                 Repository.name == _repo).first()
             if not repo:
                 return O.error(msg="Invalid script: %s" % _script,
                                field='script')
-            if not _dir:
-                _dir = "/"
             scr = Script.visible(request, _repo, _dir).filter(
                 Script.name == script_name).first()
             if not scr:
                 return O.error(msg="Invalid script: %s" % _script,
                                field='script')
-            if version:
-                rev = [r for r in scr.history if r.version == version]
-            else:
-                rev = sorted(scr.history,
-                             key=lambda x: x.created_at, reverse=True)
-                if rev:
-                    rev = rev[0]
+            rev = scr.contents(request, rev=version)
 
             if repo.type == 'cloudrunner':
                 if not rev:

@@ -257,6 +257,8 @@ class Script(TableBase):
         path = full_path.lstrip('/')
         repo, _, scr_path = path.partition('/')
         path, _, script = scr_path.rpartition('/')
+        if not path:
+            path = "/"
         script, _, rev = script.rpartition('@')
         if not script:
             script = rev

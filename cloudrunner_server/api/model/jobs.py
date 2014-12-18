@@ -16,12 +16,14 @@ import uuid
 from sqlalchemy.sql.expression import func
 from sqlalchemy import (Column, Boolean, Integer, String, DateTime, Text,
                         ForeignKey, UniqueConstraint,
-                        or_)
+                        or_, select, distinct, event, join)
 from sqlalchemy.orm import relationship, backref
 
 from .base import TableBase
-from .users import User, Org
+from .users import User, Org, UsageTier
 from .library import Revision
+
+from cloudrunner_server.api.model.base import QuotaExceeded
 
 
 class Job(TableBase):
@@ -67,3 +69,14 @@ class Job(TableBase):
         return ctx.db.query(Job).join(User).filter(
             Job.owner_id == ctx.user.id
         )
+
+
+@event.listens_for(Job, 'before_insert')
+def user_before_insert(mapper, connection, target):
+    allowed = target.owner.org.tier.cron_jobs
+    current = connection.scalar(
+        select([func.count(distinct(Job.id))]).where(
+            Job.owner_id == target.owner_id))
+    if allowed <= current:
+        raise QuotaExceeded(msg="Quota exceeded(%d of %d used)" % (
+            current, allowed), model="Job")

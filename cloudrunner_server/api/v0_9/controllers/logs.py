@@ -99,11 +99,6 @@ class Logs(HookController):
                 rel=[('taskgroup_id', 'group'),
                      ('script_content.script.full_path', 'name'),
                      ('script_content.version', 'revision'),
-                     ('trigger', 'trigger', lambda x: x.serialize(skip=[
-                         'id', 'task_id', 'created_at'],
-                         rel=[('arguments', 'arguments',
-                               lambda a: safe_load(a))]
-                     ) if x else None),
                      ('owner.username', 'owner'),
                      ('runs', 'nodes', map_nodes)])
 
@@ -236,7 +231,7 @@ class Logs(HookController):
                 q = q.order_by(Task.created_at.asc())
             else:
                 q = q.order_by(Task.created_at.desc())
-            tasks = q.all()[start:end]
+            tasks = q.all()[start: end]
         except Exception, ex:
             LOG.exception(ex)
             request.db.rollback()

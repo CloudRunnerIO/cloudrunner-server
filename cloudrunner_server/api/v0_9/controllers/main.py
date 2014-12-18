@@ -18,15 +18,16 @@ from pecan import expose, request
 from pecan.secure import secure
 
 from .auth import Auth
+from .batches import Batches
 from .dispatch import Dispatch
+from .execute import Execute
 from .help import HtmlDocs
+from .jobs import Jobs
 from .library import Library
 from .logs import Logs
 from .manage import Manage
 from .status import EntityStatus
-from .jobs import Jobs
 from .workflows import Workflows
-from .batches import Batches
 
 from cloudrunner_server.api import VERSION
 from cloudrunner_server.api.client import redis_client as r
@@ -74,6 +75,9 @@ class RestApi(object):
     scheduler = secure(Jobs(), 'authorize')
     logs = secure(Logs(), 'authorize')
     manage = secure(Manage(), 'authorize')
+
+    # Exec
+    execute = Execute()
 
     # SSE
     status = EntityStatus()
