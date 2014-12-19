@@ -159,6 +159,8 @@ class Admin(Thread):
 
                 msgs, cert_file = self.ccont.sign_node(req.node, ca=org)
                 approved = bool(cert_file)
+                node.approved = approved
+                self.db.add(node)
                 if not approved:
                     LOG.warn(msgs)
                 else:
