@@ -215,13 +215,16 @@ class Library(HookController):
         if not scr:
             return O.error(msg="Script not found")
 
+        revisions = sorted([r.serialize(
+            skip=['id', 'script_id', 'draft', 'content'],
+            rel=[("created_at", "created_at", lambda d: d)])
+            for r in scr.history
+            if not r.draft], key=lambda r: r["created_at"], reverse=True)
         return O.history(
             script=scr.name,
             owner=scr.owner.username,
-            revisions=[r.serialize(
-                       skip=['id', 'script_id', 'draft', 'content'])
-                       for r in scr.history
-                       if not r.draft])
+            revisions=revisions
+        )
 
     @expose('json', generic=True)
     @wrap_command(Script)
