@@ -37,7 +37,7 @@ LOG = logging.getLogger()
 def _get_script_data(r):
     full_path = r.script.full_path()
     path, _, name = full_path.rpartition('/')
-    return dict(path="/%s/" % path, name=name)
+    return dict(path="/%s/" % path, name=name, rev=r.version)
 
 
 def _try_load(s):
@@ -59,7 +59,7 @@ class Jobs(HookController):
             jobs = []
             query = Job.visible(request)
             jobs = [t.serialize(
-                skip=['id', 'key', 'owner_id', 'revision_id'],
+                skip=['id', 'key', 'owner_id', 'revision_id', 'uid'],
                 rel=[('owner.username', 'owner'),
                      ('params', 'params', _try_load),
                      ('script', 'script', _get_script_data)])
@@ -71,7 +71,7 @@ class Jobs(HookController):
             try:
                 job = Job.visible(request).filter(Job.name == job_name).one()
                 return O.job(**job.serialize(
-                    skip=['id', 'key', 'owner_id', 'revision_id'],
+                    skip=['id', 'key', 'owner_id', 'revision_id', 'uid'],
                     rel=[('owner.username', 'owner'),
                          ('params', 'params', _try_load),
                          ('script', 'script', _get_script_data)]))
@@ -84,23 +84,22 @@ class Jobs(HookController):
     @jobs.when(method='POST', template='json')
     @jobs.wrap_create()
     def create(self, name=None, **kwargs):
+        if not kwargs:
+            kwargs = request.json
         name = name or kwargs['name']
         script = kwargs['script']
         version = kwargs.get('version')
         params = kwargs.get('params')
         if params:
-            params = json.loads(params)
+            if not isinstance(params, dict):
+                params = json.loads(params)
         else:
             params = {}
         period = kwargs['period']
         private = (bool(kwargs.get('private'))
                    and not kwargs.get('private') in ['0', 'false', 'False'])
 
-        script = script.strip("/")
-        repo, _, script_path = script.partition("/")
-        _dir, _, script_name = script_path.rpartition("/")
-        if not _dir:
-            _dir = "/"
+        repo, _dir, script_name, version = Script.parse(script)
         scr = Script.visible(request, repo, _dir).filter(
             Script.name == script_name).one()
         if version:
@@ -151,7 +150,7 @@ class Jobs(HookController):
             repo = Repository.visible(request).filter(
                 Repository.name == _repo).first()
             if not repo:
-                return O.error(msg="Invalid script: %s" % _script,
+                return O.error(msg="Invalid repository: %s" % _repo,
                                field='script')
             scr = Script.visible(request, _repo, _dir).filter(
                 Script.name == script_name).first()

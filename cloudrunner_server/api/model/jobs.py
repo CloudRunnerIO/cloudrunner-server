@@ -16,11 +16,11 @@ import uuid
 from sqlalchemy.sql.expression import func
 from sqlalchemy import (Column, Boolean, Integer, String, DateTime, Text,
                         ForeignKey, UniqueConstraint,
-                        or_, select, distinct, event, join)
+                        or_, select, distinct, event)
 from sqlalchemy.orm import relationship, backref
 
 from .base import TableBase
-from .users import User, Org, UsageTier
+from .users import User, Org
 from .library import Revision
 
 from cloudrunner_server.api.model.base import QuotaExceeded
@@ -72,7 +72,7 @@ class Job(TableBase):
 
 
 @event.listens_for(Job, 'before_insert')
-def user_before_insert(mapper, connection, target):
+def job_before_insert(mapper, connection, target):
     allowed = target.owner.org.tier.cron_jobs
     current = connection.scalar(
         select([func.count(distinct(Job.id))]).where(

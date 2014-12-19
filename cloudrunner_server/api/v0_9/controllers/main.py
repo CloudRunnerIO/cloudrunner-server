@@ -63,6 +63,29 @@ class RestApi(object):
             return True
         return False
 
+    @classmethod
+    def lazy_authorize(cls):
+        username = request.headers.get('Cr-User')
+        token = request.headers.get('Cr-Token')
+        if username and token:
+            key = REDIS_AUTH_TOKEN % username
+            ts_now = time.mktime(datetime.now().timetuple())
+            tokens = r.zrangebyscore(key, ts_now, 'inf')
+            if token in tokens:
+
+                user_info = r.hgetall(REDIS_AUTH_USER % username)
+                permissions = r.smembers(REDIS_AUTH_PERMS % username)
+                tier_info = r.hgetall(REDIS_AUTH_TIER % username)
+                request.user = Wrap(id=user_info['uid'],
+                                    username=username,
+                                    org=user_info['org'],
+                                    token=token,
+                                    permissions=permissions)
+                request.tier = Wrap(**tier_info)
+
+        # Always return True
+        return True
+
     @expose('json')
     def version(self):
         return dict(name='CloudRunner.IO REST API', version=VERSION)
@@ -77,7 +100,7 @@ class RestApi(object):
     manage = secure(Manage(), 'authorize')
 
     # Exec
-    execute = Execute()
+    execute = secure(Execute(), 'lazy_authorize')
 
     # SSE
     status = EntityStatus()

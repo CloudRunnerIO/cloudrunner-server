@@ -87,6 +87,7 @@ class TriggerManager(Daemon):
         exec_.add_argument('-t', '--tags', help='Comma-separated tags')
         exec_.add_argument('-e', '--env', help='Environment')
 
+        setattr(self, 'exec', self.run_job)
         if _args:
             self.args = self.arg_parser.parse_args(_args)
 
@@ -112,19 +113,22 @@ class TriggerManager(Daemon):
                              bold=1)
             exit(1)
 
-    def _prepare_db(self, user_id=None, recreate=False):
+    def _prepare_db(self, user_id=None, recreate=False, **kwargs):
         if hasattr(self, 'db'):
             return
-        db_path = CONFIG.db
-        engine = create_engine(db_path)
-        self.db = scoped_session(sessionmaker(bind=engine,
-                                              autocommit=True))
-        if 'mysql+pymysql://' in db_path:
-            event.listen(engine, 'checkout', checkout_listener)
-        metadata.bind = self.db.bind
-        if recreate:
-            # For tests: re-create tables
-            metadata.create_all(engine)
+        if kwargs.get("db"):
+            self.db = kwargs["db"]
+        else:
+            db_path = CONFIG.db
+            engine = create_engine(db_path)
+            self.db = scoped_session(sessionmaker(bind=engine,
+                                                  autocommit=True))
+            if 'mysql+pymysql://' in db_path:
+                event.listen(engine, 'checkout', checkout_listener)
+            metadata.bind = self.db.bind
+            if recreate:
+                # For tests: re-create tables
+                metadata.create_all(engine)
 
         redis_host = CONFIG.redis or '127.0.0.1:6379'
         host, port = redis_host.split(':')
@@ -155,10 +159,28 @@ class TriggerManager(Daemon):
         action = kwargs.pop('action')
         getattr(self, action)(**kwargs)
 
-    def execute(self, user_id=None, content=None, parent_uuid=None, **kwargs):
-        LOG.info("Starting %s " % content.script.name)
-        self._prepare_db(user_id=user_id)
+    def run_job(self, job_name, **kwargs):
+        self._prepare_db()
         self.db.begin()
+
+        job = self.db.query(Job).filter(Job.uid == job_name,
+                                        Job.enabled == True).first()  # noqa
+        if not job:
+            LOG.warn("Job not found: %s" % job_name)
+
+        self.db.commit()
+
+        LOG.info("Script '%s' started by job '%s'" % (job.script.script.name,
+                                                      job.name))
+
+        self.execute(user_id=job.owner_id, content=job.script,
+                     started_by=job.name)
+
+    def execute(self, user_id=None, content=None, parent_uuid=None,
+                targets=None, **kwargs):
+        LOG.info("Starting %s " % content.script.name)
+        self._prepare_db(user_id=user_id, **kwargs)
+        self.db.begin(subtransactions=True)
         remote_tasks = []
         local_runs = []
         batch_id = None
@@ -202,8 +224,14 @@ class TriggerManager(Daemon):
                 group.batch_id = batch_id
                 self.db.add(group)
 
-            sections = parser.parse_sections(script_rev.content)
-
+            if script.mime_type == 'text/plain':
+                section = parser.Section()
+                section.body = script_rev.content
+                section.env = {}
+                section.target = targets
+                sections = [section]
+            else:
+                sections = parser.parse_sections(script_rev.content)
             if not sections:
                 return O.error(msg="Empty script")
 
@@ -267,7 +295,7 @@ class TriggerManager(Daemon):
                 self.db.add(run)
 
             self.db.commit()
-            self.db.begin()
+            self.db.begin(subtransactions=True)
 
             if not remote_tasks:
                 self.db.rollback()
