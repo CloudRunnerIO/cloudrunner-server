@@ -351,31 +351,6 @@ class Library(HookController):
         request.db.delete(scr)
 
     @expose('json', generic=True)
-    @wrap_command(Script, method='execute')
-    def run(self, repository, *args, **kwargs):
-        path = "/".join(args)
-        path.strip("/")
-
-        path, _, script = path.rpartition('/')
-
-        script, _, rev = script.rpartition('@')
-        if not script:
-            script = rev
-            rev = None
-
-        env = flatten_params(request.params)
-        full_path = "/".join([repository, path, script])
-        if rev:
-            full_path = "%s@%s" % (full_path, rev)
-        man = TriggerManager()
-        res = man.execute(user_id=request.user.id,
-                          script_name=full_path,
-                          job=None,
-                          env=env, **kwargs)
-
-        return O.result(**res)
-
-    @expose('json', generic=True)
     @wrap_command(Folder)
     def folder(self, repository, *args, **kwargs):
 

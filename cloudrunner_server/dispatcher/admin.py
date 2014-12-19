@@ -177,6 +177,8 @@ class Admin(Thread):
                 self.db.rollback()
                 LOG.error(ex)
                 return Control(req.node, 'REJECTED', 'APPR_FAIL')
+            finally:
+                self.db.commit()
 
         return None
 
