@@ -3,7 +3,7 @@ from pecan import expose, request, abort
 from pecan.hooks import HookController
 
 from cloudrunner_server.api.hooks.db_hook import DbHook
-from cloudrunner_server.api.util import JsonOutput as O
+from cloudrunner_server.api.util import (JsonOutput as O, flatten_params)
 from cloudrunner_server.api.model import (Script, Repository, Folder, ApiKey)
 from cloudrunner_server.triggers.manager import TriggerManager
 
@@ -57,10 +57,12 @@ class Execute(HookController):
                 return O.error(msg="Script contents for '%s' not found" %
                                full_path)
 
+        env = flatten_params(request.params)
         request.db.commit()
         task_ids = MAN.execute(user_id=user_id,
                                content=rev,
                                db=request.db,
+                               env=env,
                                **kwargs)
         return O.success(msg="Dispatched", **task_ids)
 

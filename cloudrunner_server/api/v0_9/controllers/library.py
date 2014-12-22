@@ -24,11 +24,10 @@ from cloudrunner_server.api.hooks.error_hook import ErrorHook
 from cloudrunner_server.api.hooks.db_hook import DbHook
 from cloudrunner_server.api.hooks.perm_hook import PermHook
 from cloudrunner_server.api.hooks.signal_hook import SignalHook
-from cloudrunner_server.api.util import (JsonOutput as O, flatten_params)
+from cloudrunner_server.api.util import JsonOutput as O
 from cloudrunner_server.api.model import (Repository, Script, Folder, Revision,
                                           RepositoryCreds, Org)
 from cloudrunner_server.plugins.repository.base import PluginRepoBase
-from cloudrunner_server.triggers.manager import TriggerManager
 
 LOG = logging.getLogger()
 AVAILABLE_REPO_TYPES = set(['cloudrunner', 'github', 'bitbucket', 'dropbox'])
