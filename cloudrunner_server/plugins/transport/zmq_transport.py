@@ -833,7 +833,7 @@ class Router(Thread):
         socks = {}
         while not self.running.is_set():
             try:
-                socks = dict(poller.poll(100))
+                socks = dict(poller.poll())
             except zmq.ZMQError, zerr:
                 if zerr.errno == zmq.ETERM or zerr.errno == zmq.ENOTSUP \
                         or zerr.errno == zmq.ENOTSOCK:
@@ -886,6 +886,9 @@ class Router(Thread):
                 if zerr.errno == zmq.ETERM or zerr.errno == zmq.ENOTSUP \
                         or zerr.errno == zmq.ENOTSOCK:
                     break
+            except Exception, ex:
+                LOGR.exception(ex)
+                continue
         router.close()
         reply_router.close()
         ssl_worker.close()

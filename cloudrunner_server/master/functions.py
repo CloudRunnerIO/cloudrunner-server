@@ -59,13 +59,13 @@ class DbMixin(object):
     def set_context_from_config(self, config, recreate=None, engine=None):
         global ENGINE
         session = scoped_session(sessionmaker())
-        self.db_path = config.db
+        db_path = config.db
         if not ENGINE:
             if engine:
                 ENGINE = engine
             else:
-                ENGINE = create_engine(self.db_path)
-        if 'mysql+pymysql://' in self.db_path:
+                ENGINE = create_engine(db_path)
+        if 'mysql+pymysql://' in db_path:
             event.listen(ENGINE, 'checkout', checkout_listener)
         session.bind = ENGINE
         metadata.bind = session.bind
@@ -100,7 +100,10 @@ class CertController(DbMixin):
         self.config = config
         self.ca_path = os.path.dirname(
             os.path.abspath(self.config.security.ca))
-        self.set_context_from_config(config, **kwargs)
+        if "db" in kwargs:
+            self.db = kwargs["db"]
+        else:
+            self.set_context_from_config(config, **kwargs)
 
     def pass_cb(self, *args):
         return self.config.security.cert_pass

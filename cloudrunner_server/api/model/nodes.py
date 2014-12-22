@@ -13,11 +13,15 @@
 #  *******************************************************/
 
 from sqlalchemy import (Column, Integer, String, DateTime, Boolean, Text,
-                        ForeignKey, UniqueConstraint, Table)
+                        ForeignKey, UniqueConstraint, Table,
+                        event, distinct, select)
 from sqlalchemy.sql.expression import func
 from sqlalchemy.orm import relationship, backref
+
 from .base import TableBase
 from .users import Org
+
+from cloudrunner_server.api.model.exceptions import QuotaExceeded
 
 
 class Node(TableBase):
@@ -50,6 +54,16 @@ class Node(TableBase):
     def signed(ctx):
         return Node.visible(ctx).filter(Node.approved == True)  # noqa
 
+
+@event.listens_for(Node, 'before_insert')
+def user_before_insert(mapper, connection, target):
+    allowed = target.org.tier.nodes
+    current = connection.scalar(
+        select([func.count(distinct(Node.id))]).where(
+            Node.org_id == target.org.id))
+    if allowed <= current:
+        raise QuotaExceeded(msg="Quota exceeded(%d of %d used)" % (
+            current, allowed), model="Node")
 
 node2group_rel = Table('node2group', TableBase.metadata,
                        Column('node_id', Integer, ForeignKey('nodes.id')),

@@ -17,6 +17,7 @@ import requests
 import time
 from pecan import conf, expose, request, render
 from pecan.hooks import HookController
+from sqlalchemy import event
 from sqlalchemy.exc import IntegrityError
 
 from cloudrunner_server.api.decorators import wrap_command
@@ -26,6 +27,7 @@ from cloudrunner_server.api.util import JsonOutput as O
 from cloudrunner_server.api.model import *  # noqa
 
 from cloudrunner_server.api.client import redis_client as r
+from cloudrunner_server.master.functions import CertController
 from cloudrunner_server.api.util import (REDIS_AUTH_USER,
                                          REDIS_AUTH_TOKEN,
                                          REDIS_AUTH_PERMS,
@@ -33,6 +35,12 @@ from cloudrunner_server.api.util import (REDIS_AUTH_USER,
 
 DEFAULT_EXP = 1440
 LOG = logging.getLogger()
+
+
+@event.listens_for(Org, 'after_insert')
+def org_after_insert(mapper, connection, target):
+    ccont = CertController(conf.cr_config, db=connection)
+    ccont.create_ca(target.name)
 
 
 class Auth(HookController):

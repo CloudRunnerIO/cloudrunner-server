@@ -39,8 +39,9 @@ class Nodes(object):
             node = Node.visible(request).filter(Node.name == name).first()
             return O.node(node.serialize(skip=['id', 'org_id']))
         else:
-            nodes = Node.visible(request).all()
-            groups = NodeGroup.visible(request).all()
+            nodes = sorted(Node.visible(request).all(), key=lambda n: n.name)
+            groups = sorted(NodeGroup.visible(request).all(),
+                            key=lambda g: g.name)
             return O._anon(nodes=[n.serialize(
                 skip=['id', 'org_id'],
                 rel=[('meta', 'meta', json.loads),

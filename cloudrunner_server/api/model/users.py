@@ -24,7 +24,7 @@ from .base import TableBase
 
 from cloudrunner.util.crypto import hash_token
 from cloudrunner_server.api.util import random_token
-from cloudrunner_server.api.model.base import QuotaExceeded
+from cloudrunner_server.api.model.exceptions import QuotaExceeded
 
 TOKEN_LENGTH = 64
 

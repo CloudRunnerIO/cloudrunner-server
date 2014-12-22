@@ -18,7 +18,7 @@ from sqlalchemy.exc import IntegrityError
 from pecan import request, response, core
 
 from cloudrunner_server.api.util import JsonOutput as O
-from cloudrunner_server.api.model.base import QuotaExceeded
+from cloudrunner_server.api.model.exceptions import QuotaExceeded
 
 LOG = logging.getLogger()
 

@@ -23,7 +23,7 @@ from .base import TableBase
 from .users import User, Org
 from .library import Revision
 
-from cloudrunner_server.api.model.base import QuotaExceeded
+from cloudrunner_server.api.model.exceptions import QuotaExceeded
 
 
 class Job(TableBase):

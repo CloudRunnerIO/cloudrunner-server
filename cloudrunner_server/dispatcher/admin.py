@@ -18,12 +18,14 @@ import logging
 from threading import Thread
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import scoped_session, sessionmaker
+from sqlalchemy.exc import IntegrityError
 
 from cloudrunner.core.exceptions import ConnectionError
 from cloudrunner.core.message import (ADMIN_TOWER, M, Control)
 from cloudrunner_server.util.db import checkout_listener
 from cloudrunner_server.api.model import (metadata, Node, NodeTag,
                                           Org, ApiKey, User)
+from cloudrunner_server.api.model.exceptions import QuotaExceeded
 from cloudrunner_server.master.functions import (CertController,
                                                  CertificateExists)
 from cloudrunner_server.plugins.auth.base import NodeVerifier
@@ -85,7 +87,7 @@ class Admin(Thread):
                         LOG.warn("ADMIN_TOWER invalid packet recv: %s" %
                                  packed)
                         continue
-                    LOG.info("ADMIN_TOWER recv: %s" % req)
+                    LOG.debug("ADMIN_TOWER recv: %s" % req)
                     rep = self.process(req)
                     if not rep:
                         continue
@@ -113,11 +115,24 @@ class Admin(Thread):
         if req.control == 'REGISTER':
             try:
                 tags = []
-                node = Node(name=req.node, meta=json.dumps(req.meta))
                 try:
                     valid, msg, org, tags = self.ccont.validate_request(
                         req.node, req.data)
                     LOG.info("Validate req: %s:%s" % (org, valid))
+                    _org = self.db.query(Org).filter(Org.name == org).one()
+                    node = Node(name=req.node, meta=json.dumps(req.meta),
+                                approved=False, org=_org)
+                    self.db.add(node)
+                    self.db.commit()
+                except IntegrityError, iex:
+                    self.db.rollback()
+                    LOG.warn(iex.orig)
+                    return Control(req.node, 'REJECTED', 'ERR_CRT_EXISTS')
+                except QuotaExceeded, qex:
+                    self.db.rollback()
+                    LOG.error(qex)
+                    self.ccont.revoke(req.node, ca=org)
+                    return Control(req.node, 'REJECTED', 'QUOTA_FAIL')
                 except CertificateExists, cex:
                     LOG.error("Certificate exists for node %s[%s]" % (
                         req.node, cex.org))
@@ -143,25 +158,19 @@ class Admin(Thread):
                     LOG.info("Request validation result: %s" % msg)
                     self.db.rollback()
                     return Control(req.node, 'REJECTED', "INV_CSR")
-                if org:
-                    org_ = self.db.query(Org).filter(Org.name == org).one()
-                    node.org = org_
 
                 for tag in tags:
                     t = NodeTag(value=tag)
                     node.tags.append(t)
 
                 if not self.ccont.can_approve(req.node):
-                    node.approved = False
-                    self.db.add(node)
-                    self.db.commit()
                     return Control(req.node, 'REJECTED', 'PENDING')
 
                 msgs, cert_file = self.ccont.sign_node(req.node, ca=org)
                 approved = bool(cert_file)
                 node.approved = approved
                 node.approved_at = datetime.now()
-                self.db.add(node)
+                self.db.commit()
                 if not approved:
                     LOG.warn(msgs)
                 else:
@@ -178,10 +187,8 @@ class Admin(Thread):
                     return Control(req.node, 'REJECTED', "APPR_FAIL")
             except Exception, ex:
                 self.db.rollback()
-                LOG.error(ex)
+                LOG.exception(ex)
                 return Control(req.node, 'REJECTED', 'APPR_FAIL')
-            finally:
-                self.db.commit()
 
         return None
 
