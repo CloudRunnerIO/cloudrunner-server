@@ -259,6 +259,8 @@ class Script(TableBase):
         path, _, script = scr_path.rpartition('/')
         if not path:
             path = "/"
+        else:
+            path = "/%s/" % path
         script, _, rev = script.rpartition('@')
         if not script:
             script = rev

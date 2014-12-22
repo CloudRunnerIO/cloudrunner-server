@@ -4,8 +4,7 @@ from pecan.hooks import HookController
 
 from cloudrunner_server.api.hooks.db_hook import DbHook
 from cloudrunner_server.api.util import JsonOutput as O
-from cloudrunner_server.api.model import (Revision, Script, Repository,
-                                          Folder, ApiKey)
+from cloudrunner_server.api.model import (Script, Repository, Folder, ApiKey)
 from cloudrunner_server.triggers.manager import TriggerManager
 
 LOG = logging.getLogger()
