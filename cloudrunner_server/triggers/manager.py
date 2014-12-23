@@ -321,7 +321,7 @@ class TriggerManager(Daemon):
                 run.uuid = job_id
             if msg.task_ids:
                 self.db.commit()
-            return O.task_ids(_list=msg.task_ids)
+            return O._anon(task_uid=task.uuid, group=task.taskgroup_id)
 
         except Exception, ex:
             LOG.exception(ex)

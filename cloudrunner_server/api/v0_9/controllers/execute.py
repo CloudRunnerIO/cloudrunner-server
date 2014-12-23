@@ -59,12 +59,12 @@ class Execute(HookController):
 
         env = flatten_params(request.params)
         request.db.commit()
-        task_ids = MAN.execute(user_id=user_id,
-                               content=rev,
-                               db=request.db,
-                               env=env,
-                               **kwargs)
-        return O.success(msg="Dispatched", **task_ids)
+        task_id = MAN.execute(user_id=user_id,
+                              content=rev,
+                              db=request.db,
+                              env=env,
+                              **kwargs)
+        return O.success(msg="Dispatched", **task_id)
 
     batch = workflow
 
@@ -116,24 +116,24 @@ class Execute(HookController):
             return O.error(msg="Empty script body")
 
         request.db.commit()
-        task_ids = MAN.execute(user_id=user_id,
-                               content=rev,
-                               targets=targets,
-                               db=request.db,
-                               **kwargs)
-        return O.success(msg="Dispatched", **task_ids)
+        task_id = MAN.execute(user_id=user_id,
+                              content=rev,
+                              targets=targets,
+                              db=request.db,
+                              **kwargs)
+        return O.success(msg="Dispatched", **task_id)
 
     @expose('json')
     def resume(self, uuid, step=None, **kwargs):
         try:
             step = 0
             env = flatten_params(request.params)
-            ret = MAN.resume(user_id=request.user.id,
-                             task_uuid=uuid,
-                             step=step,
-                             env=env,
-                             db=request.db,
-                             **kwargs)
-            return ret
+            task_id = MAN.resume(user_id=request.user.id,
+                                 task_uuid=uuid,
+                                 step=step,
+                                 env=env,
+                                 db=request.db,
+                                 **kwargs)
+            return O.success(msg="Dispatched", **task_id)
         except:
             return O.error(msg="Cannot resume task: %s" % uuid)
