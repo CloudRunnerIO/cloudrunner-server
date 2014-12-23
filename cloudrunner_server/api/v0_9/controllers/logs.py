@@ -107,7 +107,10 @@ class Logs(HookController):
             task_map[t.id] = ser
             if not t.parent_id:
                 if t.group.batch:
-                    ser['batch'] = t.group.batch.serialize()
+                    ser['batch'] = t.group.batch.serialize(
+                        skip=["source_id", "created_at", "id", "enabled"],
+                        rel=[('source', 'name', lambda s: s.full_path()
+                              if s else 'N/A')])
                 else:
                     ser['batch'] = {}
                 task_list.append(ser)
