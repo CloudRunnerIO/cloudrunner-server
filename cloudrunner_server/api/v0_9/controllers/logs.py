@@ -80,13 +80,6 @@ class Logs(HookController):
         tasks = Task.visible(request).filter(
             Task.taskgroup_id.in_([g[0] for g in group_ids]))
 
-        # if tags:
-        #    tag_names = [tag.strip() for tag in re.split('[\s,;]', tags)
-        #                 if tag.strip()]
-        #    tasks = tasks.filter(Tag.name.in_(tag_names)).group_by(
-        #        Task.id).having(func.count(Task.id) == len(tag_names))
-
-        # tasks = sorted(tasks.all(), key=lambda t: t.parent_id, reverse=True)
         tasks = tasks.all()
 
         task_list = []
