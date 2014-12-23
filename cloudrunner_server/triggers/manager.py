@@ -242,7 +242,8 @@ class TriggerManager(Daemon):
                         owner_id=ctx.user.id,
                         script_content=script_rev,
                         exec_start=timestamp(),
-                        timeout=timeout)
+                        timeout=timeout,
+                        exit_code=-99)
             self.db.add(task)
             for tag in tags:
                 task.tags.append(Tag(name=tag))
