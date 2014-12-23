@@ -70,6 +70,7 @@ class Execute(HookController):
 
     @expose('json')
     def script(self, *args, **kwargs):
+        kwargs = kwargs or request.json
         full_path = "/" + "/".join(args)
         LOG.info("Received execute request [%s] from: %s" % (
             full_path, request.client_addr))
@@ -121,3 +122,18 @@ class Execute(HookController):
                                db=request.db,
                                **kwargs)
         return O.success(msg="Dispatched", **task_ids)
+
+    @expose('json')
+    def resume(self, uuid, step=None, **kwargs):
+        try:
+            step = 0
+            env = flatten_params(request.params)
+            ret = MAN.resume(user_id=request.user.id,
+                             task_uuid=uuid,
+                             step=step,
+                             env=env,
+                             db=request.db,
+                             **kwargs)
+            return ret
+        except:
+            return O.error(msg="Cannot resume task: %s" % uuid)

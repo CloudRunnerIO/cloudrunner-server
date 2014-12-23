@@ -12,7 +12,6 @@
 #  * without the express permission of CloudRunner.io
 #  *******************************************************/
 
-from datetime import datetime
 from pecan import expose, request
 from pecan.hooks import HookController
 
@@ -23,6 +22,8 @@ from cloudrunner_server.api.hooks.error_hook import ErrorHook
 from cloudrunner_server.api.hooks.redis_hook import RedisHook
 from cloudrunner_server.api.hooks.zmq_hook import ZmqHook
 from cloudrunner_server.api.util import JsonOutput as O
+
+MAN = TriggerManager()
 
 
 class Dispatch(HookController):
@@ -35,49 +36,3 @@ class Dispatch(HookController):
         if getattr(msg, 'control', '') == 'NODES':
             return O.nodes(_list=msg.nodes)
         return O.nodes(_list=[])
-
-    @expose('json')
-    def execute(self, **kwargs):
-        try:
-            kw = None
-            if request.headers['Content-Type'].find(
-                    "x-www-form-urlencoded") >= 0:
-                kw = kwargs
-            else:
-                try:
-                    kw = request.json_body
-                    kw.update(kwargs)
-                except:
-                    kw = kwargs
-
-            script_name = kwargs.get("script_name")
-            if not script_name:
-                return O.error(msg="Script not passed")
-            source = kwargs.get('source')
-            if not source:
-                now = datetime.now()
-                source = 'Anonymous exec: %s' % now.isoformat()[:19]
-            kw.pop('user_id', '')
-            kw.pop('content', '')
-            kw.pop('script_name', '')
-            resp = TriggerManager().execute(user_id=request.user.id,
-                                            script_name=script_name, **kw)
-            return resp
-
-        except KeyError, kerr:
-            return O.error(msg="Missing value: %s" % kerr)
-        return {}
-
-    @expose('json')
-    def resume(self, uuid, **kwargs):
-        try:
-            TriggerManager().resume(user_id=request.user.id,
-                                    task_uuid=uuid, **kwargs)
-        except:
-            return O.error(msg="Cannot resume task: %s" % uuid)
-        return O.success(status='ok')
-
-    @expose('json')
-    def term(self, command):
-        if not command or command.lower() not in ['term', 'quit']:
-            return dict(error="Unknown termination command: %s" % command)

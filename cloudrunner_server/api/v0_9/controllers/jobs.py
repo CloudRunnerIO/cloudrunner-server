@@ -33,6 +33,12 @@ schedule_manager = conf.schedule_manager
 JOB_FIELDS = ('name', 'target', 'arguments', 'enabled', 'private')
 LOG = logging.getLogger()
 
+EXE_PATH = os.popen('which cloudrunner-trigger').read().strip()
+if not EXE_PATH:
+    LOG.warn("Scheduler job executable not found on server")
+else:
+    EXE_PATH = "%s exec %%s" % EXE_PATH
+
 
 def _get_script_data(r):
     full_path = r.script.full_path()
@@ -120,10 +126,9 @@ class Jobs(HookController):
         request.db.commit()
         cron_name = job.uid
         # Post-create
-        exe_path = os.popen('which cloudrunner-trigger').read().strip()
-        if not exe_path:
+        if not EXE_PATH:
             return O.error(msg="Scheduler job executable not found on server")
-        url = "%s exec %s" % (exe_path, cron_name)
+        url = EXE_PATH % cron_name
         if job.params:
             url = "%s -e '%s'" % (url, job.params)
         success, res = schedule_manager.add(request.user.username,
@@ -194,8 +199,12 @@ class Jobs(HookController):
             period_to_update = True
 
         enabled = kwargs.get('enabled')
+        enable_to_update = False
         if enabled is not None:
-            job.enabled = enabled not in ['0', 'false', 'False']
+            enabled = enabled not in ['0', 'false', 'False']
+            if enabled != job.enabled:
+                enable_to_update = True
+            job.enabled = enabled
 
         private = kwargs.get('private')
         if private is not None:
@@ -209,6 +218,17 @@ class Jobs(HookController):
                 request.user.username,
                 name=job.uid,
                 period=period)
+
+        if enable_to_update:
+            if job.enabled:
+                url = EXE_PATH % job.uid
+                schedule_manager.add(request.user.username,
+                                     job.uid,
+                                     job.exec_period,
+                                     url)
+            else:
+                schedule_manager.delete(
+                    user=request.user.username, name=job.uid)
 
     @jobs.when(method='PUT', template='json')
     def update(self, **kw):

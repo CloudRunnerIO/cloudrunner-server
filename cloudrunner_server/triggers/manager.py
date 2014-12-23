@@ -328,27 +328,61 @@ class TriggerManager(Daemon):
 
         return {}
 
-    def resume(self, user_id=None, task_uuid=None):
+    def resume(self, user_id=None, task_uuid=None, step=None, **kwargs):
         try:
-            self._prepare_db(user_id=user_id)
-            self.db.begin()
+            self._prepare_db(user_id=user_id, **kwargs)
+            self.db.begin(subtransactions=True)
             ctx = self.get_user_ctx(user_id)
             task = Task.visible(ctx).filter(Task.uuid == task_uuid).one()
+            task_runs = list(task.runs)
             task.id = None
-            task.started_by_id = None
+            task.uuid = None
+            tags = []
             self.db.expunge(task)
             make_transient(task)
+            to_remove = []
+
+            for run in sorted(task_runs, key=lambda r: r.step_index):
+                if run.step_index < step:
+                    to_remove.append(run)
+                else:
+                    break
+
+            for run in to_remove:
+                task_runs.remove(run)
+
+            if not task_runs:
+                return O.error(msg="No step found to resume")
+
+            print task_runs
+
+            remote_tasks = []
             atts = []
+            for i, run in enumerate(task_runs):
+                run.step_index = i
+                remote_task = dict(attachments=atts, body=run.full_script)
+                remote_task['timeout'] = run.timeout
+                remote_task['target'] = run.target
+
+                remote_tasks.append(remote_task)
+
+                run.id = None
+                run.uuid = None
+                run.exec_start = timestamp()
+                run.exec_user_id = ctx.user.id
+                self.db.expunge(run)
+                make_transient(run)
+
             env = {}
             try:
                 if task.env_in:
-                    env = json.loads(task.env_in)
+                    env_in = json.loads(task.env_in)
+                    env = env_in.update(env)
             except:
                 pass
-            remote_task = dict(attachments=atts, body=task.full_script)
-            remote_task['target'] = self._expand_target(task.target)
+
             msg = Master(ctx.user.name).command('dispatch',
-                                                tasks=[remote_task],
+                                                tasks=remote_tasks,
                                                 roles=self._roles(ctx),
                                                 includes=[],
                                                 attachments=[],
@@ -357,14 +391,25 @@ class TriggerManager(Daemon):
                 return
             task.created_at = datetime.now()
             task.uuid = msg.task_ids[0]
+
+            print msg.task_ids
+            for i, job_id in enumerate(msg.task_ids):
+                for tag in tags:
+                    cache.associate(ctx.user.org, tag, job_id)
+                # Update
+                run = task_runs[i]
+                run.uuid = job_id
+                self.db.add(run)
+                task.runs.append(run)
+
             self.db.add(task)
             self.db.commit()
-            self.db.begin()
+            return O.task_ids(_list=msg.task_ids)
 
         except Exception, ex:
             LOG.exception(ex)
             self.db.rollback()
-        return 1
+        return {}
 
     def _expand_target(self, target):
         targets = [t.strip() for t in target.split(" ")]
