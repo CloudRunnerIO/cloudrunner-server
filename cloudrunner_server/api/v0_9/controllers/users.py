@@ -15,7 +15,7 @@
 import logging
 from pecan import expose, request  # noqa
 
-from cloudrunner_server.api.model import Group, Org, User, ApiKey
+from cloudrunner_server.api.model import Group, Org, User, ApiKey, joinedload
 from cloudrunner_server.api.util import JsonOutput as O
 from cloudrunner_server.api.policy.decorators import check_policy
 from cloudrunner_server.api.decorators import wrap_command
@@ -32,6 +32,9 @@ class Users(object):
     @expose('json', generic=True)
     @wrap_command(User)
     def users(self, name=None, *args, **kwargs):
+        def modifier(roles):
+            return [dict(as_user=role.as_user, servers=role.servers)
+                    for role in roles]
         if name:
             user = User.visible(request).filter(User.username == name).first()
             return O.user(user.serialize(
@@ -41,8 +44,19 @@ class Users(object):
             users = [u.serialize(
                 skip=['id', 'org_id', 'password'],
                 rel=[('groups.name', 'groups')])
-                for u in User.visible(request).all()]
-            return O._anon(users=users, quota=dict(allowed=request.tier.users))
+                for u in User.visible(request).options(
+                    joinedload(User.groups)).all()]
+            groups = [u.serialize(
+                skip=['id', 'org_id'],
+                rel=[('roles', 'roles', modifier),
+                     ('users', 'users', lambda us: [u.username for u in us]),
+                     ])
+                for u in Group.visible(request).options(
+                    joinedload(Group.users)).options(
+                        joinedload(Group.roles)).all()]
+            return O._anon(users=users,
+                           groups=groups,
+                           quota=dict(allowed=request.tier.users))
 
     @users.when(method='POST', template='json')
     @check_policy('is_admin')
