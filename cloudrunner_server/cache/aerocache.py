@@ -34,7 +34,7 @@ redis = r.Redis(host=r_host, port=r_port, db=0)
 
 config = {
     'hosts': [
-        (as_host, as_port)
+        (as_host, int(as_port))
     ],
     'lua': {
         'user_path': os.path.join(os.path.dirname(__file__), "functions")
