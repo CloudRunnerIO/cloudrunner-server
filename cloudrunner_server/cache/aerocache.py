@@ -191,8 +191,8 @@ class RegReader(RegBase):
             q = self.client.query(LOGS_SET, self.org)
             q.where(p.equals('uuid', uuid))
 
-            q.apply('filters', 'score', min_score, max_score,
-                    self.body_filter, self.nodes_filter)
+            q.apply('filters', 'score', [min_score, max_score,
+                                         self.body_filter, self.nodes_filter])
 
             data = {}
 
