@@ -36,14 +36,6 @@ local function score_filter(min_score, max_score, pattern, nodes)
   end
 end
 
-local function pattern_filter(pattern)
-  return function(record)
-    for line in record.lines do
-      return string.find(s, pattern) ~= nil
-    end
-  end
-end
-
 local function map_record(r)
   local m = map()
   m['ts'] = r.ts
