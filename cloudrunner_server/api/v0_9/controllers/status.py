@@ -12,7 +12,6 @@
 #  * without the express permission of CloudRunner.io
 #  *******************************************************/
 
-import re
 from pecan import expose, request, response
 from pecan.hooks import HookController
 
@@ -82,11 +81,11 @@ class EntityStatus(HookController):
                 if len(tokens) == 1:
                     etag = cache.check(org, target)
                     st.add_line(target, target, etag, retry=1000)
-                elif tokens[0] == 'tags':
-                    data = tokens[1]
-                    tags = sorted(re.split('[\s;,]', data))
-                    etag = cache.check_group(org, *tags)
-                    st.add_line(target, ','.join(tags), etag)
+                # elif tokens[0] == 'tags':
+                    # data = tokens[1]
+                    # tags = sorted(re.split('[\s;,]', data))
+                    # etag = cache.check_group(org, *tags)
+                    # st.add_line(target, ','.join(tags), etag)
 
         resp = unicode(st.data)
         if resp:

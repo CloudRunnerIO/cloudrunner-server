@@ -29,9 +29,10 @@ from cloudrunner.core.message import (M, Ready, StdOut, StdErr, FileExport,
                                       FinishedMessage,
                                       SafeDictWrapper)
 from cloudrunner.core.message import StatusCodes
-from cloudrunner.util import timestamp
 from cloudrunner.util.string import stringify
 from cloudrunner.util.string import stringify1
+
+from cloudrunner_server.util import timestamp
 
 LOG = logging.getLogger('ServerSession')
 
@@ -126,6 +127,7 @@ class JobSession(Thread):
                                  org=user_org[1])
         self._reply(message)
         result = {}
+        msg_ret = []
 
         try:
             if self.task.pre_conditions:
@@ -151,6 +153,7 @@ class JobSession(Thread):
                                        remote_user_map=self.remote_user_map,
                                        attachments=attachments),
                 timeout=self.timeout)
+
             for _reply in section_it:
                 if _reply[0] == 'PIPE':
                     # reply: 'PIPE', self.session_id, ts, run_as, node_id,
@@ -267,8 +270,8 @@ class JobSession(Thread):
         target = JobTarget(self.session_id, str(targets))
         target.hdr.org = remote_user_map['org']
         self.manager.publisher.send(target._)
-
         user_map = UserMap(remote_user_map['roles'], self.user)
+        start_at = timestamp()
         try:
             while not self.session_event.is_set() and not job_event.is_set():
                 ready = poller.poll()
@@ -356,6 +359,7 @@ class JobSession(Thread):
 
                 state['status'] = job_rep.control
                 if isinstance(job_rep, Finished):
+                    state['data']['elapsed'] = int(timestamp() - start_at)
                     state['data']['ret_code'] = job_rep.result['ret_code']
                     state['data']['env'] = job_rep.result['env']
                     if job_rep.result['stdout'] or job_rep.result['stderr']:
@@ -426,13 +430,16 @@ class JobSession(Thread):
         job_reply.close()
         self.manager.delete_session(self.session_id)
 
-        yield self.session_id, [dict(node=k,
-                                     remote_user=n['remote_user'],
-                                     env=n['data'].get('env', {}),
-                                     stdout=n['data'].get('stdout', ''),
-                                     stderr=n['data'].get('stderr', ''),
-                                     ret_code=n['data'].get('ret_code', -255))
-                                for k, n in node_map.items()], file_exports
+        yield (self.session_id,
+               [dict(node=k,
+                     remote_user=n['remote_user'],
+                     env=n['data'].get('env', {}),
+                     stdout=n['data'].get('stdout', ''),
+                     stderr=n['data'].get('stderr', ''),
+                     elapsed=n['data'].get('elapsed', 0),
+                     ret_code=n['data'].get('ret_code', -255))
+                for k, n in node_map.items()],
+               file_exports)
 
     def _create_ts(self):
         ts = timestamp()

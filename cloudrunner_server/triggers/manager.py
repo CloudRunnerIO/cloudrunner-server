@@ -29,7 +29,6 @@ except ImportError:
 from cloudrunner import CONFIG_LOCATION, LOG_DIR
 from cloudrunner.core import parser
 from cloudrunner.core.message import Queued, DictWrapper
-from cloudrunner.util import timestamp
 from cloudrunner.util.config import Config
 from cloudrunner.util.daemon import Daemon
 from cloudrunner.util.logconfig import configure_loggers
@@ -38,6 +37,7 @@ from cloudrunner_server.api.model import *  # noqa
 from cloudrunner_server.api.server import Master
 from cloudrunner_server.plugins.repository.base import (PluginRepoBase,
                                                         NotModified)
+from cloudrunner_server.util import timestamp
 from cloudrunner_server.util.db import checkout_listener
 from cloudrunner_server.util.cache import CacheRegistry
 from cloudrunner_server.api.util import JsonOutput as O

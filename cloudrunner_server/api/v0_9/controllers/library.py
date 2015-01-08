@@ -251,13 +251,19 @@ class Library(HookController):
                     response.last_modified = rev.created_at.strftime('%c')
                     response.cache_control.private = True
                     response.cache_control.max_age = 1
+            revisions = sorted([r.serialize(
+                skip=['id', 'script_id', 'draft', 'content'],
+                rel=[("created_at", "created_at", lambda d: d)])
+                for r in scr.history
+                if not r.draft], key=lambda r: r["created_at"], reverse=True)
             return O.script(name=scr.name,
                             created_at=scr.created_at,
                             owner=scr.owner.username,
                             content=rev.content,
                             version=rev.version,
                             allow_sudo=scr.allow_sudo,
-                            mime=scr.mime_type)
+                            mime=scr.mime_type,
+                            revisions=revisions)
         else:
             return O.error(msg="Not found")
         return O.script({})

@@ -43,7 +43,7 @@ class Logs(HookController):
     def all(self, start=None, end=None, nodes=None, run_uuids=None, etag=None):
         start = int(start or 0) or 0
         if etag:
-            etag = float(etag)
+            etag = int(etag)
         else:
             etag = 0
         if start and not end:
@@ -53,7 +53,7 @@ class Logs(HookController):
         if end - start > 100:
             return O.error(msg="Page size cannot be bigger than 100")
 
-        cache = CacheRegistry(redis=request.redis)
+        cache = CacheRegistry()
         max_score = 0
         uuids = []
         with cache.reader(request.user.org) as c:
@@ -69,7 +69,7 @@ class Logs(HookController):
         groups = TaskGroup.unique(request).order_by(Task.created_at.desc())
         ts = None
         if etag:
-            ts = datetime.utcfromtimestamp(etag)
+            ts = datetime.utcfromtimestamp(etag / 1000.0)
             groups = groups.filter(Task.created_at >= ts)
         if uuids:
             groups = groups.filter(Run.uuid.in_(uuids))
@@ -142,7 +142,7 @@ class Logs(HookController):
                                          Script).filter(Script.id == scr.id)
             ts = None
             if etag:
-                ts = datetime.utcfromtimestamp(etag)
+                ts = datetime.utcfromtimestamp(etag / 1000.0)
                 groups = groups.filter(Task.created_at >= ts)
             group = groups.first()
             if not group:
@@ -218,8 +218,8 @@ class Logs(HookController):
                               content_type=content_type)
 
         # TODO: check for e-tag
-        min_score = float(kwargs.get('from', request.headers.get('Etag', 0)))
-        max_score = float(kwargs.get('to', 'inf'))
+        min_score = int(kwargs.get('from', request.headers.get('Etag', 0)))
+        max_score = int(kwargs.get('to', 0)) or None
         cache = CacheRegistry(redis=request.redis)
         score = 1
         try:
@@ -245,14 +245,14 @@ class Logs(HookController):
         outputs = []
         with cache.reader(request.user.org) as c:
             try:
-                c.apply_filters(pattern=pattern, target=show,
-                                node=nodes,
+                c.apply_filters(pattern=pattern,
+                                nodes=nodes,
                                 before=kwargs.get('B'),
                                 after=kwargs.get('A'))
             except ValueError:
                 return O.error(msg="Wrong regex pattern")
 
-            score, logs = c.load_log(min_score, max_score,
+            score, logs = c.load_log(min_score=min_score, max_score=max_score,
                                      uuids=uuids, tail=tail)
             for uuid in uuids:
                 log_data = logs.get(uuid, [])
@@ -269,7 +269,7 @@ class Logs(HookController):
                         created_at=run.task.created_at,
                         status='running' if run.exit_code == -99
                         else 'finished',
-                        etag=float(score),
+                        etag=int(score),
                         uuid=uuid,
                         task_id=run.task.uuid,
                         screen=log_data))

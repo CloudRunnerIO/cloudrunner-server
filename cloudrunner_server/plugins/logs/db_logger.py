@@ -5,9 +5,9 @@ import redis
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import scoped_session, sessionmaker
 
-from cloudrunner.util import timestamp
 from cloudrunner_server.api.model import *  # noqa
 from cloudrunner_server.plugins.logs.base import LoggerPluginBase
+from cloudrunner_server.util import timestamp
 from cloudrunner_server.util.cache import CacheRegistry
 from cloudrunner_server.util.db import checkout_listener
 
@@ -98,17 +98,25 @@ class DbLogger(LoggerPluginBase):
                 # Empty
                 return
             with self.cache.writer(msg.org, msg.session_id) as cache:
-                cache.store_log(msg.node, msg.ts, log, io)
+                cache.store_log(msg.node, msg.ts, log, msg.user, io, ttl=None)
 
         elif msg.control == "FINISHEDMESSAGE":
             self._finalize(msg)
+            result = {'exit_code': 0, 'total_time': 0}
+            for node, data in msg.result.items():
+                result['exit_code'] = int(bool(result['exit_code']
+                                               | data['ret_code']))
+                result['total_time'] = max(result['exit_code'],
+                                           data['elapsed'])
+                result.setdefault('nodes', []).append(
+                    dict(node=node, exit_code=data['ret_code'],
+                         elapsed=data['elapsed'], as_user=data['remote_user']))
             with self.cache.writer(msg.org, msg.session_id) as cache:
-                cache.store_meta(msg.result, msg.ts)
+                cache.store_meta(result, msg.ts)
 
-            cache.final(msg.session_id, env=msg.env)
-            cache.notify("logs")
+                cache.final(msg.session_id, env=msg.env)
+                cache.notify(msg.org, "logs")
 
         elif msg.control == "INITIALMESSAGE":
             with self.cache.writer(msg.org, msg.session_id) as cache:
-                cache.prepare_log()
-            cache.notify("logs")
+                cache.notify(msg.org, "logs")
