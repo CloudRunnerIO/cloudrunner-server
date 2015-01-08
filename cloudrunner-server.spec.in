@@ -151,6 +151,7 @@ fi
 %{python_sitelib}/cloudrunner_server/dispatcher
 %{python_sitelib}/cloudrunner_server/master
 %{python_sitelib}/cloudrunner_server/api
+%{python_sitelib}/cloudrunner_server/cache
 %{python_sitelib}/cloudrunner_server/triggers
 %{python_sitelib}/cloudrunner_server/util
 
