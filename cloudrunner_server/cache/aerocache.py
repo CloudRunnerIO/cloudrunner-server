@@ -56,6 +56,8 @@ TS_SET = 'timestamps'
 MAX_LOG_LINES = 200
 MAX_SCORE = MAX_TS * 1000
 
+LOG.info("AEROSPIKE CONFIG: %s" % config)
+
 
 class AeroRegistry(object):
 
