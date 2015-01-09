@@ -186,8 +186,8 @@ class Logs(HookController):
 
     @expose('json', content_type="application/json")
     @expose('include/raw.html', content_type="text/plain")
-    def output(self, uuid=None, tail=100, nodes=None,
-               show=None, template=None, content_type="text/html", **kwargs):
+    def output(self, uuid=None, tail=100, show=None,
+               template=None, content_type="text/html", **kwargs):
         try:
             tail = int(tail)
             if tail == -1:
@@ -209,10 +209,11 @@ class Logs(HookController):
             uuids.extend(re.split('[\s,;]', uuid))
             q = q.filter(Run.uuid.in_(uuids))
 
+        nodes = kwargs.get("nodes")
         if nodes:
-            nodes = [re.split('[\s,;]', nodes)]
+            if not isinstance(nodes, list):
+                nodes = re.split('[\s,;]', nodes)
             q = q.filter(RunNode.name.in_(nodes))
-
         if template:
             override_template("library:%s" % template,
                               content_type=content_type)

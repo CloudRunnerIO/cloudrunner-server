@@ -179,9 +179,8 @@ class RegReader(RegBase):
         else:
             return 0, []
 
-    def load_log(self, min_score=None, max_score=None,
-                 nodes=None, uuids=None, tail=None):
-        if not nodes and not uuids:
+    def load_log(self, min_score=None, max_score=None, uuids=None, tail=None):
+        if not uuids:
             return 0, {}
 
         output = {'new_score': 1}
@@ -189,11 +188,11 @@ class RegReader(RegBase):
         max_score = max_score or int(MAX_SCORE)
         for uuid in uuids:
             q = self.client.query(LOGS_SET, self.org)
+
             q.where(p.equals('uuid', uuid))
 
             q.apply('filters', 'score', [min_score, max_score,
                                          self.body_filter, self.nodes_filter])
-
             data = {}
 
             def callback(rec):

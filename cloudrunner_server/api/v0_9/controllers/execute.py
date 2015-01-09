@@ -57,7 +57,8 @@ class Execute(HookController):
                 return O.error(msg="Script contents for '%s' not found" %
                                full_path)
 
-        env = flatten_params(request.params)
+        env = kwargs.pop('env', {})
+        env.update(flatten_params(request.params))
         request.db.commit()
         task_id = MAN.execute(user_id=user_id,
                               content=rev,

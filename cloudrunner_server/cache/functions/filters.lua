@@ -12,12 +12,19 @@ local function score_filter(min_score, max_score, pattern, nodes)
       end
 
       if pattern ~= nil then
+        if record.lines == nil then
+          return false
+        end
         local lines = record.lines
         for i=#lines,1,-1 do
           local line = lines[i]
-          if string.find(line, pattern) == nil then
+          if line == nil or line == "" or string.find(line, pattern) == nil then
             list.remove(lines, i)
           end
+        end
+        record.lines = lines
+        if #record.lines == 0 then
+          return false
         end
       end
 
