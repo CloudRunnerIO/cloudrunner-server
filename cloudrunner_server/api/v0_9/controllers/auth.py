@@ -28,6 +28,7 @@ from cloudrunner_server.api.model import *  # noqa
 
 from cloudrunner_server.api.client import redis_client as r
 from cloudrunner_server.master.functions import CertController
+from cloudrunner_server.util.cache import CacheRegistry
 from cloudrunner_server.api.util import (REDIS_AUTH_USER,
                                          REDIS_AUTH_TOKEN,
                                          REDIS_AUTH_PERMS,
@@ -182,6 +183,8 @@ class Auth(HookController):
             raise
         # send validation email
 
+        cache = CacheRegistry()
+        cache.prepare_space(org.name)
         ACTION_URL = "%s/index.html#activate/%s" % (
             conf.DASH_SERVER_URL.rstrip('/'), key.value)
         html = render('email/activate.html',

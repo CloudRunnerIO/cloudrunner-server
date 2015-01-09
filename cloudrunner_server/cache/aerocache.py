@@ -58,6 +58,9 @@ MAX_SCORE = MAX_TS * 1000
 
 LOG.info("AEROSPIKE CONFIG: %s" % config)
 
+STR_INDICES = ['owner', 'node', 'uuid']
+NUM_INDICES = ['ts']
+
 
 class AeroRegistry(object):
 
@@ -79,6 +82,18 @@ class AeroRegistry(object):
     def associate(self, org, tag, *ids):
         pass
         # client.get((TS_SET, org, target))
+
+    def prepare_space(self, org):
+        policy = {}
+        ns = LOGS_SET
+        _set = org
+
+        for bin in STR_INDICES:
+            index_name = "%s-%s" % (_set, bin)
+            self.client.index_string_create(policy, ns, _set, bin, index_name)
+        for bin in NUM_INDICES:
+            index_name = "%s-%s" % (_set, bin)
+            self.client.index_integer_create(policy, ns, _set, bin, index_name)
 
     @contextmanager
     def writer(self, org, _id):
