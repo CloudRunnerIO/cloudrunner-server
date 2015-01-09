@@ -136,7 +136,11 @@ class RegWriter(RegBase):
             return
 
         key = self.key(LOGS_SET, self.org, "%s_%s" % (self.id, ts))
-        lines = log.splitlines()
+        lines = []
+        for l in log.splitlines():
+            l = l.strip()
+            if l:
+                lines.append(l)
 
         rec = dict(uuid=self.id, ts=int(ts * 1000), lines=lines, io=io,
                    node=str(node), owner=str(user), type='output')
@@ -214,9 +218,10 @@ class RegReader(RegBase):
                 if "ts" in rec:
                     output['new_score'] = max(output['new_score'], rec['ts'])
                 if rec['type'] == 'output':
+                    ts = rec['ts'] / 1000.0
                     data.setdefault(rec['node'],
                                     {}).setdefault('lines',
-                                                   []).append([rec['ts'],
+                                                   []).append([ts,
                                                                rec['lines'],
                                                                rec['io']])
                 elif rec['type'] == 'meta':
@@ -227,7 +232,7 @@ class RegReader(RegBase):
             for node in data:
                 lines = data[node].get("lines", [])
                 if lines:
-                    lines = sorted(lines, key=lambda l: l[0])
+                    data[node]['lines'] = sorted(lines, key=lambda l: l[0])
             output[uuid] = data
 
         new_score = output.pop('new_score', 1)
