@@ -122,8 +122,6 @@ class RegWriter(RegBase):
 
         key = self.key(LOGS_SET, self.org, "%s_%s" % (self.id, ts))
         lines = log.splitlines()
-        if io != 'O':
-            lines = ['\x00\x00' + l for l in lines]
 
         rec = dict(uuid=self.id, ts=int(ts * 1000), lines=lines, io=io,
                    node=str(node), owner=str(user), type='output')
@@ -205,7 +203,8 @@ class RegReader(RegBase):
                     data.setdefault(rec['node'],
                                     {}).setdefault('lines',
                                                    []).append([rec['ts'],
-                                                               rec['lines']])
+                                                               rec['lines'],
+                                                               rec['io']])
                 elif rec['type'] == 'meta':
                     for node in rec.get('nodes', []):
                         data.setdefault(node, {})['result'] = rec['result']

@@ -64,7 +64,10 @@ class Execute(HookController):
                               db=request.db,
                               env=env,
                               **kwargs)
-        return O.success(msg="Dispatched", **task_id)
+        if task_id:
+            return O.success(msg="Dispatched", **task_id)
+        else:
+            return O.error(msg="Cannot send request")
 
     batch = workflow
 

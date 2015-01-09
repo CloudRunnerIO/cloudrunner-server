@@ -42,6 +42,7 @@ local function map_record(r)
   m['uuid'] = r.uuid
   m['node'] = r.node
   m['lines'] = r.lines
+  m['io'] = r.io
   m['result'] = r.result
   m['type'] = r.type
   return m
