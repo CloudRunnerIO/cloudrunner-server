@@ -14,8 +14,9 @@
 
 import json
 import logging
-from pecan import expose, request
+from pecan import expose, request, response, redirect
 from pecan.hooks import HookController
+import pytz
 
 from cloudrunner_server.api.hooks.error_hook import ErrorHook
 from cloudrunner_server.api.hooks.db_hook import DbHook
@@ -43,9 +44,26 @@ class Batches(HookController):
         script = Script.find(request, path).one()
 
         revision = script.contents(request, rev=rev)
-        batch = json.loads(revision.content)
 
-        return O.batch(rev=revision.version, steps=batch)
+        if request.if_modified_since:
+            req_modified = request.if_modified_since
+            script_modified = pytz.utc.localize(revision.created_at)
+            if req_modified == script_modified:
+                return redirect(code=304)
+        else:
+            response.last_modified = revision.created_at.strftime('%c')
+            response.cache_control.private = True
+            response.cache_control.max_age = 1
+
+        batch = json.loads(revision.content)
+        revisions = sorted([r.serialize(
+            skip=['id', 'script_id', 'draft', 'content'],
+            rel=[("created_at", "created_at", lambda d: d)])
+            for r in script.history
+            if not r.draft], key=lambda r: r["created_at"], reverse=True)
+
+        return O.batch(rev=revision.version, steps=batch,
+                       revisions=revisions)
 
     @batch.when(method='POST', template='json')
     @batch.wrap_create(model_name='Batch')

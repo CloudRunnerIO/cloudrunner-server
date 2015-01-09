@@ -13,8 +13,9 @@
 #  *******************************************************/
 
 import logging
-from pecan import expose, request
+from pecan import expose, request, redirect, response
 from pecan.hooks import HookController
+import pytz
 
 from cloudrunner.core import parser
 from cloudrunner_server.api.hooks.error_hook import ErrorHook
@@ -46,6 +47,16 @@ class Workflows(HookController):
         sections = parser.parse_sections(revision.content)
         data = []
 
+        if request.if_modified_since:
+            req_modified = request.if_modified_since
+            script_modified = pytz.utc.localize(revision.created_at)
+            if req_modified == script_modified:
+                return redirect(code=304)
+        else:
+            response.last_modified = revision.created_at.strftime('%c')
+            response.cache_control.private = True
+            response.cache_control.max_age = 1
+
         for s in sections:
             atts = []
             include_before = []
@@ -64,7 +75,7 @@ class Workflows(HookController):
                     else:
                         options[arg] = vals
 
-            section = dict(content=s.body,
+            section = dict(content=s.body.strip(),
                            targets=[t.strip() for t in s.target.split(' ')
                                     if t.strip()],
                            lang=s.lang,
@@ -74,8 +85,14 @@ class Workflows(HookController):
                            env=s.env._items,
                            timeout=s.timeout)
             data.append(section)
+        revisions = sorted([r.serialize(
+            skip=['id', 'script_id', 'draft', 'content'],
+            rel=[("created_at", "created_at", lambda d: d)])
+            for r in script.history
+            if not r.draft], key=lambda r: r["created_at"], reverse=True)
 
-        return O.workflow(rev=revision.version, sections=data)
+        return O.workflow(rev=revision.version, sections=data,
+                          revisions=revisions)
 
     @workflow.when(method='POST', template='json')
     @workflow.wrap_create(model_name='Workflow')
@@ -150,7 +167,8 @@ def flatten_workflow(workflow, expand=False):
     header = ("#! switch [%(targets)s] %(include_before)s %(include_after)s "
               "%(attachments)s %(env)s %(timeout)s")
     for section in workflow['sections']:
-        targets = " ".join(section['targets'])
+        targets = " ".join([s.strip() for s in section['targets']
+                            if s.strip()])
         timeout = section['timeout'] or ''
         lang = section.get('lang')
         shebang_lang = ""
@@ -184,19 +202,18 @@ def flatten_workflow(workflow, expand=False):
                     s = _parse_script_name(request, scr['path']).content
                 except:
                     s = '# Script %s cannot be loaded' % scr['path']
-                parts.append(s)
+                parts.append(s.strip())
 
             include_before = []
             include_after = []
         else:
-            parts = [section['content']]
+            parts = [section['content'].strip()]
         _header = header % dict(targets=targets,
                                 include_before=" ".join(include_before),
                                 include_after=" ".join(include_after),
                                 attachments=" ".join(attachments),
                                 timeout=timeout,
                                 env=env)
-
         new_content.append(_header)
         if shebang_lang:
             new_content.append(shebang_lang)
