@@ -182,8 +182,6 @@ class TestLibrary(base.BaseRESTTestCase):
 
         self.assertEqual(resp_json, {"success": {"status": "ok"}},
                          resp.body)
-        self.assertRedisInc('scripts:create')
-        self.assertRedisPub('scripts:create', 5)
 
         resp = self.app.get(
             '/rest/library/script/cloudrunner/folder1/scr1',
@@ -214,8 +212,6 @@ class TestLibrary(base.BaseRESTTestCase):
             resp_json, {
                 "error": {"msg": "Folder private/folder1/ is not accessible"}},
             resp.body)
-        self.assertRedisInc(None)
-        self.assertRedisPub(None, None)
 
     def test_update_script(self):
         resp = self.app.put('/rest/library/script',
@@ -230,9 +226,6 @@ class TestLibrary(base.BaseRESTTestCase):
         self.assertEqual(resp_json, {"success": {"status": "ok"}},
                          resp.body)
 
-        self.assertRedisInc('scripts:modify')
-        self.assertRedisPub('scripts:modify', 1)
-
     def test_delete_script(self):
         resp = self.app.delete(
             '/rest/library/script/cloudrunner/folder1/test1',
@@ -244,9 +237,6 @@ class TestLibrary(base.BaseRESTTestCase):
 
         self.assertEqual(resp_json, {"success": {"status": "ok"}},
                          resp.body)
-
-        self.assertRedisInc('scripts:delete')
-        self.assertRedisPub('scripts:delete', 1)
 
     def test_delete_fail_script(self):
         resp = self.app.delete(
@@ -261,9 +251,6 @@ class TestLibrary(base.BaseRESTTestCase):
             resp_json, {"error": {"msg": "Script 'test111' not found"}},
             resp.body)
 
-        self.assertRedisInc(None)
-        self.assertRedisPub(None, None)
-
     def test_delete_repo_fail_script(self):
         resp = self.app.delete('/rest/library/script/private/folder1/test1',
                                headers={
@@ -275,6 +262,3 @@ class TestLibrary(base.BaseRESTTestCase):
         self.assertEqual(
             resp_json, {"error": {"msg": "Script 'test1' not found"}},
             resp.body)
-
-        self.assertRedisInc(None)
-        self.assertRedisPub(None, None)

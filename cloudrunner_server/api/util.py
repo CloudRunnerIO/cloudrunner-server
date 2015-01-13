@@ -15,11 +15,6 @@
 from random import SystemRandom
 import string
 
-REDIS_AUTH_USER = 'X-Auth-Cached-User__%s'
-REDIS_AUTH_TOKEN = 'X-Auth-Cached-Token__%s'
-REDIS_AUTH_PERMS = 'X-Auth-Cached-Permissions__%s'
-REDIS_AUTH_TIER = 'X-Auth-Cached-Tier__%s'
-
 TOKEN_CHARS = string.letters + string.digits + '~_-'
 
 

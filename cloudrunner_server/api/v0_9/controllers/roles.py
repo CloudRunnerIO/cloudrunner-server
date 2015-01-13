@@ -43,7 +43,7 @@ class Roles(object):
         return O.roles(roles=[r.serialize(
             skip=['id', 'group_id', 'user_id'],
             rel=([('group.name', 'group')])) for r in roles],
-            quota=dict(allowed=request.tier.roles))
+            quota=dict(allowed=request.user.tier.roles))
 
     @check_policy('is_admin')
     @roles.when(method='POST', template='json')

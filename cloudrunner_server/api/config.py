@@ -65,11 +65,6 @@ schedule_manager = local_plugin_loader(cr_config.scheduler)()
 REST_SERVER_URL = cr_config.rest_api_url or "http://localhost/rest/"
 DASH_SERVER_URL = cr_config.dash_api_url or "http://localhost/"
 
-redis = {
-    'host': 'localhost',
-    'port': 6379
-}
-
 zmq = {
     'server_uri': "tcp://0.0.0.0:5559"
 }

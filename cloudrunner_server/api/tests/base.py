@@ -13,7 +13,6 @@
 #  *******************************************************/
 
 from datetime import datetime, timedelta
-from mock import call, Mock, patch
 import os
 from pecan.testing import load_test_app
 from pecan import conf, set_config
@@ -21,35 +20,20 @@ from sqlalchemy import create_engine
 from sqlalchemy.pool import StaticPool
 
 from cloudrunner.util.crypto import hash_token
-from cloudrunner_server.api.hooks.redis_hook import redis as r
 from ...tests.base import BaseTestCase
 from ..model import *  # noqa
 
 engine = None
-redis = Mock()
-r.Redis = redis
 
 
 class BaseRESTTestCase(BaseTestCase):
 
-    @patch('redis.Redis', redis)
     def setUp(self):
         super(BaseRESTTestCase, self).setUp()
         self.app = load_test_app(os.path.join(
             os.path.dirname(__file__), '../../api',
             'config_test.py'
         ))
-        self.redis = redis()
-        incr = Mock()
-        publ = Mock()
-        self.redis.incr = incr
-        self.redis.publish = publ
-
-        self.redis.zrangebyscore.return_value = ['PREDEFINED_TOKEN']
-        self.redis.hgetall.return_value = dict(uid=1, org='MyOrg')
-        self.redis.smembers.return_value = set(['role1', 'is_test_user',
-                                                'is_admin'])
-        self.redis.get.return_value = "10"
         self.populate()
         global engine
         conf.sqlalchemy.engine = engine
@@ -258,17 +242,3 @@ class BaseRESTTestCase(BaseTestCase):
                     created_at=datetime.strptime('2014-01-01', '%Y-%m-%d'))
         Session.add(task)
         Session.commit()
-
-    def assertRedisInc(self, value):
-        if value:
-            self.assertEqual(self.redis.incr.call_args_list,
-                             [call(value)])
-        else:
-            self.assertEqual(self.redis.incr.call_args_list, [])
-
-    def assertRedisPub(self, value, action):
-        if value:
-            self.assertEqual(self.redis.publish.call_args_list,
-                             [call(value, action)])
-        else:
-            self.assertEqual(self.redis.publish.call_args_list, [])

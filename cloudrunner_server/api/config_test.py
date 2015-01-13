@@ -55,11 +55,6 @@ cr_config = CONFIG
 schedule_manager = local_plugin_loader(CONFIG.scheduler)()
 loaded_plugins = load_plugins(CONFIG)
 
-redis = {
-    'host': 'localhost',
-    'port': 6379
-}
-
 zmq = {
     'server_uri': "ipc:///home/ttrifonov/.cloudrunner/"
     "var/run/sock/cloudrunner//local-api.sock"

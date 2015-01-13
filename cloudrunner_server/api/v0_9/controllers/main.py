@@ -12,13 +12,12 @@
 #  * without the express permission of CloudRunner.io
 #  *******************************************************/
 
-import time
-from datetime import datetime
 from pecan import expose, request
 from pecan.secure import secure
 
 from .auth import Auth
 from .batches import Batches
+from .billing import Billing
 from .dispatch import Dispatch
 from .execute import Execute
 from .help import HtmlDocs
@@ -30,12 +29,8 @@ from .status import EntityStatus
 from .workflows import Workflows
 
 from cloudrunner_server.api import VERSION
-from cloudrunner_server.api.client import redis_client as r
-from cloudrunner_server.api.util import (REDIS_AUTH_USER,
-                                         REDIS_AUTH_TOKEN,
-                                         REDIS_AUTH_PERMS,
-                                         REDIS_AUTH_TIER,
-                                         Wrap)
+from cloudrunner_server.api.util import (Wrap)
+from cloudrunner_server.util.cache import CacheRegistry
 
 
 class RestApi(object):
@@ -44,45 +39,27 @@ class RestApi(object):
     def authorize(cls):
         username = request.headers.get('Cr-User')
         token = request.headers.get('Cr-Token')
-        if username and token:
-            key = REDIS_AUTH_TOKEN % username
-            ts_now = time.mktime(datetime.now().timetuple())
-            tokens = r.zrangebyscore(key, ts_now, 'inf')
-            if token not in tokens:
+        reg = CacheRegistry()
+        if not username or not token:
+            return False
+
+        with reg.reader('') as cache:
+            token = cache.get_user_token(username, token)
+            if not token:
                 return False
 
-            user_info = r.hgetall(REDIS_AUTH_USER % username)
-            permissions = r.smembers(REDIS_AUTH_PERMS % username)
-            tier_info = r.hgetall(REDIS_AUTH_TIER % username)
-            request.user = Wrap(id=user_info['uid'],
+            request.user = Wrap(id=token['uid'],
                                 username=username,
-                                org=user_info['org'],
-                                token=token,
-                                permissions=permissions)
-            request.tier = Wrap(**tier_info)
+                                org=token['org'],
+                                token=token['token'],
+                                permissions=token['permissions'],
+                                tier=Wrap(**token['tier']))
             return True
         return False
 
     @classmethod
     def lazy_authorize(cls):
-        username = request.headers.get('Cr-User')
-        token = request.headers.get('Cr-Token')
-        if username and token:
-            key = REDIS_AUTH_TOKEN % username
-            ts_now = time.mktime(datetime.now().timetuple())
-            tokens = r.zrangebyscore(key, ts_now, 'inf')
-            if token in tokens:
-
-                user_info = r.hgetall(REDIS_AUTH_USER % username)
-                permissions = r.smembers(REDIS_AUTH_PERMS % username)
-                tier_info = r.hgetall(REDIS_AUTH_TIER % username)
-                request.user = Wrap(id=user_info['uid'],
-                                    username=username,
-                                    org=user_info['org'],
-                                    token=token,
-                                    permissions=permissions)
-                request.tier = Wrap(**tier_info)
-
+        RestApi.authorize()
         # Always return True
         return True
 
@@ -91,6 +68,7 @@ class RestApi(object):
         return dict(name='CloudRunner.IO REST API', version=VERSION)
 
     auth = Auth()
+    billing = secure(Billing(), 'authorize')
     dispatch = secure(Dispatch(), 'authorize')
     workflows = secure(Workflows(), 'authorize')
     batches = secure(Batches(), 'authorize')

@@ -12,20 +12,24 @@
 #  * without the express permission of CloudRunner.io
 #  *******************************************************/
 
-import logging
+from pecan import expose, request
 from pecan.hooks import HookController
 
+from cloudrunner_server.triggers.manager import TriggerManager
+
+from cloudrunner_server.api.hooks.braintree_hook import BrainTreeHook
 from cloudrunner_server.api.hooks.db_hook import DbHook
 from cloudrunner_server.api.hooks.error_hook import ErrorHook
+from cloudrunner_server.api.util import JsonOutput as O
 
-LOG = logging.getLogger()
-
-from .groups import Groups
-from .nodes import Nodes
-from .orgs import Orgs
-from .roles import Roles
-from .users import Users
+MAN = TriggerManager()
 
 
-class Manage(HookController, Users, Roles, Groups, Nodes, Orgs):
-    __hooks__ = [DbHook(), ErrorHook()]
+class Billing(HookController):
+
+    __hooks__ = [DbHook(), ErrorHook(), BrainTreeHook()]
+
+    @expose('json')
+    def token(self):
+        token = request.braintree.ClientToken.generate()
+        return O.billing(token=token)

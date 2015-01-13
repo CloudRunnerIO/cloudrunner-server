@@ -20,7 +20,6 @@ class TestManage(base.BaseRESTTestCase):
 
     def setUp(self):
         super(TestManage, self).setUp()
-        self.redis.smembers.return_value = set(['is_admin', 'is_test_user'])
 
     def ztest_list_users(self):
         resp = self.app.get('/rest/manage/users/',
@@ -66,9 +65,6 @@ class TestManage(base.BaseRESTTestCase):
 
         self.assertEqual(resp_json, {"success": {"status": "ok"}}, resp.body)
 
-        self.assertRedisInc('users:create')
-        self.assertRedisPub('users:create', 3)
-
     def ztest_update_user(self):
         resp = self.app.put(
             '/rest/manage/users/',
@@ -82,9 +78,6 @@ class TestManage(base.BaseRESTTestCase):
 
         self.assertEqual(
             resp_json, {"success": {"status": "ok"}}, resp.body)
-
-        self.assertRedisInc('users:modify')
-        self.assertRedisPub('users:modify', 2)
 
     def ztest_update_user_fail(self):
         resp = self.app.put('/rest/manage/users/',
@@ -100,9 +93,6 @@ class TestManage(base.BaseRESTTestCase):
         self.assertEqual(
             resp_json, {"error": {"msg": "User not found"}}, resp.body)
 
-        self.assertRedisInc(None)
-        self.assertRedisPub(None, None)
-
     def ztest_update_user_field_fail(self):
 
         resp = self.app.put('/rest/manage/users/',
@@ -114,10 +104,7 @@ class TestManage(base.BaseRESTTestCase):
 
         self.assertEqual(
             resp_json, {"error": {"msg": "Field not present: 'email'",
-                        "field": "'email'"}}, resp.body)
-
-        self.assertRedisInc(None)
-        self.assertRedisPub(None, None)
+                                  "field": "'email'"}}, resp.body)
 
     def ztest_patch_user(self):
         resp = self.app.patch('/rest/manage/users/',
@@ -128,9 +115,6 @@ class TestManage(base.BaseRESTTestCase):
         resp_json = resp.json
 
         self.assertEqual(resp_json, {"success": {"status": "ok"}}, resp.body)
-
-        self.assertRedisInc('users:modify')
-        self.assertRedisPub('users:modify', 2)
 
     def ztest_patch_user_nothing(self):
         resp = self.app.patch('/rest/manage/users/',
@@ -153,9 +137,6 @@ class TestManage(base.BaseRESTTestCase):
         self.assertEqual(
             resp_json, {"success": {"status": "ok"}}, resp.body)
 
-        self.assertRedisInc('users:delete')
-        self.assertRedisPub('users:delete', 2)
-
     def ztest_delete_user_fail(self):
         resp = self.app.delete('/rest/manage/users/nonexistinguser',
                                headers={'Cr-Token': 'PREDEFINED_TOKEN',
@@ -165,9 +146,6 @@ class TestManage(base.BaseRESTTestCase):
 
         self.assertEqual(
             resp_json, {"error": {"msg": "User not found"}}, resp.body)
-
-        self.assertRedisInc(None)
-        self.assertRedisPub(None, None)
 
     # Groups
 
@@ -292,7 +270,6 @@ class SuperAdminTest(base.BaseRESTTestCase):
 
     def setUp(self):
         super(SuperAdminTest, self).setUp()
-        self.redis.smembers.return_value = set(['is_super_admin'])
 
     def ztest_list_orgs(self):
         resp = self.app.get('/rest/manage/orgs/',

@@ -22,7 +22,7 @@ from sqlalchemy.orm import relationship, backref, aliased
 from .base import TableBase
 from .users import User, Org
 
-VALID_NAME = re.compile(r"^[\w\-. ]+$")
+from cloudrunner_server.util.validator import valid_script_name
 
 
 class Repository(TableBase):
@@ -250,7 +250,7 @@ class Script(TableBase):
 
     @staticmethod
     def valid_name(name):
-        return re.match(VALID_NAME, name)
+        return valid_script_name(name)
 
     @staticmethod
     def parse(full_path):

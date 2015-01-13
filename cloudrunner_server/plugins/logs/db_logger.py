@@ -99,6 +99,7 @@ class DbLogger(LoggerPluginBase):
                 return
             with self.cache.writer(msg.org, msg.session_id) as cache:
                 cache.store_log(msg.node, msg.ts, log, msg.user, io, ttl=None)
+            self.r.publish('task:update', msg.session_id)
 
         elif msg.control == "FINISHEDMESSAGE":
             self._finalize(msg)
@@ -113,10 +114,12 @@ class DbLogger(LoggerPluginBase):
                          elapsed=data['elapsed'], as_user=data['remote_user']))
             with self.cache.writer(msg.org, msg.session_id) as cache:
                 cache.store_meta(result, msg.ts)
+                cache.incr(msg.org, "logs")
 
-                cache.final(msg.session_id, env=msg.env)
-                cache.notify(msg.org, "logs")
+            msg = dict(id=msg.session_id, env=msg.env)
+            self.r.publish("task:end", json.dumps(msg))
 
         elif msg.control == "INITIALMESSAGE":
             with self.cache.writer(msg.org, msg.session_id) as cache:
-                cache.notify(msg.org, "logs")
+                cache.incr(msg.org, "logs")
+            self.r.publish('task:start', msg.session_id)

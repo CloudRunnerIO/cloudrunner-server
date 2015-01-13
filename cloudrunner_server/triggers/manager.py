@@ -429,17 +429,7 @@ class TriggerManager(Daemon):
 
         pubsub = self.redis.pubsub()
 
-        jobs = self.db.query(Job).filter(Job.enabled == True).all()  # noqa
-        pubsub.psubscribe('jobs:*')
-        patterns = {}
-
-        for job in jobs:
-            pattern = None
-            pubsub.psubscribe("task:*")
-            if pattern:
-                patterns[job.id] = pattern
-                pubsub.psubscribe(pattern)
-                LOG.info('Subscribed to %s' % pattern)
+        pubsub.psubscribe('task:*')
 
         while True:
             try:
@@ -448,34 +438,7 @@ class TriggerManager(Daemon):
                         continue
                     self.db.expire_all()
                     target, action = item['channel'].split(":", 1)
-                    if target == 'jobs':
-                        if action == 'create':
-                            job_id = int(item['data'])
-                            job = self.db.query(Job).filter(
-                                Job.id == job_id).first()
-                            if job:
-                                pattern = None
-                                if pattern:
-                                    patterns[job.id] = pattern
-                                    pubsub.psubscribe(pattern)
-                                    LOG.info('Subscribed to %s' % pattern)
-                        elif action == 'update':
-                            job_id = int(item['data'])
-                            job = self.db.query(Job).filter(
-                                Job.id == job_id).first()
-                            if job and job.arguments != patterns.get(job.id):
-                                pattern = patterns.pop(job_id, '')
-                                if pattern:
-                                    pubsub.punsubscribe(pattern)
-                                pubsub.psubscribe(job.arguments)
-                                LOG.info('Subscribed to %s' % job.arguments)
-                        elif action == 'delete':
-                            job_id = int(item['data'])
-                            pattern = patterns.pop(job_id, '')
-                            if pattern:
-                                pubsub.punsubscribe(pattern)
-                    # Processing triggers
-                    elif target == 'task':
+                    if target == 'task':
                         job_data = json.loads(item['data'])
                         LOG.info(job_data)
                         kwargs['env'] = job_data.get('env', {})

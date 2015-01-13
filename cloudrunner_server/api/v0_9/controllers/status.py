@@ -16,7 +16,6 @@ from pecan import expose, request, response
 from pecan.hooks import HookController
 
 from cloudrunner_server.api.hooks.error_hook import ErrorHook
-from cloudrunner_server.api.hooks.redis_hook import RedisHook
 from cloudrunner_server.util.cache import CacheRegistry
 
 MAX_TIMEOUT = 15
@@ -61,14 +60,13 @@ class Status(object):
 
 class EntityStatus(HookController):
 
-    __hooks__ = [ErrorHook(), RedisHook()]
+    __hooks__ = [ErrorHook()]
 
     @expose(content_type="text/event-stream")
     @expose(content_type="application/json")
     def get(self, org=None, *args, **kwargs):
         targets = kwargs.keys()
-
-        cache = CacheRegistry(redis=request.redis)
+        cache = CacheRegistry()
 
         st = Status.from_request(request)
 

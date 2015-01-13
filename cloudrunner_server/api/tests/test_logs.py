@@ -21,7 +21,6 @@ class TestLogs(base.BaseRESTTestCase):
         super(TestLogs, self).setUp()
 
     def test_list_logs(self):
-        self.redis.pipeline().execute.return_value = [(('1111111111', 1000),)]
         tasks = {
             'etag': 1000,
             'groups': [

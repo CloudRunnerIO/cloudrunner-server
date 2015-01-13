@@ -44,7 +44,7 @@ class Groups(object):
                 rel=[('roles', 'roles', modifier)])
                 for u in Group.visible(request).all()]
             return O._anon(groups=groups,
-                           quota=dict(allowed=request.tier.groups))
+                           quota=dict(allowed=request.user.tier.groups))
 
     @check_policy('is_admin')
     @groups.when(method='POST', template='json')

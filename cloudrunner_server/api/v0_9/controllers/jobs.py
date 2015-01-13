@@ -23,7 +23,6 @@ from cloudrunner_server.api.decorators import wrap_command
 from cloudrunner_server.api.hooks.error_hook import ErrorHook
 from cloudrunner_server.api.hooks.db_hook import DbHook
 from cloudrunner_server.api.hooks.perm_hook import PermHook
-from cloudrunner_server.api.hooks.signal_hook import SignalHook
 from cloudrunner_server.api.model import (Job, Script, Repository, User)
 from cloudrunner_server.api.util import JsonOutput as O
 from cloudrunner_server.plugins.repository.base import PluginRepoBase
@@ -55,7 +54,7 @@ def _try_load(s):
 
 class Jobs(HookController):
 
-    __hooks__ = [SignalHook(), ErrorHook(), DbHook(),
+    __hooks__ = [ErrorHook(), DbHook(),
                  PermHook(dont_have=set(['is_super_admin']))]
 
     @expose('json', generic=True)
@@ -71,7 +70,7 @@ class Jobs(HookController):
                      ('script', 'script', _get_script_data)])
                     for t in query.all()]
             return O._anon(jobs=sorted(jobs, key=lambda t: t['name'].lower()),
-                           quota=dict(allowed=request.tier.cron_jobs))
+                           quota=dict(allowed=request.user.tier.cron_jobs))
         else:
             job_name = args[0]
             try:

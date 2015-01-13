@@ -33,6 +33,7 @@ from cloudrunner.core.message import TOKEN_SEPARATOR
 from cloudrunner_server.plugins.auth.base import NodeVerifier
 from cloudrunner_server.api.model import *  # noqa
 from cloudrunner_server.util.db import checkout_listener
+from cloudrunner_server.util.validator import valid_node_name
 
 YEARS = 10  # Default expire for signed certificates
 TAG = 1
@@ -50,7 +51,6 @@ except:
     C = 'US'
 
 ENGINE = None
-VALID_NAME = re.compile('^[a-zA-Z0-9\-_\.]+$')
 LOG = logging.getLogger("Functions")
 
 
@@ -247,7 +247,7 @@ class CertController(DbMixin):
         is_signed = False
         messages = []
 
-        if not VALID_NAME.match(node):
+        if not valid_node_name(node):
             messages.append((ERR, 'Invalid node name'))
             return messages, None
 
@@ -440,9 +440,9 @@ class CertController(DbMixin):
                     pass
             if not ca:
                 return False, 'ORG cannot be determined', None, None
-            if not VALID_NAME.match(CN):
+            if not valid_node_name(CN):
                 return False, 'Invalid node name', None, None
-            if not VALID_NAME.match(ca):
+            if not valid_node_name(ca):
                 return False, 'Invalid org name', None, None
 
             csr_file_name = os.path.join(self.ca_path, 'reqs',

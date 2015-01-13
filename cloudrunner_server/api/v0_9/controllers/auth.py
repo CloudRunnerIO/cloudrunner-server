@@ -21,18 +21,14 @@ from sqlalchemy import event
 from sqlalchemy.exc import IntegrityError
 
 from cloudrunner_server.api.decorators import wrap_command
+from cloudrunner_server.api.hooks.braintree_hook import BrainTreeHook
 from cloudrunner_server.api.hooks.db_hook import DbHook
 from cloudrunner_server.api.hooks.error_hook import ErrorHook
 from cloudrunner_server.api.util import JsonOutput as O
 from cloudrunner_server.api.model import *  # noqa
 
-from cloudrunner_server.api.client import redis_client as r
 from cloudrunner_server.master.functions import CertController
 from cloudrunner_server.util.cache import CacheRegistry
-from cloudrunner_server.api.util import (REDIS_AUTH_USER,
-                                         REDIS_AUTH_TOKEN,
-                                         REDIS_AUTH_PERMS,
-                                         REDIS_AUTH_TIER)
 
 DEFAULT_EXP = 1440
 LOG = logging.getLogger()
@@ -46,7 +42,7 @@ def org_after_insert(mapper, connection, target):
 
 class Auth(HookController):
 
-    __hooks__ = [DbHook(), ErrorHook()]
+    __hooks__ = [DbHook(), ErrorHook(), BrainTreeHook()]
 
     @expose('json')
     def login(self, **kwargs):
@@ -87,21 +83,14 @@ class Auth(HookController):
                                   minutes=expire,
                                   scope='LOGIN')
 
-        key = REDIS_AUTH_TOKEN % username
-        ts = time.mktime(token.expires_at.timetuple())
-        r.zadd(key, token.value, ts)
         permissions = [p.name for p in user.permissions]
-        perm_key = REDIS_AUTH_PERMS % username
-        r.delete(perm_key)
-        if permissions:
-            r.sadd(perm_key, *permissions)
-        info_key = REDIS_AUTH_USER % username
-        r.delete(info_key)
-        r.hmset(info_key, dict(uid=str(user.id), org=user.org.name))
+        cached_token = dict(uid=user.id, org=user.org.name, token=token.value,
+                            tier=user.org.tier.serialize(skip=['id']),
+                            permissions=permissions)
 
-        tier_key = REDIS_AUTH_TIER % username
-        r.delete(tier_key)
-        r.hmset(tier_key, user.org.tier.serialize(skip=['id']))
+        cache = CacheRegistry()
+        with cache.writer('', '') as cache:
+            cache.add_token(username, cached_token, expire)
 
         return O.login(user=username,
                        token=token.value,
@@ -126,8 +115,8 @@ class Auth(HookController):
                 LOG.error(ex)
                 return O.error(msg="Cannot logout")
             finally:
-                key = REDIS_AUTH_TOKEN % user
-                key_perm = REDIS_AUTH_PERMS % user
+                key = CACHE_AUTH_TOKEN % user
+                key_perm = CACHE_AUTH_PERMS % user
                 # Remove current token
                 r.zrem(key, token)
                 r.delete(key_perm)
@@ -153,8 +142,8 @@ class Auth(HookController):
             UsageTier.name == plan_id).one()
         org = Org(name="ORG-%s" % username, tier=plan, active=True)
         user = User(username=username, email=email, org=org,
-                    first_name=kwargs.get("first_name"),
-                    last_name=kwargs.get("last_name"),
+                    first_name=kwargs["first_name"],
+                    last_name=kwargs["last_name"],
                     department=kwargs.get("department"),
                     position=kwargs.get("position"),
                     active=False)
@@ -187,6 +176,35 @@ class Auth(HookController):
         cache.prepare_space(org.name)
         ACTION_URL = "%s/index.html#activate/%s" % (
             conf.DASH_SERVER_URL.rstrip('/'), key.value)
+
+        # Billing
+        token = kwargs.get('payment_nonce')
+        customer_reply = request.braintree.Customer.create({
+            "first_name": kwargs['first_name'],
+            "last_name": kwargs['last_name'],
+            "email": email,
+            "credit_card": {
+                "payment_method_nonce": token,
+                "options": {
+                    "verify_card": True,
+                }
+            }
+        })
+        if plan_id != 'free':
+            if customer_reply.is_success:
+                customer = request.braintree.Customer.find(
+                    customer_reply.customer.id)
+                token = customer.credit_cards[0].token
+                result = request.braintree.Subscription.create({
+                    "payment_method_token": token,
+                    "plan_id": plan_id
+                })
+                print result
+            else:
+                print customer_reply.message
+                for error in customer_reply.errors.deep_errors:
+                    print vars(error)
+
         html = render('email/activate.html',
                       dict(ACTION_URL=ACTION_URL, KEY=key.value))
         requests.post(

@@ -23,7 +23,6 @@ from cloudrunner_server.api.decorators import wrap_command
 from cloudrunner_server.api.hooks.error_hook import ErrorHook
 from cloudrunner_server.api.hooks.db_hook import DbHook
 from cloudrunner_server.api.hooks.perm_hook import PermHook
-from cloudrunner_server.api.hooks.signal_hook import SignalHook
 from cloudrunner_server.api.util import JsonOutput as O
 from cloudrunner_server.api.model import (Repository, Script, Folder, Revision,
                                           RepositoryCreds, Org)
@@ -35,7 +34,7 @@ AVAILABLE_REPO_TYPES = set(['cloudrunner', 'github', 'bitbucket', 'dropbox'])
 
 class Library(HookController):
 
-    __hooks__ = [DbHook(), ErrorHook(), SignalHook(),
+    __hooks__ = [DbHook(), ErrorHook(),
                  PermHook(dont_have=set(['is_super_admin']))]
 
     @expose('json', generic=True)
@@ -43,13 +42,14 @@ class Library(HookController):
     def repo(self, *args, **kwargs):
         if not args:
             repos = Repository.visible(request).all()
+            tier = request.user.tier
             return O._anon(repositories=sorted([r.serialize(
                 skip=['id', 'org_id', 'owner_id'],
                 rel=[('owner.username', 'owner')]) for r in repos],
                 key=lambda l: l['name']),
-                quota=dict(total=request.tier.total_repos,
-                           user=request.tier.total_repos,
-                           external=request.tier.external_repos == "True"))
+                quota=dict(total=tier.total_repos,
+                           user=tier.total_repos,
+                           external=tier.external_repos == "True"))
         else:
             repo_name = args[0]
             repo = Repository.visible(request).filter(

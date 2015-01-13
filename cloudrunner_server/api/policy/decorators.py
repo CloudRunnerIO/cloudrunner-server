@@ -26,7 +26,7 @@ def check_policy(*args):
         @wraps(f)
         def wrapper(*args, **kwargs):
             # Call function
-            if not request.user.permissions.intersection(permissions):
+            if not set(request.user.permissions).intersection(permissions):
                 abort(401)
 
             return f(*args, **kwargs)

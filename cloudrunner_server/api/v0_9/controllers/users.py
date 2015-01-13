@@ -56,8 +56,8 @@ class Users(object):
                         joinedload(Group.roles)).all()]
             return O._anon(users=users,
                            groups=groups,
-                           quota=dict(users=request.tier.users,
-                                      groups=request.tier.groups))
+                           quota=dict(users=request.user.tier.users,
+                                      groups=request.user.tier.groups))
 
     @users.when(method='POST', template='json')
     @check_policy('is_admin')

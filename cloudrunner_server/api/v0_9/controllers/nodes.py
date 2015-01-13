@@ -51,7 +51,7 @@ class Nodes(object):
                     skip=['id', 'org_id'],
                     rel=[('nodes', 'members', _serialize)]
                 ) for g in groups],
-                quota=dict(allowed=request.tier.nodes))
+                quota=dict(allowed=request.user.tier.nodes))
 
     @expose('json', generic=True)
     @check_policy('is_admin')

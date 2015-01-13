@@ -24,11 +24,11 @@ from sqlalchemy.orm import exc, joinedload
 from cloudrunner_server.api.hooks.error_hook import ErrorHook
 from cloudrunner_server.api.hooks.db_hook import DbHook
 from cloudrunner_server.api.hooks.perm_hook import PermHook
-from cloudrunner_server.api.hooks.redis_hook import RedisHook
 from cloudrunner_server.api.model import (Script, Task, TaskGroup, Run,
                                           Revision, RunNode, LOG_STATUS)
 from cloudrunner_server.api.util import JsonOutput as O
 from cloudrunner_server.util.cache import CacheRegistry
+from cloudrunner_server.util.validator import valid_node_name
 
 LOG = logging.getLogger()
 PAGE_SIZE = 50
@@ -36,28 +36,24 @@ PAGE_SIZE = 50
 
 class Logs(HookController):
 
-    __hooks__ = [ErrorHook(), DbHook(), RedisHook(),
+    __hooks__ = [ErrorHook(), DbHook(),
                  PermHook(dont_have=set(['is_super_admin']))]
 
     @expose('json')
-    def all(self, start=None, end=None, nodes=None, run_uuids=None, etag=None):
-        start = int(start or 0) or 0
+    def all(self, marker=None, nodes=None, run_uuids=None, etag=None,
+            **kwargs):
         if etag:
             etag = int(etag)
         else:
             etag = 0
-        if start and not end:
-            end = start + PAGE_SIZE
-        else:
-            end = PAGE_SIZE
-        if end - start > 100:
-            return O.error(msg="Page size cannot be bigger than 100")
+
+        pattern = kwargs.get('filter')
 
         cache = CacheRegistry()
         max_score = 0
         uuids = []
-        with cache.reader(request.user.org) as c:
-            if etag:
+        if etag:
+            with cache.reader(request.user.org) as c:
                 max_score, uuids = c.get_uuid_by_score(min_score=etag)
 
         if run_uuids:
@@ -75,8 +71,14 @@ class Logs(HookController):
             groups = groups.filter(Run.uuid.in_(uuids))
         if nodes:
             nodes = nodes.split(',')
-            groups = groups.filter(RunNode.name.in_(nodes))
-        group_ids = groups.all()[start:end]
+            if len(nodes) == 1:
+                nodes = [valid_node_name(*nodes)]
+            else:
+                nodes = valid_node_name(*nodes)
+
+            if nodes:
+                groups = groups.filter(RunNode.name.in_(nodes))
+        group_ids = groups.all()[:PAGE_SIZE]
         tasks = Task.visible(request).filter(
             Task.taskgroup_id.in_([g[0] for g in group_ids]))
 
@@ -135,7 +137,13 @@ class Logs(HookController):
                     groups = groups.filter(Run.uuid.in_(run_uuids))
                 if nodes:
                     nodes = nodes.split(',')
-                    groups = groups.filter(RunNode.name.in_(nodes))
+                    if len(nodes) == 1:
+                        nodes = [valid_node_name(*nodes)]
+                    else:
+                        nodes = valid_node_name(*nodes)
+
+                    if nodes:
+                        groups = groups.filter(RunNode.name.in_(nodes))
                 if script_name:
                     scr = Script.find(request, script_name).one()
                     groups = groups.join(Revision,
@@ -221,7 +229,6 @@ class Logs(HookController):
         # TODO: check for e-tag
         min_score = int(kwargs.get('from', request.headers.get('Etag', 0)))
         max_score = int(kwargs.get('to', 0)) or None
-        cache = CacheRegistry(redis=request.redis)
         score = 1
         try:
             if order_by == 'asc':
@@ -244,6 +251,7 @@ class Logs(HookController):
                 runs.extend([r for r in t.runs if r.uuid in uuids])
 
         outputs = []
+        cache = CacheRegistry()
         with cache.reader(request.user.org) as c:
             try:
                 c.apply_filters(pattern=pattern,

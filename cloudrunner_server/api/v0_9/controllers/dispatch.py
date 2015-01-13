@@ -19,7 +19,6 @@ from cloudrunner_server.triggers.manager import TriggerManager
 
 from cloudrunner_server.api.hooks.db_hook import DbHook
 from cloudrunner_server.api.hooks.error_hook import ErrorHook
-from cloudrunner_server.api.hooks.redis_hook import RedisHook
 from cloudrunner_server.api.hooks.zmq_hook import ZmqHook
 from cloudrunner_server.api.util import JsonOutput as O
 
@@ -28,7 +27,7 @@ MAN = TriggerManager()
 
 class Dispatch(HookController):
 
-    __hooks__ = [DbHook(), ZmqHook(), ErrorHook(), RedisHook()]
+    __hooks__ = [DbHook(), ZmqHook(), ErrorHook()]
 
     @expose('json')
     def active_nodes(self):

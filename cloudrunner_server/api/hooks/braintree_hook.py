@@ -12,15 +12,23 @@
 #  * without the express permission of CloudRunner.io
 #  *******************************************************/
 
-from pecan import conf, request  # noqa
+import braintree
+
+from pecan import request
 from pecan.hooks import PecanHook
-import redis
+from cloudrunner_server.api.model import Session
 
 
-class RedisHook(PecanHook):
+class BrainTreeHook(PecanHook):
 
-    priority = 99
+    priority = 300
 
     def before(self, state):
-        r_server, r_port = conf.redis['host'], conf.redis['port']
-        request.redis = redis.Redis(host=r_server, port=int(r_port), db=0)
+        state.request.db = Session
+        braintree.Configuration.configure(
+            braintree.Environment.Sandbox,
+            "yfvc86vtgs6q5ybq",
+            "t4bzcv4jcjdrwspg",
+            "7fb4d9c563b098c44313fb73b48663f2"
+        )
+        request.braintree = braintree
