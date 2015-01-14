@@ -37,6 +37,8 @@ Requires:      python-sqlalchemy >= 0.7
 Requires:      pytz
 Requires:      python-pecan
 Requires:      python-msgpack >= 0.4
+Requires:      python-aerospike >= 1.0.35
+Requires:      python-braintree
 
 Obsoletes:     cloudrunner-dispatcher
 Obsoletes:     cloudrunner_server
