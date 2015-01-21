@@ -1,71 +1,27 @@
 
-local function score_filter(min_score, max_score, pattern, nodes)
-  return function(record)
-    local ts = record.ts or -1
-    if ts == -1 then
-      return true
-    else
-
-      if min_score ~= nil and max_score ~= nil then
-        if ts < min_score or ts >= max_score then
-          return false
-        end
-      end
-
-      if pattern ~= nil then
-        if record.lines == nil then
-          return false
-        end
-        local lines = record.lines
-        for i=#lines,1,-1 do
-          local line = lines[i]
-          if line == nil or line == "" or string.find(line, pattern) == nil then
-            list.remove(lines, i)
-          end
-        end
-        record.lines = lines
-        if #record.lines == 0 then
-          return false
-        end
-      end
-
-      if nodes ~= nil then
-        for i=#nodes,1,-1 do
-          local n = nodes[i]
-          if n == record.node then
-            return true
-          end
-        end
-        return false
-      end
-
-      return true
-    end
-  end
-end
-
-local function map_record(r)
-  local m = map()
-  m['ts'] = r.ts
-  m['uuid'] = r.uuid
-  m['node'] = r.node
-  m['lines'] = r.lines
-  m['io'] = r.io
-  m['result'] = r.result
-  m['type'] = r.type
-  return m
-end
-
 local function simple_map_record(r)
   local m = map()
   m['ts'] = r.ts
   m['uuid'] = r.uuid
+  local lstack = require('ldt/lib_lstack')
+  if lstack.ldt_exists(r, 'content') then
+    lines = lstack.peek(r, 'content', 0)
+    m['num_lines'] = #lines
+  end
   return m
 end
 
-function score(stream, min_score, max_score, pattern, nodes)
-  local s_filter = score_filter(min_score, max_score, pattern, nodes)
-  return stream : filter(s_filter) : map(map_record)
+local function content_map_record(r)
+  local m = map()
+  m['ts'] = r.ts
+  m['uuid'] = r.uuid
+  m['result'] = r.result
+  local lstack = require('ldt/lib_lstack')
+  if lstack.ldt_exists(r, 'content') then
+    lines = lstack.peek(r, 'content', 0)
+    m['content'] = lines
+  end
+  return m
 end
 
 -- Search functions
@@ -91,6 +47,18 @@ end
 local function owner_filter(owner)
   return function(record)
     return owner == record.owner
+  end
+end
+
+local function uuid_filter(uuids)
+  return function(record)
+    for i=#uuids,1,-1 do
+      local u = uuids[i]
+      if u == record.uuid then
+        return true
+      end
+    end
+    return false
   end
 end
 
@@ -125,7 +93,15 @@ function search(stream, bin, filters)
     local s_filter = content_filter(bin, filters.pattern)
     stream : filter(s_filter)
   end
-  return stream : map(simple_map_record);
+  if filters.uuids ~= nil and filters.uuids ~= "" then
+    local u_filter = uuid_filter(filters.uuids)
+    stream : filter(u_filter)
+  end
+  if filters.full_map then
+    return stream : map(content_map_record)
+  else
+    return stream : map(simple_map_record);
+  end
 end
 
 function userModule.search_ids(rec, min_score)
@@ -138,15 +114,24 @@ function userModule.search_ids(rec, min_score)
 end
 
 function userModule.filter_contents(record, pattern)
+  warn('FILTER: TYPE(%s)', type(record))
   if type(record) ~= "userdata" then return false end
 
   local lines = record.lines
-  for l=1,#lines do
-    local line = lines[l]
-    if line ~= nil and line ~= "" and string.find(line, pattern) ~= nil then
-      return true
+  warn('FILTER: LINES(%s)', lines)
+  if lines then
+    for l=1,#lines do
+      local line = lines[l]
+      if line ~= nil and line ~= "" and string.find(line, pattern) ~= nil then
+        return true
+      end
     end
   end
+end
+
+function userModule.adjust_settings( ldtMap )
+  local ldt_settings=require('ldt/settings_lstack');
+  ldt_settings.use_package( ldtMap, "ListMediumObject" );
 end
 
 return userModule;

@@ -168,15 +168,12 @@ class RegWriter(RegBase):
         rec = dict(key=ts, lines=lines, io=io, node=str(node))
 
         self.client.apply((LOGS_NS, 'output', self.id), 'lstack', 'push',
-                          ['content', rec])
+                          ['content', rec, 'filters'])
 
     def store_meta(self, result, ts, ttl=None):
-        key = self.key(LOGS_NS, self.org, self.id)
+        key = self.key(LOGS_NS, 'output', self.id)
         ttl = {'ttl': ttl or DAYS30}
-        self.client.put(key, dict(type='M',
-                                  uuid=self.id,
-                                  result=result),
-                        ttl)
+        self.client.put(key, dict(result=result))
 
     def add_token(self, username, token, expire):
         ttl = {'ttl': expire * 60}
@@ -216,7 +213,6 @@ class RegReader(RegBase):
                                       ['autoid', limit, 'filters',
                                        'search_ids', int(marker)])
             if not uuids:
-                print("Consumed list, exiting")
                 break
             marker = min([u['key'] for u in uuids])
             min_ts = min([u.get('ts', MAX_SCORE) for u in uuids])
@@ -280,35 +276,29 @@ class RegReader(RegBase):
         min_score = min_score or 0
         max_score = max_score or int(MAX_SCORE)
 
-        for uuid in uuids:
-            q = self.client.query(LOGS_NS, self.org)
+        q = self.client.query(LOGS_NS, 'output')
+        q.where(p.between('ts', min_score, max_score))
+        q.apply('filters', 'search',
+                ['content', dict(org=self.org, uuids=uuids, full_map=True,
+                                 pattern=self.body_filter,
+                                 nodes=self.nodes_filter)])
 
-            q.where(p.equals('uuid', uuid))
+        data = {}
 
-            q.apply('filters', 'score', [min_score, max_score,
-                                         self.body_filter, self.nodes_filter])
-            data = {}
+        def callback(rec):
+            output['new_score'] = max(output['new_score'], rec.get('ts', 0))
+            ts = output['new_score'] / 1000.0
 
-            def callback(rec):
-                if "ts" in rec:
-                    output['new_score'] = max(output['new_score'], rec['ts'])
-                if rec['type'] == 'O':
-                    ts = rec['ts'] / 1000.0
-                    data.setdefault(rec['node'],
-                                    {}).setdefault('lines',
-                                                   []).append([ts,
-                                                               rec['lines'],
-                                                               rec['io']])
-                elif rec['type'] == 'M':
-                    for node in rec.get('nodes', []):
-                        data.setdefault(node, {})['result'] = rec['result']
+            for r in rec['content']:
+                data.setdefault(r['node'],
+                                {}).setdefault('lines',
+                                               []).insert(0, [ts,
+                                                              r['lines'],
+                                                              r['io']])
+                # data.setdefault(node, {})['result'] = rec['result']
+            output[rec['uuid']] = data
 
-            q.foreach(callback)
-            for node in data:
-                lines = data[node].get("lines", [])
-                if lines:
-                    data[node]['lines'] = sorted(lines, key=lambda l: l[0])
-            output[uuid] = data
+        q.foreach(callback)
 
         new_score = output.pop('new_score', 1)
         return new_score, output
