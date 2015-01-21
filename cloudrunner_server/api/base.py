@@ -17,13 +17,8 @@ from pecan import request, response
 from mako.template import Template
 
 from cloudrunner_server.api.model import Script
-from cloudrunner_server.api.hooks.zmq_hook import ZmqHook
 
 LOG = logging.getLogger()
-
-
-class ZmqMixin(object):
-    __hooks__ = [ZmqHook()]
 
 
 class DbMixin(object):

@@ -90,7 +90,9 @@ class JobSession(Thread):
             return
 
         self.env = env
-        if not isinstance(env, dict):
+        if not env:
+            env = {}
+        elif not isinstance(env, dict):
             LOG.warn("Invalid ENV passed: %s" % env)
             env = {}
         self.job_done = self.manager.backend.publish_queue('logger')
@@ -124,7 +126,8 @@ class JobSession(Thread):
         ts = self._create_ts()
         message = InitialMessage(session_id=self.session_id,
                                  ts=ts,
-                                 org=user_org[1])
+                                 org=user_org[1],
+                                 user=user_org[0])
         self._reply(message)
         result = {}
         msg_ret = []

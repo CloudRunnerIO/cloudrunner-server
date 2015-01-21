@@ -172,8 +172,6 @@ class Auth(HookController):
             raise
         # send validation email
 
-        cache = CacheRegistry()
-        cache.prepare_space(org.name)
         ACTION_URL = "%s/index.html#activate/%s" % (
             conf.DASH_SERVER_URL.rstrip('/'), key.value)
 

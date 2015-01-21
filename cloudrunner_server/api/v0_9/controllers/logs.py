@@ -40,14 +40,12 @@ class Logs(HookController):
                  PermHook(dont_have=set(['is_super_admin']))]
 
     @expose('json')
-    def all(self, marker=None, nodes=None, run_uuids=None, etag=None,
+    def all(self, nodes=None, run_uuids=None, etag=None, marker=None,
             **kwargs):
         if etag:
             etag = int(etag)
         else:
             etag = 0
-
-        pattern = kwargs.get('filter')
 
         cache = CacheRegistry()
         max_score = 0
@@ -57,7 +55,8 @@ class Logs(HookController):
                 max_score, uuids = c.get_uuid_by_score(min_score=etag)
 
         if run_uuids:
-            run_uuids = run_uuids.split(",")
+            if not isinstance(run_uuids, list):
+                run_uuids = run_uuids.split(",")
             if uuids:
                 uuids = set(run_uuids).intersection(set(uuids))
             else:
@@ -120,9 +119,29 @@ class Logs(HookController):
 
         for t in tasks:
             walk(t)
-        return O.tasks(etag=max_score,
+        return O.tasks(etag=max_score, marker=marker,
                        groups=sorted(task_list, key=lambda t: t['created_at'],
                                      reverse=True))
+
+    @expose('json')
+    def search(self, marker=0, nodes=None, owner=None, **kwargs):
+
+        pattern = kwargs.get('filter')
+        marker = int(marker)
+
+        if nodes:
+            if not isinstance(nodes, list):
+                nodes = re.split('[\s,;]', nodes)
+
+        cache = CacheRegistry()
+        filtered_uuids = []
+        with cache.reader(request.user.org) as c:
+            marker, filtered_uuids = c.search(marker=marker, nodes=nodes,
+                                              owner=owner, pattern=pattern)
+
+        if not filtered_uuids:
+            return O.tasks(etag=0, marker=marker, groups=[])
+        return self.all(run_uuids=list(filtered_uuids), marker=marker)
 
     @expose('json')
     def get(self, group_id=None, task_ids=None, run_uuids=None,

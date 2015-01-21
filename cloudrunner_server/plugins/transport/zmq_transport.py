@@ -393,6 +393,8 @@ class ZmqTransport(ServerTransportBackend):
                 self.tenants[msg.hdr.org].pop(msg.hdr.peer)
         elif msg.hdr.org not in self.tenants:
             LOGPUB.warn("Unrecognized node: %s" % msg)
+        elif msg.control == 'PING':
+            LOGPUB.info("PING from %s@%s" % (msg.hdr.peer, msg.hdr.org))
         else:
             LOGPUB.info("HB from %s@%s" % (msg.hdr.peer, msg.hdr.org))
 
@@ -548,7 +550,7 @@ class ZmqTransport(ServerTransportBackend):
                         LOGPUB.warn("Invalid HB request: %s" % req)
                         continue
 
-                    if isinstance(req, (HBR, Ident, Quit)):
+                    if isinstance(req, (HBR, Ident, Ping, Quit)):
                         try:
                             if self.heartbeat(req) or isinstance(req, Ident):
                                 msg = Init(self.tenants[req.hdr.org].id,
@@ -585,6 +587,8 @@ class ZmqTransport(ServerTransportBackend):
                 continue
             except KeyboardInterrupt:
                 break
+            except Exception, ex:
+                LOGPUB.exception(ex)
 
         timer.stop()
         if pub_proxy:
@@ -798,6 +802,8 @@ class Router(Thread):
                 LOGR.error("Socket uri is missing: %s" %
                            self.buses.in_messages.consume)
             return
+        except Exception, ex:
+            LOGR.exception(ex)
 
         reply_router = self.context.socket(zmq.DEALER)
         reply_router.bind(self.buses.out_messages.publish)
@@ -838,6 +844,9 @@ class Router(Thread):
                 if zerr.errno == zmq.ETERM or zerr.errno == zmq.ENOTSUP \
                         or zerr.errno == zmq.ENOTSOCK:
                     break
+                continue
+            except Exception, ex:
+                LOGR.exception(ex)
                 continue
             try:
                 for sock in socks:

@@ -15,14 +15,10 @@
 from pecan import expose, request
 from pecan.hooks import HookController
 
-from cloudrunner_server.triggers.manager import TriggerManager
-
 from cloudrunner_server.api.hooks.braintree_hook import BrainTreeHook
 from cloudrunner_server.api.hooks.db_hook import DbHook
 from cloudrunner_server.api.hooks.error_hook import ErrorHook
 from cloudrunner_server.api.util import JsonOutput as O
-
-MAN = TriggerManager()
 
 
 class Billing(HookController):

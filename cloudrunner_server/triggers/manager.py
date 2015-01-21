@@ -39,7 +39,6 @@ from cloudrunner_server.plugins.repository.base import (PluginRepoBase,
                                                         NotModified)
 from cloudrunner_server.util import timestamp
 from cloudrunner_server.util.db import checkout_listener
-from cloudrunner_server.util.cache import CacheRegistry
 from cloudrunner_server.api.util import JsonOutput as O
 
 CONFIG = Config(CONFIG_LOCATION)
@@ -311,11 +310,8 @@ class TriggerManager(Daemon):
             if not isinstance(msg, Queued):
                 return
 
-            cache = CacheRegistry(redis=self.redis)
             LOG.info("TASK UUIDs: %s" % msg.task_ids)
             for i, job_id in enumerate(msg.task_ids):
-                for tag in tags:
-                    cache.associate(ctx.user.org, tag, job_id)
                 # Update
                 run = local_runs[i]
                 run.uuid = job_id
@@ -338,7 +334,6 @@ class TriggerManager(Daemon):
             task_runs = list(task.runs)
             task.id = None
             task.uuid = None
-            tags = []
             self.db.expunge(task)
             make_transient(task)
             to_remove = []
@@ -354,8 +349,6 @@ class TriggerManager(Daemon):
 
             if not task_runs:
                 return O.error(msg="No step found to resume")
-
-            print task_runs
 
             remote_tasks = []
             atts = []
@@ -393,10 +386,7 @@ class TriggerManager(Daemon):
             task.created_at = datetime.now()
             task.uuid = msg.task_ids[0]
 
-            print msg.task_ids
             for i, job_id in enumerate(msg.task_ids):
-                for tag in tags:
-                    cache.associate(ctx.user.org, tag, job_id)
                 # Update
                 run = task_runs[i]
                 run.uuid = job_id

@@ -31,11 +31,11 @@ config = {
         (as_host, int(as_port))
     ],
     'lua': {
-        'user_path': os.path.join(os.path.dirname(__file__), "functions")
+        'user_path': os.path.join(
+            os.path.dirname(__file__), "functions")
     },
     'policies': {
         'timeout': 1000,  # milliseconds
-        'retry': 2,
     }
 }
 
@@ -45,17 +45,14 @@ LOG = logging.getLogger('AERO CACHE')
 DAYS30 = 30 * 24 * 60 * 60
 DAYS7 = 7 * 24 * 60 * 60
 
-LOGS_SET = 'logs'
-AUTH_SET = 'auth'
-TS_SET = 'timestamps'
+LOGS_NS = 'logs'
+AUTH_NS = 'auth'
+TS_NS = 'timestamps'
+USER_NS = 'userdata'
 MAX_LOG_LINES = 200
 MAX_SCORE = MAX_TS * 1000
 
-LOG.info("AEROSPIKE CONFIG: %s" % config)
-
-STR_INDICES = ['owner', 'node', 'uuid']
-NUM_INDICES = ['id', 'ts']
-AUTH_INDICES = ['token', 'username']
+LOG.debug("AEROSPIKE CONFIG: %s" % config)
 
 
 class AeroRegistry(object):
@@ -64,10 +61,10 @@ class AeroRegistry(object):
         self.client = client
 
     def check(self, org, target):
-        LOG.info(RegBase.key(TS_SET, org, target))
+        LOG.info(RegBase.key(TS_NS, org, target))
         try:
             key, meta, last = self.client.get(
-                RegBase.key(TS_SET, org, target))
+                RegBase.key(TS_NS, org, target))
             LOG.info(last)
             if last:
                 return last.get('ts', 0)
@@ -75,27 +72,17 @@ class AeroRegistry(object):
             LOG.error(ex)
         return 0
 
-    def associate(self, org, tag, *ids):
-        pass
-        # client.get((TS_SET, org, target))
-
-    def prepare_space(self, org):
+    def put(self, org, key, data, ttl=None):
         policy = {}
-        ns = LOGS_SET
-        _set = org
+        if ttl:
+            policy['ttl'] = ttl
 
-        for bin in STR_INDICES:
-            index_name = "%s-%s" % (_set, bin)
-            self.client.index_string_create(policy, ns, _set, bin, index_name)
-        for bin in NUM_INDICES:
-            index_name = "%s-%s" % (_set, bin)
-            self.client.index_integer_create(policy, ns, _set, bin, index_name)
+        self.client.put(RegBase.key(USER_NS, org, key),
+                        data, policy)
 
-        # Auth
-        for bin in AUTH_INDICES:
-            index_name = "auth-%s" % bin
-            self.client.index_string_create(
-                policy, "auth", "tokens", bin, index_name)
+    def get(self, org, key):
+        k, m, data = self.client.get(RegBase.key(USER_NS, org, key))
+        return data
 
     @contextmanager
     def writer(self, org, _id):
@@ -121,7 +108,7 @@ class AeroRegistry(object):
 class RegBase(object):
 
     def __init__(self, client, org, _id):
-        self.org = org
+        self.org = str(org)
         self.id = str(_id)
 
         self.client = client
@@ -133,16 +120,7 @@ class RegBase(object):
 
 class RegWriter(RegBase):
 
-    def store_log(self, node, ts, log, user, io='O', ttl=None):
-        if not log:
-            return
-
-        lines = []
-        for l in log.splitlines():
-            l = l.strip()
-            if l:
-                lines.append(l)
-
+    def prepare_log(self, user, ts, ttl=None):
         inc_ops = [
             {
                 "op": aerospike.OPERATOR_INCR,
@@ -154,7 +132,7 @@ class RegWriter(RegBase):
                 "bin": "autoid"
             }
         ]
-        inc_key = self.key(LOGS_SET, "meta", "inc-%s" % self.org)
+        inc_key = self.key(LOGS_NS, "meta", "inc-%s" % self.org)
         try:
             _, _, data = self.client.operate(inc_key, inc_ops)
         except Exception, (ecode, emsg, efile, eline):
@@ -162,18 +140,38 @@ class RegWriter(RegBase):
                 self.client.put(inc_key, dict(autoid=0L, org=self.org))
             # retry ...
             _, _, data = self.client.operate(inc_key, inc_ops)
-
         inc = int(data['autoid'])
-
         ts = int(ts * 1000)
-        key = self.key(LOGS_SET, self.org, "%s-%s" % (self.id, ts))
-        rec = dict(id=inc, uuid=self.id, ts=ts, lines=lines,
-                   io=io, node=str(node), owner=str(user), type='O')
+        key = self.key(LOGS_NS, 'output', self.id)
+        rec = dict(id=inc, uuid=self.id, ts=ts, owner=str(user), org=self.org)
+
         ttl = {'ttl': ttl or DAYS30}
         self.client.put(key, rec, ttl)
 
+        # Store indexed value
+        ind = dict(key=inc, ts=ts, uuid=self.id)
+
+        self.client.apply((LOGS_NS, 'time-index', self.org), 'lstack', 'push',
+                          ['autoid', ind])
+
+    def store_log(self, node, ts, log, user, io='O', ttl=None):
+        if not log:
+            return
+
+        lines = []
+        for l in log.splitlines():
+            l = l.strip()
+            if l:
+                lines.append(l)
+
+        ts = int(ts * 1000)
+        rec = dict(key=ts, lines=lines, io=io, node=str(node))
+
+        self.client.apply((LOGS_NS, 'output', self.id), 'lstack', 'push',
+                          ['content', rec])
+
     def store_meta(self, result, ts, ttl=None):
-        key = self.key(LOGS_SET, self.org, self.id)
+        key = self.key(LOGS_NS, self.org, self.id)
         ttl = {'ttl': ttl or DAYS30}
         self.client.put(key, dict(type='M',
                                   uuid=self.id,
@@ -183,12 +181,12 @@ class RegWriter(RegBase):
     def add_token(self, username, token, expire):
         ttl = {'ttl': expire * 60}
         token['username'] = username
-        key = self.key(AUTH_SET, "tokens", token['token'])
+        key = self.key(AUTH_NS, "tokens", token['token'])
         self.client.put(key, token, ttl)
 
     def incr(self, org, what):
         self.client.put(
-            self.key(TS_SET, org, what), dict(ts=int(timestamp() * 1000)))
+            self.key(TS_NS, org, what), dict(ts=int(timestamp() * 1000)))
 
 
 class RegReader(RegBase):
@@ -200,14 +198,59 @@ class RegReader(RegBase):
         self.nodes_filter = None
 
     def get_user_token(self, user, token):
-        key = self.key(AUTH_SET, "tokens", token)
+        key = self.key(AUTH_NS, "tokens", token)
         _, _, val = self.client.get(key)
         if not val:
             return None
         return val
 
+    def search(self, marker=0, nodes=None, pattern=None, owner=None, limit=50):
+        has_more = True
+        if not marker:
+            marker = MAX_SCORE
+        i = 1
+        while has_more:
+            i = i + 1
+            uuids = self.client.apply((LOGS_NS, 'time-index', self.org),
+                                      'lstack', 'filter',
+                                      ['autoid', limit, 'filters',
+                                       'search_ids', int(marker)])
+            if not uuids:
+                print("Consumed list, exiting")
+                break
+            marker = min([u['key'] for u in uuids])
+            min_ts = min([u.get('ts', MAX_SCORE) for u in uuids])
+            max_ts = max([u.get('ts', 0) for u in uuids])
+
+            uuids = set([u['uuid'] for u in uuids])
+
+            q = self.client.query(LOGS_NS, 'output')
+            q.select('uuid', 'ts')
+            q.where(p.between('ts', min_ts, max_ts))
+
+            q.apply('filters', 'search',
+                    ['content', dict(org=self.org, nodes=nodes or "",
+                                     owner=str(owner or ''),
+                                     pattern=str(pattern or ''))])
+
+            filtered = set()
+
+            def callback(rec):
+                filtered.add(rec['uuid'])
+
+            q.foreach(callback)
+            uuids = uuids.intersection(filtered)
+
+            if uuids:
+                break
+
+        if marker == MAX_SCORE:
+            marker = 0
+
+        return marker, uuids
+
     def get_uuid_by_score(self, min_score=0, max_score=MAX_SCORE):
-        q = self.client.query(LOGS_SET, self.org)
+        q = self.client.query(LOGS_NS, self.org)
         q.select('uuid', 'ts')
         q.where(p.between('ts', int(min_score), int(max_score)))
 
@@ -238,7 +281,7 @@ class RegReader(RegBase):
         max_score = max_score or int(MAX_SCORE)
 
         for uuid in uuids:
-            q = self.client.query(LOGS_SET, self.org)
+            q = self.client.query(LOGS_NS, self.org)
 
             q.where(p.equals('uuid', uuid))
 
