@@ -152,7 +152,7 @@ class RegWriter(RegBase):
         ind = dict(key=inc, ts=ts, uuid=self.id)
 
         self.client.apply((LOGS_NS, 'time-index', self.org), 'lstack', 'push',
-                          ['autoid', ind])
+                          ['autoid', ind, 'filters'])
 
     def store_log(self, node, ts, log, user, io='O', ttl=None):
         if not log:
@@ -214,6 +214,7 @@ class RegReader(RegBase):
                                        'search_ids', int(marker)])
             if not uuids:
                 break
+            LOG.info("First pass: %s" % uuids)
             marker = min([u['key'] for u in uuids])
             min_ts = min([u.get('ts', MAX_SCORE) for u in uuids])
             max_ts = max([u.get('ts', 0) for u in uuids])
@@ -233,6 +234,8 @@ class RegReader(RegBase):
 
             def callback(rec):
                 filtered.add(rec['uuid'])
+
+            LOG.info("Second pass(filtered): %s" % filtered)
 
             q.foreach(callback)
             uuids = uuids.intersection(filtered)
