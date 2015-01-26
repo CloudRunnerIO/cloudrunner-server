@@ -12,6 +12,7 @@
 #  * without the express permission of CloudRunner.io
 #  *******************************************************/
 
+import logging
 from pecan import expose, request
 from pecan.secure import secure
 
@@ -32,6 +33,8 @@ from cloudrunner_server.api import VERSION
 from cloudrunner_server.api.util import (Wrap)
 from cloudrunner_server.util.cache import CacheRegistry
 
+LOG = logging.getLogger()
+
 
 class RestApi(object):
 
@@ -39,13 +42,14 @@ class RestApi(object):
     def authorize(cls):
         username = request.headers.get('Cr-User')
         token = request.headers.get('Cr-Token')
-        reg = CacheRegistry()
         if not username or not token:
             return False
 
+        reg = CacheRegistry()
         with reg.reader('') as cache:
             token = cache.get_user_token(username, token)
             if not token:
+                LOG.warn("Missing or expired token for %s" % username)
                 return False
 
             request.user = Wrap(id=token['uid'],

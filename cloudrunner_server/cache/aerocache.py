@@ -56,6 +56,7 @@ MAX_SCORE = MAX_TS * 1000
 META_SET = "meta"
 OUTPUT_SET = "output"
 INDEX_SET = "time-index"
+AUTH_TOKEN_SET = "tokens"
 
 LOG.debug("AEROSPIKE CONFIG: %s" % config)
 
@@ -186,7 +187,7 @@ class RegWriter(RegBase):
     def add_token(self, username, token, expire):
         ttl = {'ttl': expire * 60}
         token['username'] = username
-        key = self.key(AUTH_NS, "tokens", token['token'])
+        key = self.key(AUTH_NS, AUTH_TOKEN_SET, token['token'])
         self.client.put(key, token, ttl)
 
     def incr(self, org, what):
@@ -203,7 +204,7 @@ class RegReader(RegBase):
         self.nodes_filter = None
 
     def get_user_token(self, user, token):
-        key = self.key(AUTH_NS, "tokens", token)
+        key = self.key(AUTH_NS, AUTH_TOKEN_SET, token)
         _, _, val = self.client.get(key)
         if not val:
             return None
@@ -277,7 +278,7 @@ class RegReader(RegBase):
         return marker, filtered
 
     def get_uuid_by_score(self, min_score=0, max_score=MAX_SCORE):
-        q = self.client.query(LOGS_NS, self.org)
+        q = self.client.query(LOGS_NS, OUTPUT_SET)
         q.select('uuid', 'ts')
         q.where(p.between('ts', int(min_score), int(max_score)))
 
