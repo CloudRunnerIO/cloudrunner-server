@@ -52,6 +52,11 @@ USER_NS = 'userdata'
 MAX_LOG_LINES = 200
 MAX_SCORE = MAX_TS * 1000
 
+# SETS
+META_SET = "meta"
+OUTPUT_SET = "output"
+INDEX_SET = "time-index"
+
 LOG.debug("AEROSPIKE CONFIG: %s" % config)
 
 
@@ -132,7 +137,7 @@ class RegWriter(RegBase):
                 "bin": "autoid"
             }
         ]
-        inc_key = self.key(LOGS_NS, "meta", "inc-%s" % self.org)
+        inc_key = self.key(LOGS_NS, META_SET, "inc-%s" % self.org)
         try:
             _, _, data = self.client.operate(inc_key, inc_ops)
         except Exception, (ecode, emsg, efile, eline):
@@ -142,17 +147,17 @@ class RegWriter(RegBase):
             _, _, data = self.client.operate(inc_key, inc_ops)
         inc = int(data['autoid'])
         ts = int(ts * 1000)
-        key = self.key(LOGS_NS, 'output', self.id)
+        key = self.key(LOGS_NS, META_SET, self.id)
         rec = dict(id=inc, uuid=self.id, ts=ts, owner=str(user), org=self.org)
 
         ttl = {'ttl': ttl or DAYS30}
         self.client.put(key, rec, ttl)
 
         # Store indexed value
-        ind = dict(key=inc, ts=ts, uuid=self.id)
+        index_key = dict(key=inc, ts=ts, uuid=self.id)
 
-        self.client.apply((LOGS_NS, 'time-index', self.org), 'lstack', 'push',
-                          ['autoid', ind, 'filters'])
+        self.client.apply((LOGS_NS, INDEX_SET, self.org), 'lstack', 'push',
+                          ['autoid', index_key, 'filters'])
 
     def store_log(self, node, ts, log, user, io='O', ttl=None):
         if not log:
@@ -162,18 +167,21 @@ class RegWriter(RegBase):
         for l in log.splitlines():
             l = l.strip()
             if l:
-                lines.append(l)
+                lines.append(str(l))
 
         ts = int(ts * 1000)
-        rec = dict(key=ts, lines=lines, io=io, node=str(node))
+        rec = dict(ts=ts, uuid=self.id, lines=lines, io=io,
+                   node=str(node), org=self.org)
+        ttl = {'ttl': ttl or DAYS30}
 
-        self.client.apply((LOGS_NS, 'output', self.id), 'lstack', 'push',
-                          ['content', rec, 'filters'])
+        key = (LOGS_NS, OUTPUT_SET, "%s-%s" % (self.id, ts))
+        self.client.put(key, rec, ttl)
 
     def store_meta(self, result, ts, ttl=None):
-        key = self.key(LOGS_NS, 'output', self.id)
+        key = self.key(LOGS_NS, OUTPUT_SET, "%s-meta" % self.id)
         ttl = {'ttl': ttl or DAYS30}
-        self.client.put(key, dict(result=result))
+        self.client.put(key, dict(uuid=self.id, org=self.org,
+                                  type="meta", result=result))
 
     def add_token(self, username, token, expire):
         ttl = {'ttl': expire * 60}
@@ -201,52 +209,72 @@ class RegReader(RegBase):
             return None
         return val
 
-    def search(self, marker=0, nodes=None, pattern=None, owner=None, limit=50):
+    def search(self, marker=0, nodes=None, pattern=None, owner=None, limit=50,
+               start=None, end=None):
         has_more = True
         if not marker:
-            marker = MAX_SCORE
+            marker = int(min(start or MAX_SCORE, MAX_SCORE))
         i = 1
+        if start:
+            start = int(start * 1000)
+        else:
+            start = 0
+        if end:
+            end = int(end * 1000)
+        else:
+            end = int(MAX_SCORE)
+
         while has_more:
             i = i + 1
-            uuids = self.client.apply((LOGS_NS, 'time-index', self.org),
+            uuids = self.client.apply((LOGS_NS, INDEX_SET, self.org),
                                       'lstack', 'filter',
                                       ['autoid', limit, 'filters',
-                                       'search_ids', int(marker)])
+                                       'search_ids', dict(marker=int(marker),
+                                                          start_ts=start,
+                                                          end_ts=end)])
             if not uuids:
                 break
-            LOG.info("First pass: %s" % uuids)
-            marker = min([u['key'] for u in uuids])
-            min_ts = min([u.get('ts', MAX_SCORE) for u in uuids])
-            max_ts = max([u.get('ts', 0) for u in uuids])
+            # LOG.info("First pass: %s" % uuids)
+            new_marker = min([u['ts'] for u in uuids])
+            if new_marker == marker:
+                break
+            marker = new_marker
+            min_ts = min([u.get('ts', end) for u in uuids])
+            max_ts = max([u.get('ts', start) for u in uuids])
 
             uuids = set([u['uuid'] for u in uuids])
 
-            q = self.client.query(LOGS_NS, 'output')
-            q.select('uuid', 'ts')
-            q.where(p.between('ts', min_ts, max_ts))
+            q = self.client.query(LOGS_NS, OUTPUT_SET)
+            if min_ts == max_ts:
+                q.where(p.equals('ts', min_ts))
+            else:
+                LOG.debug("Search between %s and %s " % (min_ts, max_ts))
+                q.where(p.between('ts', min_ts - 1, max_ts + 1))
 
-            q.apply('filters', 'search',
-                    ['content', dict(org=self.org, nodes=nodes or "",
-                                     owner=str(owner or ''),
-                                     pattern=str(pattern or ''))])
+            args = dict(org=self.org, nodes=nodes or '',
+                        owner=str(owner or ''),
+                        pattern=pattern or '',
+                        aggregate=True)
 
-            filtered = set()
+            q.apply('filters', 'search', [args])
+
+            filtered = dict()
 
             def callback(rec):
-                filtered.add(rec['uuid'])
-
-            LOG.info("Second pass(filtered): %s" % filtered)
+                for k in rec:
+                    if k in uuids:
+                        filtered[k] = rec[k]
 
             q.foreach(callback)
-            uuids = uuids.intersection(filtered)
+            # LOG.info("Second pass(filtered): %s" % filtered)
 
-            if uuids:
+            if filtered:
                 break
 
         if marker == MAX_SCORE:
             marker = 0
 
-        return marker, uuids
+        return marker, filtered
 
     def get_uuid_by_score(self, min_score=0, max_score=MAX_SCORE):
         q = self.client.query(LOGS_NS, self.org)
@@ -263,6 +291,7 @@ class RegReader(RegBase):
             #     return False
 
         q.foreach(callback)
+
         lines = sorted(lines, key=lambda l: l[1])
         ret = zip(*lines)
 
@@ -279,30 +308,36 @@ class RegReader(RegBase):
         min_score = min_score or 0
         max_score = max_score or int(MAX_SCORE)
 
-        q = self.client.query(LOGS_NS, 'output')
-        q.where(p.between('ts', min_score, max_score))
-        q.apply('filters', 'search',
-                ['content', dict(org=self.org, uuids=uuids, full_map=True,
-                                 pattern=self.body_filter,
-                                 nodes=self.nodes_filter)])
-
-        data = {}
-
-        def callback(rec):
-            output['new_score'] = max(output['new_score'], rec.get('ts', 0))
+        def callback(r):
+            if r.get('type') == 'meta':
+                output['result'] = r.get('result')
+                return
+            data = output.setdefault(r['uuid'], {})
+            output['new_score'] = max(
+                output['new_score'], r.get('ts', 0))
             ts = output['new_score'] / 1000.0
 
-            for r in rec['content']:
-                data.setdefault(r['node'],
-                                {}).setdefault('lines',
-                                               []).insert(0, [ts,
-                                                              r['lines'],
-                                                              r['io']])
-                # data.setdefault(node, {})['result'] = rec['result']
-            output[rec['uuid']] = data
+            data.setdefault(r['node'],
+                            {}).setdefault('lines',
+                                           []).insert(0, [ts,
+                                                          r['lines'],
+                                                          r['io']])
+        for uuid in uuids:
+            q = self.client.query(LOGS_NS, OUTPUT_SET)
+            q.where(p.equals('uuid', str(uuid)))
+            q.apply('filters', 'search',
+                    [dict(org=self.org, full_map=True,
+                          min_score=min_score, max_score=max_score,
+                          pattern=self.body_filter,
+                          nodes=self.nodes_filter)])
 
-        q.foreach(callback)
+            q.foreach(callback)
 
+        for uuid in uuids:
+            log = output.get(uuid, {})
+            for node in log.values():
+                node['lines'] = sorted(node.get("lines", []),
+                                       key=lambda l: l[0])
         new_score = output.pop('new_score', 1)
         return new_score, output
 

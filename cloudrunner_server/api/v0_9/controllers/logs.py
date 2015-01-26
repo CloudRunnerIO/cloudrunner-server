@@ -40,8 +40,7 @@ class Logs(HookController):
                  PermHook(dont_have=set(['is_super_admin']))]
 
     @expose('json')
-    def all(self, nodes=None, run_uuids=None, etag=None, marker=None,
-            **kwargs):
+    def all(self, nodes=None, run_uuids=None, etag=None, marker=None, **kwargs):
         if etag:
             etag = int(etag)
         else:
@@ -124,7 +123,8 @@ class Logs(HookController):
                                      reverse=True))
 
     @expose('json')
-    def search(self, marker=0, nodes=None, owner=None, **kwargs):
+    def search(self, marker=0, nodes=None, owner=None,
+               time_from=None, time_to=None, **kwargs):
 
         pattern = kwargs.get('filter')
         marker = int(marker)
@@ -135,13 +135,22 @@ class Logs(HookController):
 
         cache = CacheRegistry()
         filtered_uuids = []
+        try:
+            if time_from:
+                time_from = float(time_from)
+            if time_to:
+                time_to = float(time_to)
+        except:
+            pass
+
         with cache.reader(request.user.org) as c:
             marker, filtered_uuids = c.search(marker=marker, nodes=nodes,
-                                              owner=owner, pattern=pattern)
+                                              owner=owner, pattern=pattern,
+                                              start=time_from, end=time_to)
 
         if not filtered_uuids:
             return O.tasks(etag=0, marker=marker, groups=[])
-        return self.all(run_uuids=list(filtered_uuids), marker=marker)
+        return self.all(run_uuids=filtered_uuids.keys(), marker=marker)
 
     @expose('json')
     def get(self, group_id=None, task_ids=None, run_uuids=None,
@@ -306,8 +315,10 @@ class Logs(HookController):
 
 
 def map_nodes(runs):
+    _runs = []
     for r in runs:
-        return [dict(name=n.name, exit=n.exit_code) for n in r.nodes]
+        _runs.extend([dict(name=n.name, exit=n.exit_code) for n in r.nodes])
+    return _runs
 
 
 def map_nodes2(nodes):

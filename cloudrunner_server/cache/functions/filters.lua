@@ -1,26 +1,21 @@
 
 local function simple_map_record(r)
   local m = map()
+  m['id'] = r.id
   m['ts'] = r.ts
   m['uuid'] = r.uuid
-  local lstack = require('ldt/lib_lstack')
-  if lstack.ldt_exists(r, 'content') then
-    lines = lstack.peek(r, 'content', 0)
-    m['num_lines'] = #lines
-  end
   return m
 end
 
 local function content_map_record(r)
   local m = map()
   m['ts'] = r.ts
+  m['node'] = r.node
   m['uuid'] = r.uuid
+  m['io'] = r.io
+  m['type'] = r.type
+  m['lines'] = r.lines
   m['result'] = r.result
-  local lstack = require('ldt/lib_lstack')
-  if lstack.ldt_exists(r, 'content') then
-    lines = lstack.peek(r, 'content', 0)
-    m['content'] = lines
-  end
   return m
 end
 
@@ -32,8 +27,16 @@ local function org_filter(org)
   end
 end
 
+local function score_filter(min, max)
+  return function(record)
+    if record.type == 'meta' then return true end
+    return record.ts >= min and record.ts < max
+  end
+end
+
 local function node_filter(nodes)
   return function(record)
+    if record.type == 'meta' then return true end
     for i=#nodes,1,-1 do
       local n = nodes[i]
       if n == record.node then
@@ -46,12 +49,14 @@ end
 
 local function owner_filter(owner)
   return function(record)
+    if record.type == 'meta' then return true end
     return owner == record.owner
   end
 end
 
 local function uuid_filter(uuids)
   return function(record)
+    if record.type == 'meta' then return true end
     for i=#uuids,1,-1 do
       local u = uuids[i]
       if u == record.uuid then
@@ -62,50 +67,87 @@ local function uuid_filter(uuids)
   end
 end
 
-local userModule = {};
-
-local function content_filter(bin, pattern)
+local function content_filter(pattern)
   return function(record)
-    if record[bin] == nil then return false end
-
-    local lstack = require('ldt/lib_lstack')
-    if not lstack.ldt_exists(record, bin) then return false end
-
-    local logs = lstack.peek(record, bin, 1, 'filters', 'filter_contents', pattern)
-    return #logs > 0
+    if record.type == 'meta' then return true end
+    local lines = record.lines
+    if lines then
+      for l=1,#lines do
+        local line = lines[l]
+        if line ~= nil and line ~= "" and string.find(line, pattern) ~= nil then
+          return true
+        end
+      end
+    end
   end
 end
 
-function search(stream, bin, filters)
-  local org_filter = org_filter(filters.org)
+local function aggregate_search_results(resultMap, nextResult)
+  local uuid = nextResult.uuid
+  resultMap[uuid] = (resultMap[uuid] or 0) + 1
+  return resultMap
+end
+
+function search(stream, args)
+  -- warn("FILTER BY: %s", tostring(args))
+  local org_filter = org_filter(args.org)
   stream : filter(org_filter)
 
-  if filters.owner ~= nil and filters.owner ~= "" then
-    local o_filter = owner_filter(filters.owner)
+  if args.uuids ~= nil and args.uuids ~= "" then
+    -- warn("FILTER BY UUIDS: %s", tostring(args.uuids))
+    local u_filter = uuid_filter(args.uuids)
+    stream : filter(u_filter)
+  end
+
+  if args.owner ~= nil and args.owner ~= "" then
+    -- warn("FILTER BY OWNER: %s", tostring(args.owner))
+    local o_filter = owner_filter(args.owner)
     stream : filter(o_filter)
   end
 
-  if filters.nodes ~= nil and filters.nodes ~= "" then
-    local n_filter = node_filter(filters.nodes)
+  if args.nodes ~= nil and args.nodes ~= "" then
+    -- warn("FILTER BY NODES: %s", tostring(args.nodes))
+    local n_filter = node_filter(args.nodes)
     stream : filter(n_filter)
   end
-  if filters.pattern ~= nil and filters.pattern ~= "" then
-    local s_filter = content_filter(bin, filters.pattern)
-    stream : filter(s_filter)
+
+  if args.min_score ~= nil and args.min_score ~= "" then
+    -- warn("FILTER BY MIN SCORE: %s : %s", tostring(args.min_score), tostring(args.max_score))
+    local sc_filter = score_filter(args.min_score, args.max_score)
+    stream : filter(sc_filter)
   end
-  if filters.uuids ~= nil and filters.uuids ~= "" then
-    local u_filter = uuid_filter(filters.uuids)
-    stream : filter(u_filter)
+
+  if args.pattern ~= nil and args.pattern ~= "" then
+    -- warn("FILTER BY PATTERN: %s", tostring(args.pattern))
+    local c_filter = content_filter(args.pattern)
+    stream : filter(c_filter)
   end
-  if filters.full_map then
-    return stream : map(content_map_record)
+
+
+  if args.aggregate == 1 then
+    stream : aggregate(map(), aggregate_search_results) -- : reduce(reduce_search_results)
   else
-    return stream : map(simple_map_record);
+    if args.full_map then
+      stream : map(content_map_record)
+    else
+      stream : map(simple_map_record);
+    end
   end
+
+  return stream
 end
 
-function userModule.search_ids(rec, min_score)
+local userModule = {};
+
+function userModule.search_ids(rec, args)
   local val = rec.key
+  local ts = rec.ts
+  local min_score = args.marker
+  local ts_min = args.start_ts
+  local ts_max = args.end_ts
+  -- warn("FILTER:::: search_ids:: %s : %s ~ %s", min_score, ts_min, ts)
+  if ts_min ~= nil and ts_min ~= "" and ts < ts_min then return nil end
+  if ts_max ~= nil and ts_max ~= "" and ts > ts_max then return nil end
   if val >= min_score then
     return nil
   else
@@ -113,27 +155,12 @@ function userModule.search_ids(rec, min_score)
   end
 end
 
-function userModule.filter_contents(record, pattern)
-  warn('FILTER: TYPE(%s)', type(record))
-  if type(record) ~= "userdata" then return false end
-
-  local lines = record.lines
-  warn('FILTER: LINES(%s)', lines)
-  if lines then
-    for l=1,#lines do
-      local line = lines[l]
-      if line ~= nil and line ~= "" and string.find(line, pattern) ~= nil then
-        return true
-      end
-    end
-  end
-end
-
 function userModule.adjust_settings( ldtMap )
   local ldt_settings=require('ldt/settings_lstack');
   ldt_settings.use_package( ldtMap, "ListMediumObject" );
+  -- warn("FILTER: ADJUST SETTINGS %s", ldtMap)
 
-  ldt_settings.set_coldlist_max( ldtMap, 100 )
+  ldt_settings.set_coldlist_max( ldtMap, 200 )
   ldt_settings.set_colddir_rec_max( ldtMap, 10000 )
 end
 
