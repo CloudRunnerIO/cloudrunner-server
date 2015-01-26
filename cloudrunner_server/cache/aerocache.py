@@ -214,7 +214,8 @@ class RegReader(RegBase):
                start=None, end=None):
         has_more = True
         if not marker:
-            marker = int(min(start or MAX_SCORE, MAX_SCORE))
+            marker = MAX_SCORE
+        marker = int(marker)
         i = 1
         if start:
             start = int(start * 1000)
@@ -229,10 +230,12 @@ class RegReader(RegBase):
 
         while has_more:
             i = i + 1
+            # LOG.info("First search between [%s] %s and %s " % (
+            #    marker, start, end))
             uuids = self.client.apply((LOGS_NS, INDEX_SET, self.org),
                                       'lstack', 'filter',
                                       ['autoid', limit, 'filters',
-                                       'search_ids', dict(marker=int(marker),
+                                       'search_ids', dict(marker=marker,
                                                           start_ts=start,
                                                           end_ts=end)])
             if not uuids:
@@ -243,26 +246,28 @@ class RegReader(RegBase):
                 break
             marker = new_marker
             min_ts = min([u.get('ts', end) for u in uuids])
-            max_ts = max([u.get('ts', start) for u in uuids])
+            # max_ts = max([u.get('ts', start) for u in uuids])
 
             uuids = set([u['uuid'] for u in uuids])
+            if not uuids:
+                break
 
             q = self.client.query(LOGS_NS, OUTPUT_SET)
-            if min_ts == max_ts:
-                q.where(p.equals('ts', min_ts))
-            else:
-                # LOG.info("Search between %s and %s " % (min_ts, max_ts))
-                q.where(p.between('ts', min_ts, max_ts + 1000))
+
+            # LOG.info("Search between %s and %s " % (min_ts,
+            #                                         max_ts))
+            q.where(p.between('ts', min_ts, int(MAX_SCORE)))
 
             args = dict(org=self.org, nodes=nodes or '',
                         owner=str(owner or ''),
+                        uuids=list(uuids),
                         pattern=pattern or '',
-                        aggregate=True)
+                        # min_score=min_ts, max_score=max_ts,
+                        aggregate=1)
 
             q.apply('filters', 'search', [args])
 
             def callback(rec):
-                LOG.info(rec)
                 for k in rec:
                     if k in uuids:
                         filtered[k] = rec[k]
