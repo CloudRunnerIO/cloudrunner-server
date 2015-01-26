@@ -316,13 +316,13 @@ class RegReader(RegBase):
             data = output.setdefault(r['uuid'], {})
             output['new_score'] = max(
                 output['new_score'], r.get('ts', 0))
-            ts = output['new_score'] / 1000.0
+            ts = r.get('ts', 0) / 1000.0
 
             data.setdefault(r['node'],
                             {}).setdefault('lines',
-                                           []).insert(0, [ts,
-                                                          r['lines'],
-                                                          r['io']])
+                                           []).append([ts,
+                                                       r['lines'],
+                                                       r['io']])
         for uuid in uuids:
             q = self.client.query(LOGS_NS, OUTPUT_SET)
             q.where(p.equals('uuid', str(uuid)))
