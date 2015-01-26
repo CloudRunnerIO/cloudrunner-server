@@ -251,8 +251,8 @@ class RegReader(RegBase):
             if min_ts == max_ts:
                 q.where(p.equals('ts', min_ts))
             else:
-                LOG.debug("Search between %s and %s " % (min_ts, max_ts))
-                q.where(p.between('ts', min_ts - 1, max_ts + 1))
+                # LOG.info("Search between %s and %s " % (min_ts, max_ts))
+                q.where(p.between('ts', min_ts, max_ts + 1000))
 
             args = dict(org=self.org, nodes=nodes or '',
                         owner=str(owner or ''),
@@ -262,6 +262,7 @@ class RegReader(RegBase):
             q.apply('filters', 'search', [args])
 
             def callback(rec):
+                LOG.info(rec)
                 for k in rec:
                     if k in uuids:
                         filtered[k] = rec[k]

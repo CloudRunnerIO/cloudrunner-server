@@ -30,7 +30,7 @@ end
 local function score_filter(min, max)
   return function(record)
     if record.type == 'meta' then return true end
-    return record.ts >= min and record.ts < max
+    return record.ts >= min and record.ts <= max
   end
 end
 
@@ -84,6 +84,7 @@ end
 
 local function aggregate_search_results(resultMap, nextResult)
   local uuid = nextResult.uuid
+  -- warn("FILTER::AGGR %s %s", uuid, nextResult.ts)
   resultMap[uuid] = (resultMap[uuid] or 0) + 1
   return resultMap
 end
@@ -123,15 +124,14 @@ function search(stream, args)
     stream : filter(c_filter)
   end
 
+  if args.full_map then
+    stream : map(content_map_record)
+  else
+    stream : map(simple_map_record);
+  end
 
   if args.aggregate == 1 then
-    stream : aggregate(map(), aggregate_search_results) -- : reduce(reduce_search_results)
-  else
-    if args.full_map then
-      stream : map(content_map_record)
-    else
-      stream : map(simple_map_record);
-    end
+    stream : aggregate(map(), aggregate_search_results)
   end
 
   return stream
@@ -145,7 +145,6 @@ function userModule.search_ids(rec, args)
   local min_score = args.marker
   local ts_min = args.start_ts
   local ts_max = args.end_ts
-  -- warn("FILTER:::: search_ids:: %s : %s ~ %s", min_score, ts_min, ts)
   if ts_min ~= nil and ts_min ~= "" and ts < ts_min then return nil end
   if ts_max ~= nil and ts_max ~= "" and ts > ts_max then return nil end
   if val >= min_score then
@@ -158,7 +157,6 @@ end
 function userModule.adjust_settings( ldtMap )
   local ldt_settings=require('ldt/settings_lstack');
   ldt_settings.use_package( ldtMap, "ListMediumObject" );
-  -- warn("FILTER: ADJUST SETTINGS %s", ldtMap)
 
   ldt_settings.set_coldlist_max( ldtMap, 200 )
   ldt_settings.set_colddir_rec_max( ldtMap, 10000 )
