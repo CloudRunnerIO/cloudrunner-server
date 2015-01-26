@@ -224,6 +224,8 @@ class RegReader(RegBase):
         else:
             end = int(MAX_SCORE)
 
+        filtered = dict()
+
         while has_more:
             i = i + 1
             uuids = self.client.apply((LOGS_NS, INDEX_SET, self.org),
@@ -257,8 +259,6 @@ class RegReader(RegBase):
                         aggregate=True)
 
             q.apply('filters', 'search', [args])
-
-            filtered = dict()
 
             def callback(rec):
                 for k in rec:
