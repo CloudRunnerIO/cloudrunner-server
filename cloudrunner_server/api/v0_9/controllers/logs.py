@@ -46,12 +46,18 @@ class Logs(HookController):
         else:
             etag = 0
 
+        try:
+            start = int(kwargs.get("start", 0))
+            end = start + PAGE_SIZE
+        except:
+            pass
         cache = CacheRegistry()
         max_score = 0
         uuids = []
-        if etag:
-            with cache.reader(request.user.org) as c:
+        with cache.reader(request.user.org) as c:
+            if etag:
                 max_score, uuids = c.get_uuid_by_score(min_score=etag)
+            total_logs = c.log_count()
 
         if run_uuids:
             if not isinstance(run_uuids, list):
@@ -76,7 +82,7 @@ class Logs(HookController):
 
             if nodes:
                 groups = groups.filter(RunNode.name.in_(nodes))
-        group_ids = groups.all()[:PAGE_SIZE]
+        group_ids = groups.all()[start:end]
         tasks = Task.visible(request).filter(
             Task.taskgroup_id.in_([g[0] for g in group_ids]))
 
@@ -118,7 +124,8 @@ class Logs(HookController):
 
         for t in tasks:
             walk(t)
-        return O.tasks(etag=max_score, marker=marker,
+        pages = int(total_logs / PAGE_SIZE)
+        return O.tasks(etag=max_score, marker=marker, pages=pages,
                        groups=sorted(task_list, key=lambda t: t['created_at'],
                                      reverse=True))
 

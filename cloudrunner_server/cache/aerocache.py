@@ -170,9 +170,13 @@ class RegWriter(RegBase):
             if l:
                 lines.append(str(l))
 
+        ind_key = self.key(LOGS_NS, META_SET, self.id)
+        k, m, v = self.client.get(ind_key)
+        index = v.get("id", 0)
+
         ts = int(ts * 1000)
         rec = dict(ts=ts, uuid=self.id, lines=lines, io=io,
-                   node=str(node), org=self.org)
+                   node=str(node), org=self.org, id=index)
         ttl = {'ttl': ttl or DAYS30}
 
         key = (LOGS_NS, OUTPUT_SET, "%s-%s" % (self.id, ts))
@@ -210,6 +214,11 @@ class RegReader(RegBase):
             return None
         return val
 
+    def log_count(self):
+        total = self.client.apply((LOGS_NS, INDEX_SET, self.org),
+                                  'lstack', 'size', ['autoid'])
+        return total
+
     def search(self, marker=0, nodes=None, pattern=None, owner=None, limit=50,
                start=None, end=None):
         has_more = True
@@ -245,8 +254,8 @@ class RegReader(RegBase):
             if new_marker == marker:
                 break
             marker = new_marker
-            min_ts = min([u.get('ts', end) for u in uuids])
-            # max_ts = max([u.get('ts', start) for u in uuids])
+            min_id = int(min([u.get('key', MAX_SCORE) for u in uuids]))
+            max_id = int(max([u.get('key', 0) for u in uuids]))
 
             uuids = set([u['uuid'] for u in uuids])
             if not uuids:
@@ -254,15 +263,14 @@ class RegReader(RegBase):
 
             q = self.client.query(LOGS_NS, OUTPUT_SET)
 
-            # LOG.info("Search between %s and %s " % (min_ts,
-            #                                         max_ts))
-            q.where(p.between('ts', min_ts, int(MAX_SCORE)))
+            LOG.info("Search between %s and %s " % (min_id,
+                                                    max_id))
+            q.where(p.between('id', min_id, max_id))
 
             args = dict(org=self.org, nodes=nodes or '',
                         owner=str(owner or ''),
                         uuids=list(uuids),
                         pattern=pattern or '',
-                        # min_score=min_ts, max_score=max_ts,
                         aggregate=1)
 
             q.apply('filters', 'search', [args])
