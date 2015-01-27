@@ -12,6 +12,7 @@
 #  * without the express permission of CloudRunner.io
 #  *******************************************************/
 
+import hashlib
 import logging
 import requests
 import time
@@ -84,15 +85,20 @@ class Auth(HookController):
                                   scope='LOGIN')
 
         permissions = [p.name for p in user.permissions]
+        md = hashlib.md5()
+        md.update(user.email)
+        email_hash = md.hexdigest()
         cached_token = dict(uid=user.id, org=user.org.name, token=token.value,
                             tier=user.org.tier.serialize(skip=['id']),
-                            permissions=permissions)
+                            permissions=permissions,
+                            email_hash=email_hash)
 
         cache = CacheRegistry()
         with cache.writer('', '') as cache:
             cache.add_token(username, cached_token, expire)
 
         return O.login(user=username,
+                       email_hash=email_hash,
                        token=token.value,
                        expire=token.expires_at,
                        org=user.org.name,

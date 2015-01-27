@@ -55,6 +55,7 @@ class RestApi(object):
             request.user = Wrap(id=token['uid'],
                                 username=username,
                                 org=token['org'],
+                                email_hash=token['email_hash'],
                                 token=token['token'],
                                 permissions=token['permissions'],
                                 tier=Wrap(**token['tier']))
