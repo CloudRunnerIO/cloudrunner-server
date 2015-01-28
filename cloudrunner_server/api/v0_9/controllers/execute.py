@@ -1,3 +1,18 @@
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+# vim: tabstop=4 shiftwidth=4 softtabstop=4
+
+# /*******************************************************
+#  * Copyright (C) 2013-2014 CloudRunner.io <info@cloudrunner.io>
+#  *
+#  * Proprietary and confidential
+#  * This file is part of CloudRunner Server.
+#  *
+#  * CloudRunner Server can not be copied and/or distributed
+#  * without the express permission of CloudRunner.io
+#  *******************************************************/
+
+from datetime import datetime
 import logging
 from pecan import expose, request, abort
 from pecan.hooks import HookController
@@ -23,12 +38,11 @@ class Execute(HookController):
             full_path, request.client_addr))
 
         if not getattr(request, "user", None):
-            key = kwargs.pop('key')
+            key = kwargs.pop('key', None)
             if not key:
                 return O.error(msg="Missing auth key")
 
-            api_key = request.db.query(ApiKey).filter(
-                ApiKey.value == key).first()
+            api_key = get_api_key(key)
             if not api_key:
                 return abort(401)
             user_id = api_key.user_id
@@ -85,8 +99,7 @@ class Execute(HookController):
             if not key:
                 return O.error(msg="Missing auth key")
 
-            api_key = request.db.query(ApiKey).filter(
-                ApiKey.value == key).first()
+            api_key = get_api_key(key)
             if not api_key:
                 return abort(401)
             user_id = api_key.user_id
@@ -141,3 +154,12 @@ class Execute(HookController):
             return O.success(msg="Dispatched", **task_id)
         except:
             return O.error(msg="Cannot resume task: %s" % uuid)
+
+
+def get_api_key(key):
+    api_key = request.db.query(ApiKey).filter(
+        ApiKey.value == key, ApiKey.active == True).first()  # noqa
+    if api_key:
+        api_key.last_used = datetime.utcnow()
+        request.db.add(api_key)
+        return api_key

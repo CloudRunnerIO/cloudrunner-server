@@ -136,11 +136,36 @@ class Users(object):
 
     @apikeys.when(method='POST', template='json')
     @apikeys.wrap_create()
-    def apikeys_create(self, *args):
-        key = ApiKey(user_id=request.user.id)
+    def apikeys_create(self, *args, **kwargs):
+        description = kwargs.get('description', "")
+        key = ApiKey(user_id=request.user.id, description=description,
+                     active=True)
         request.db.add(key)
         request.db.commit()
         return O.key(**key.serialize(skip=['id', 'user_id']))
+
+    @apikeys.when(method='PATCH', template='json')
+    @apikeys.wrap_modify()
+    def apikeys_modify(self, value, *args, **kwargs):
+        key = request.db.query(ApiKey).join(User).filter(
+            User.id == request.user.id, ApiKey.value == value).one()
+        if not key:
+            return O.error(msg="Api Key not found")
+
+        if 'description' in kwargs:
+            description = kwargs['description']
+            key.description = description
+        if 'active' in kwargs:
+            active = kwargs.get('active') not in ['0', 'false', 'False']
+            key.active = active
+
+    @apikeys.when(method='PUT', template='json')
+    @apikeys.wrap_modify()
+    def apikeys_replace(self, value, *args, **kwargs):
+        description = kwargs['description']
+        active = kwargs['active']
+        description = kwargs.get('description', "")
+        self.apikeys_modify(value, description=description, active=active)
 
     @apikeys.when(method='DELETE', template='json')
     @apikeys.wrap_delete()

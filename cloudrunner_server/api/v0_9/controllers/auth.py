@@ -230,7 +230,7 @@ class Auth(HookController):
             kwargs = request.json
         key = kwargs['code']
         user = request.db.query(User).join(Org, ApiKey).filter(
-            ApiKey.value == key).one()
+            ApiKey.value == key, ApiKey.active == True).one()  # noqa
         user.active = True
         api_key = request.db.query(ApiKey).filter(ApiKey.value == key).one()
         new_key = ApiKey(user=user)

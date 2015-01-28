@@ -200,8 +200,17 @@ class ApiKey(TableBase):
                    default=lambda ctx: uuid.uuid4().hex)
 
     user_id = Column(Integer, ForeignKey('users.id'))
+    description = Column(String(500))
+    last_used = Column(DateTime)
+    active = Column(Boolean, default=True)
 
     user = relationship('User', backref="apikeys")
+
+    @staticmethod
+    def visible(ctx):
+        return ctx.db.query(ApiKey).join(User, Org).filter(
+            Org.name == ctx.user.org
+        )
 
 
 class UsageTier(TableBase):

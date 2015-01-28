@@ -40,8 +40,12 @@ class ApiKeyVerifier(NodeVerifier):
 
     def verify(self, node, subject, **kwargs):
         org = self.db.query(Org).join(User, ApiKey).filter(
-            ApiKey.value == subject.OU).first()
+            ApiKey.value == subject.OU, ApiKey.active == True).first()  # noqa
         if org:
+            key = self.db.query(ApiKey).join(User, Org).filter(
+                ApiKey.value == subject.OU).one()
+            key.last_used = datetime.utcnow()
+            self.db.add(key)
             return org.name
 
 
