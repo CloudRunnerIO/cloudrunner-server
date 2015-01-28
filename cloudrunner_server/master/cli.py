@@ -335,8 +335,6 @@ def main():
     tier_add.add_argument('description', help='Tier description',)
     tier_add.add_argument('--total_repos', help='Tier total repos',
                           required=True)
-    tier_add.add_argument('--user_repos', help='Tier user repos',
-                          required=True)
     tier_add.add_argument('--external_repos', help='Tier external repos',
                           required=True, action='store_true')
     tier_add.add_argument('--nodes', help='Tier max nodes',

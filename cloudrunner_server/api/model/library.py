@@ -12,17 +12,17 @@
 #  * without the express permission of CloudRunner.io
 #  *******************************************************/
 
-import re
 import uuid
 from sqlalchemy.sql.expression import func
 from sqlalchemy import (Column, Integer, String, DateTime, Boolean, Text,
                         ForeignKey, UniqueConstraint,
-                        or_, event, select)
+                        or_, event, select, distinct)
 from sqlalchemy.orm import relationship, backref, aliased
 from .base import TableBase
 from .users import User, Org
 
 from cloudrunner_server.util.validator import valid_script_name
+from cloudrunner_server.api.model.exceptions import QuotaExceeded
 
 
 class Repository(TableBase):
@@ -58,6 +58,20 @@ class Repository(TableBase):
 
     def editable(self, ctx):
         return self.owner_id == int(ctx.user.id)
+
+
+@event.listens_for(Repository, 'before_insert')
+def repo_before_insert(mapper, connection, target):
+    total_allowed = target.org.tier.total_repos
+
+    current_total = connection.scalar(
+        select([func.count(distinct(Repository.id))]).where(
+            Repository.org_id == target.org.id).where(
+                Repository.type == "cloudrunner"))
+
+    if total_allowed <= current_total:
+        raise QuotaExceeded(msg="Quota exceeded(%d of %d used)" % (
+            current_total, total_allowed), model="Repository")
 
 
 class RepositoryCreds(TableBase):

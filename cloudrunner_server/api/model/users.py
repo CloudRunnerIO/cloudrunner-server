@@ -221,7 +221,6 @@ class UsageTier(TableBase):
     title = Column(String(100))
     description = Column(Text)
     total_repos = Column(Integer)
-    user_repos = Column(Integer)
     external_repos = Column(Boolean)
     nodes = Column(Integer)
     users = Column(Integer)
