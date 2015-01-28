@@ -356,7 +356,7 @@ class TriggerManager(Daemon):
                 run.step_index = i
                 remote_task = dict(attachments=atts, body=run.full_script)
                 remote_task['timeout'] = run.timeout
-                remote_task['target'] = run.target
+                remote_task['target'] = self._expand_target(run.target)
 
                 remote_tasks.append(remote_task)
 
