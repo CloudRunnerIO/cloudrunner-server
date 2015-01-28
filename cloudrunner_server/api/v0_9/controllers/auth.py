@@ -90,7 +90,7 @@ class Auth(HookController):
         email_hash = md.hexdigest()
         cached_token = dict(uid=user.id, org=user.org.name, token=token.value,
                             tier=user.org.tier.serialize(skip=['id']),
-                            permissions=permissions,
+                            permissions=permissions, email=user.email,
                             email_hash=email_hash)
 
         cache = CacheRegistry()
