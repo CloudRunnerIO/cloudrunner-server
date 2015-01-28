@@ -81,7 +81,7 @@ class Execute(HookController):
 
         targets = kwargs.pop('targets')
         if not getattr(request, "user", None):
-            key = kwargs.pop('key')
+            key = kwargs.pop('key', None)
             if not key:
                 return O.error(msg="Missing auth key")
 

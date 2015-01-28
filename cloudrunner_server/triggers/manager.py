@@ -367,13 +367,21 @@ class TriggerManager(Daemon):
                 self.db.expunge(run)
                 make_transient(run)
 
-            env = {}
+            env = kwargs.get("env", {})
+            if env and not isinstance(env, dict):
+                try:
+                    env = json.loads(env)
+                except:
+                    env = {}
             try:
-                if task.env_in:
-                    env_in = json.loads(task.env_in)
-                    env = env_in.update(env)
-            except:
-                pass
+                env_in = {}
+                if task_runs[0].env_in:
+                    env_in = json.loads(task_runs[0].env_in) or {}
+                if env_in:
+                    env_in.update(env)
+                    env = env_in
+            except Exception, ex:
+                LOG.exception(ex)
 
             msg = Master(ctx.user.name).command('dispatch',
                                                 tasks=remote_tasks,
@@ -429,55 +437,60 @@ class TriggerManager(Daemon):
                     self.db.expire_all()
                     target, action = item['channel'].split(":", 1)
                     if target == 'task':
-                        job_data = json.loads(item['data'])
-                        LOG.info(job_data)
-                        kwargs['env'] = job_data.get('env', {})
-                        task = self.db.query(Task).join(Run).filter(
-                            Run.uuid == job_data['id']).first()
-                        if (not task or not task.group.batch or
-                                task.status != LOG_STATUS.Finished):
-                                # Intermediate step - skip
-                            continue
-                        src_script_step = [
-                            s for s in task.group.batch.scripts
-                            if s.script == task.script_content.script]
-                        if len(src_script_step) != 1:
-                            s = task.script_content.script
-                            LOG.warn("Incorrect number of script - %s steps "
-                                     "matched for sctipt %s" % (
-                                         len(src_script_step),
-                                         s.full_path()))
-                            continue
-                        src_script_step = src_script_step[0]
-                        conditions = [c for c in task.group.batch.conditions
-                                      if c.source == src_script_step]
-                        passed = [c for c in conditions
-                                  if c.evaluate(job_data)]
-                        seen = []
-                        for p in passed:
-                            _scr = p.destination.script
-                            script_name = _scr.full_path()
-                            if p.destination.version:
-                                script_name = "%s@%s" % (script_name,
-                                                         p.destination.version)
-                            if p.destination.id in seen:
+                        if action == "update":
+                            LOG.info("Task %s running" % item['data'])
+                        elif action == "end":
+                            LOG.info("Task %s finished" % item['data'])
+                            job_data = json.loads(item['data'])
+                            # LOG.info(job_data)
+                            kwargs['env'] = job_data.get('env', {})
+                            task = self.db.query(Task).join(Run).filter(
+                                Run.uuid == job_data['id']).first()
+                            if (not task or not task.group.batch or
+                                    task.status != LOG_STATUS.Finished):
+                                    # Intermediate step - skip
                                 continue
-                            seen.append(p.destination.id)
-                            self.db.begin()
-                            self.db.commit()
-                            ctx = self.get_user_ctx(task.owner.id)
-                            job_uuid = self.execute(
-                                user_id=task.owner.id,
-                                content=_scr.contents(
-                                    ctx, rev=p.destination.version),
-                                parent_uuid=task.uuid,
-                                **kwargs)
-                            LOG.info("Executed %s/%s" % (
-                                job_uuid, script_name))
+                            src_script_step = [
+                                s for s in task.group.batch.scripts
+                                if s.script == task.script_content.script]
+                            if len(src_script_step) != 1:
+                                s = task.script_content.script
+                                LOG.warn("Incorrect script id - %s steps "
+                                         "matched for sctipt %s" % (
+                                             len(src_script_step),
+                                             s.full_path()))
+                                continue
+                            src_script_step = src_script_step[0]
+                            conditions = [c for
+                                          c in task.group.batch.conditions
+                                          if c.source == src_script_step]
+                            passed = [c for c in conditions
+                                      if c.evaluate(job_data)]
+                            seen = []
+                            for p in passed:
+                                _scr = p.destination.script
+                                script_name = _scr.full_path()
+                                if p.destination.version:
+                                    script_name = "%s@%s" % (
+                                        script_name, p.destination.version)
+                                if p.destination.id in seen:
+                                    continue
+                                seen.append(p.destination.id)
+                                self.db.begin()
+                                self.db.commit()
+                                ctx = self.get_user_ctx(task.owner.id)
+                                job_uuid = self.execute(
+                                    user_id=task.owner.id,
+                                    content=_scr.contents(
+                                        ctx, rev=p.destination.version),
+                                    parent_uuid=task.uuid,
+                                    **kwargs)
+                                LOG.info("Executed %s/%s" % (
+                                    job_uuid, script_name))
                     else:
                         LOG.warn("Unrecognized pattern: %s" % item['pattern'])
             except Exception, ex:
-                LOG.error(ex)
+                LOG.exception(ex)
             except KeyboardInterrupt:
                 break
         LOG.info('Exited main thread')
