@@ -132,6 +132,11 @@ class Auth(HookController):
         return O.error(msg="Cannot logout")
 
     @expose('json')
+    def payment_token(self):
+        token = request.braintree.ClientToken.generate()
+        return O.payment(token=token)
+
+    @expose('json')
     @wrap_command(User, method='create')
     def register(self, **kwargs):
         if request.method != "POST":

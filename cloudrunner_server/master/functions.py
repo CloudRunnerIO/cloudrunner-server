@@ -758,18 +758,21 @@ basicConstraints = CA:true
             return
         conf_file = os.path.join(org_path, "openssl.cnf")
 
-        ret = os.system("openssl ca -revoke %s -config %s -passin pass:%s" % (
-            ca_crt, conf_file, self.config.security.cert_pass))
-        if ret:
-            yield ERR, 'Error revoking Org CA: %s' % ret
-            exit(1)
+        try:
+            ret = os.system("openssl ca -revoke %s -config %s -passin pass:%s"
+                            % (ca_crt, conf_file,
+                               self.config.security.cert_pass))
+            if ret:
+                yield ERR, 'Error revoking Org CA: %s' % ret
+        except Exception, ex:
+            yield ERR, "%s" % ex
+        finally:
+            yield DATA, "Removing crt file %s" % ca_crt
+            os.unlink(ca_crt)
+            yield DATA, "Removing key file %s" % ca_key
+            os.unlink(ca_key)
 
-        yield DATA, "Removing crt file %s" % ca_crt
-        os.unlink(ca_crt)
-        yield DATA, "Removing key file %s" % ca_key
-        os.unlink(ca_key)
-
-        yield TAG, "Certificate for %s removed" % ca
+            yield TAG, "Certificate for %s removed" % ca
 
 
 class ConfigController(object):
@@ -1096,6 +1099,7 @@ class UserController(DbMixin):
 
     def __init__(self, config, to_print=True):
         self.set_context_from_config(config)
+        self.config = config
 
     @yield_wrap
     def list(self, **kwargs):
@@ -1134,6 +1138,9 @@ class UserController(DbMixin):
         org = Org(name=name, tier=tier)
         self.db.add(org)
         self.db.commit()
+        ccont = CertController(self.config)
+        for _type, line in ccont.create_ca(name):
+            yield _type, line
         yield DATA, "Added"
 
     @yield_wrap
@@ -1175,6 +1182,10 @@ class UserController(DbMixin):
 
         self.db.delete(org)
         self.db.commit()
+        ccont = CertController(self.config)
+
+        for _type, line in ccont.revoke_ca(name):
+            yield _type, line
         yield DATA, "Removed"
 
     @yield_wrap

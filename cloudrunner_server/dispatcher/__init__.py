@@ -30,6 +30,12 @@ class TaskQueue(object):
         self.tasks = []
         self.owner = None
 
+    def push(self, task):
+        self.tasks.append(task)
+
+    def find(self, task_id):
+        return filter(lambda x: x.session_id == task_id, self.tasks)
+
     @property
     def task_ids(self):
         return [task.session_id for task in self.tasks]

@@ -40,7 +40,8 @@ class Logs(HookController):
                  PermHook(dont_have=set(['is_super_admin']))]
 
     @expose('json')
-    def all(self, nodes=None, run_uuids=None, etag=None, marker=None, **kwargs):
+    def all(self, nodes=None, run_uuids=None, etag=None, marker=None,
+            **kwargs):
         if etag:
             etag = int(etag)
         else:
@@ -83,10 +84,12 @@ class Logs(HookController):
             if nodes:
                 groups = groups.filter(RunNode.name.in_(nodes))
         group_ids = groups.all()[start:end]
-        tasks = Task.visible(request).filter(
-            Task.taskgroup_id.in_([g[0] for g in group_ids]))
-
-        tasks = tasks.all()
+        tasks = Task.visible(request)
+        if group_ids:
+            tasks = tasks.filter(Task.taskgroup_id.in_(
+                [g[0] for g in group_ids])).all()
+        else:
+            tasks = []
 
         task_list = []
         task_map = {}

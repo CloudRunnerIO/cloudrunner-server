@@ -38,7 +38,8 @@ class Repository(TableBase):
     private = Column(Boolean, default=False)
     org_id = Column(Integer, ForeignKey(Org.id))
 
-    org = relationship(Org)
+    org = relationship(Org, backref=backref('library_scripts',
+                                            cascade="delete"))
     owner = relationship(User)
 
     @staticmethod
@@ -107,7 +108,8 @@ class Folder(TableBase):
     repository_id = Column(Integer, ForeignKey(Repository.id))
     owner_id = Column(Integer, ForeignKey(User.id))
 
-    owner = relationship(User)
+    owner = relationship(User, backref=backref('library_folders',
+                                               cascade="delete"))
     parent = relationship('Folder',
                           remote_side=[id],
                           backref=backref('subfolders', cascade="delete"))
@@ -197,7 +199,8 @@ class Script(TableBase):
     owner_id = Column(Integer, ForeignKey(User.id))
 
     folder = relationship(Folder)
-    owner = relationship(User)
+    owner = relationship(User, backref=backref('library_scripts',
+                                               cascade="delete"))
 
     def contents(self, ctx, rev=None, **kwargs):
         if rev and str(rev).lower() != 'head':

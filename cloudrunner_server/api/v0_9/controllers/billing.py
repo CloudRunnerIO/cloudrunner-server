@@ -26,11 +26,6 @@ class Billing(HookController):
     __hooks__ = [DbHook(), ErrorHook(), BrainTreeHook()]
 
     @expose('json')
-    def token(self):
-        token = request.braintree.ClientToken.generate()
-        return O.billing(token=token)
-
-    @expose('json')
     def account(self):
         request.user.email = '3tisho433433343@imageo.net'
 

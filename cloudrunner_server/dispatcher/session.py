@@ -45,14 +45,13 @@ class JobSession(Thread):
     """
 
     def __init__(self, manager, user, session_id, task, remote_user_map,
-                 env_in, env_out, timeout, stop_event=None,
+                 env_in, env_out, timeout, parent, stop_event=None,
                  **kwargs):
         super(JobSession, self).__init__()
-        self.session_id = session_id
+        self.session_id = str(session_id)
         self.user = user
         self.task = SafeDictWrapper(task)
         self.remote_user_map = remote_user_map
-        self.kwargs = kwargs
         self.stop_reason = 'term'
         self.session_event = stop_event or Event()
         self.task_name = str(kwargs.get('caller', ''))
@@ -65,7 +64,26 @@ class JobSession(Thread):
         self.env_in = env_in
         self.env_out = env_out
         self.global_timeout = self.timeout
+        self.parent = parent
         self.env = {}
+        self.node_map = kwargs.pop("node_map", {})
+        self.restore = False
+        self.user_org = (self.user, self.remote_user_map['org'])
+        self.attachments = []
+        self.start_at = kwargs.get('start_at', 0)
+        self.request = dict(env=self.env, script=self.task.body,
+                            remote_user_map=self.remote_user_map)
+        self.file_exports = {}
+
+        self.kwargs = kwargs
+
+    def serialize(self):
+        ser = dict(task=self.task, session_id=self.session_id,
+                   timeout=self.timeout, parent=self.parent,
+                   user=self.user, remote_user_map=self.remote_user_map,
+                   node_map=self.node_map, start_at=self.start_at,
+                   kwargs=self.kwargs)
+        return ser
 
     def _reply(self, message):
         seq = timestamp()
@@ -79,9 +97,9 @@ class JobSession(Thread):
             LOG.exception(ex)
             self.env_out.put((self.env, None))
 
-    def _run(self):
+    def _execute(self):
         try:
-            env, file_exports = self.env_in.get(True, self.global_timeout)
+            env, self.file_exports = self.env_in.get(True, self.global_timeout)
         except Empty:
             LOG.warn("Timeout waiting for previous task to finish")
             return
@@ -95,7 +113,6 @@ class JobSession(Thread):
         elif not isinstance(env, dict):
             LOG.warn("Invalid ENV passed: %s" % env)
             env = {}
-        self.job_done = self.manager.backend.publish_queue('logger')
 
         if self.timeout == -1:
             # Persistent job
@@ -106,31 +123,26 @@ class JobSession(Thread):
                 self.session_id,
                 self.timeout))
 
-        user_org = (self.user, self.remote_user_map['org'])
-        # Clean up
-        self.kwargs.pop('user_org', None)
-        self.kwargs.pop('section', None)
-        self.kwargs.pop('tgt_args', None)
-
-        attachments = []
-
         if 'attachments' in self.kwargs:
             try:
                 # process runtime includes
-                attachments.append(self.kwargs['attachments'])
+                self.attachments.append(self.kwargs['attachments'])
             except Exception, ex:
                 LOG.exception(ex)
-        if file_exports:
-            attachments.append(file_exports)
+        if self.file_exports:
+            self.attachments.append(self.file_exports)
 
         ts = self._create_ts()
         message = InitialMessage(session_id=self.session_id,
                                  ts=ts,
-                                 org=user_org[1],
-                                 user=user_org[0])
+                                 org=self.user_org[1],
+                                 user=self.user_org[0])
         self._reply(message)
-        result = {}
-        msg_ret = []
+
+        # Clean up
+        self.kwargs.pop('user_org', None)
+        self.kwargs.pop('section', None)
+        self.kwargs.pop('tgt_args', None)
 
         try:
             if self.task.pre_conditions:
@@ -148,16 +160,30 @@ class JobSession(Thread):
                         raise
 
             self.update_target(env)
+            self.request['env'].update(env)
+
             #
             # Exec section
             #
-            section_it = self.exec_section(
-                self.task.target, dict(env=env, script=self.task.body,
-                                       remote_user_map=self.remote_user_map,
-                                       attachments=attachments),
-                timeout=self.timeout)
+            self.run_script(
+                self.task.target)
 
-            for _reply in section_it:
+        except Exception, ex:
+            LOG.exception(ex)
+
+    def _run(self):
+        self.manager.register_session(self.session_id)
+        self.job_done = self.manager.backend.publish_queue('logger')
+
+        if not self.restore:
+            self._execute()
+
+        result = {}
+        env = {}
+        msg_ret = []
+
+        try:
+            for _reply in self.read():
                 if _reply[0] == 'PIPE':
                     # reply: 'PIPE', self.session_id, ts, run_as, node_id,
                     # stdout, stderr
@@ -231,50 +257,46 @@ class JobSession(Thread):
                                       result=result,
                                       env=env)
             self._reply(message)
-            self.env_out.put((env, file_exports))
+            self.env_out.put((env, self.file_exports))
 
         self.session_event.set()
         # Wait for all other threads to finish consuming session data
         time.sleep(.5)
         self.job_done.close()
 
-    def exec_section(self, targets, request, timeout=None):
+    def run_script(self, targets):
         """
         Send request to nodes
         Arguments:
 
         targets     --  Target nodes, described by Id or Selector
 
-        request     --  Job request
-
-        timeout     --  Wait timeout for the request in seconds.
-                        Defaults to config value or 300 sec
-
         """
 
-        self.manager.register_session(self.session_id)
+        remote_user_map = self.request.pop('remote_user_map')
+
+        target = JobTarget(self.session_id, str(targets))
+        target.hdr.org = remote_user_map['org']
+        self.start_at = timestamp()
+        self.manager.publisher.send(target._)
+
+    def read(self):
         job_event = Event()
-        file_exports = {}
-        remote_user_map = request.pop('remote_user_map')
-        # Call for nodes
+        user_map = UserMap(self.remote_user_map['roles'], self.user)
+        node_map = self.node_map
+
+        job_reply = self.manager.backend.publish_queue('out_messages')
         job_queue = self.manager.backend.consume_queue('in_messages',
                                                        ident=self.session_id)
-        job_reply = self.manager.backend.publish_queue('out_messages')
         user_input_queue = self.manager.backend.consume_queue(
             'user_input',
             ident=self.session_id)
 
         poller = self.manager.backend.create_poller(job_queue,
                                                     user_input_queue)
-        node_map = {}
         discovery_period = time.time() + self.manager.discovery_timeout
-        total_wait = time.time() + (timeout or self.manager.wait_timeout)
+        total_wait = time.time() + (self.timeout or self.manager.wait_timeout)
 
-        target = JobTarget(self.session_id, str(targets))
-        target.hdr.org = remote_user_map['org']
-        self.manager.publisher.send(target._)
-        user_map = UserMap(remote_user_map['roles'], self.user)
-        start_at = timestamp()
         try:
             while not self.session_event.is_set() and not job_event.is_set():
                 ready = poller.poll()
@@ -332,7 +354,7 @@ class JobSession(Thread):
                     continue
 
                 # Assert we have rep from the same organization
-                if job_rep.hdr.org != remote_user_map['org']:
+                if job_rep.hdr.org != self.remote_user_map['org']:
                     continue
 
                 state = node_map.setdefault(
@@ -354,7 +376,7 @@ class JobSession(Thread):
                     # Send task to attached node
                     node_map[job_rep.hdr.peer]['remote_user'] = remote_user
                     LOG.info("Sending job to %s" % job_rep.hdr.peer)
-                    job_msg = Job(self.session_id, remote_user, request)
+                    job_msg = Job(self.session_id, remote_user, self.request)
                     job_msg.hdr.ident = job_rep.hdr.ident
                     job_msg.hdr.dest = self.session_id
                     job_reply.send(job_msg._)
@@ -362,7 +384,7 @@ class JobSession(Thread):
 
                 state['status'] = job_rep.control
                 if isinstance(job_rep, Finished):
-                    state['data']['elapsed'] = int(timestamp() - start_at)
+                    state['data']['elapsed'] = int(timestamp() - self.start_at)
                     state['data']['ret_code'] = job_rep.result['ret_code']
                     state['data']['env'] = job_rep.result['env']
                     if job_rep.result['stdout'] or job_rep.result['stderr']:
@@ -383,7 +405,7 @@ class JobSession(Thread):
                            '', job_rep.output)
                 elif isinstance(job_rep, FileExport):
                     file_name = '%s_%s' % (job_rep.hdr.peer, job_rep.file_name)
-                    file_exports[file_name] = job_rep.content
+                    self.file_exports[file_name] = job_rep.content
                 elif isinstance(job_rep, Events):
                     LOG.info("Polling events for %s" % self.session_id)
                 # else:
@@ -442,7 +464,7 @@ class JobSession(Thread):
                      elapsed=n['data'].get('elapsed', 0),
                      ret_code=n['data'].get('ret_code', -255))
                 for k, n in node_map.items()],
-               file_exports)
+               self.file_exports)
 
     def _create_ts(self):
         ts = timestamp()
