@@ -41,14 +41,15 @@ class Logs(HookController):
 
     @expose('json')
     def all(self, nodes=None, run_uuids=None, etag=None, marker=None,
-            **kwargs):
+            page=None, **kwargs):
         if etag:
             etag = int(etag)
         else:
             etag = 0
 
+        start, end = 0, PAGE_SIZE
         try:
-            start = int(kwargs.get("start", 0))
+            start = max(0, (int(page or 1) - 1) * PAGE_SIZE)
             end = start + PAGE_SIZE
         except:
             pass
