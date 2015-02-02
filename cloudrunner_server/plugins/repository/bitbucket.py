@@ -22,7 +22,11 @@ class BitbucketPluginRepo(PluginRepoBase):
         self.client = o.Client(consumer)
 
     @retry()
-    def contents(self, full_path, rev=None, last_modified=None):
+    def browse(self, repo, path, last_modified=None):
+        return dict(folders=[], scripts=[]), None
+
+    @retry()
+    def contents(self, repo, full_path, rev=None, last_modified=None):
         user, _, repo_path = full_path.partition('/')
         repo, _, path = repo_path.partition('/')
         args = dict(user=user, repo=repo, path=path, rev=rev or 'HEAD')

@@ -15,6 +15,7 @@
 from pecan import conf  # noqa
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import scoped_session, sessionmaker
+from sqlalchemy.sql.expression import null
 
 from .base import metadata
 from .batches import *  # noqa
@@ -27,6 +28,7 @@ from .jobs import *  # noqa
 from cloudrunner_server.util.db import checkout_listener
 
 Session = scoped_session(sessionmaker())
+NULL = null()
 
 
 def init_model():

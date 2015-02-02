@@ -16,7 +16,11 @@ class DropboxPluginRepo(PluginRepoBase):
         self.client = DropboxClient(auth_pass)
 
     @retry()
-    def contents(self, full_path, rev=None, last_modified=None):
+    def browse(self, repo, path, last_modified=None):
+        return dict(folders=[], scripts=[]), None
+
+    @retry()
+    def contents(self, repo, full_path, rev=None, last_modified=None):
         user, _, path = full_path.partition('/')
         if rev:
             revisions = self.client.revisions(path)

@@ -12,7 +12,6 @@
 #  * without the express permission of CloudRunner.io
 #  *******************************************************/
 
-import uuid
 from sqlalchemy.sql.expression import func
 from sqlalchemy import (Column, Integer, String, DateTime, Boolean, Text,
                         ForeignKey, UniqueConstraint,
@@ -106,6 +105,7 @@ class Folder(TableBase):
     full_name = Column(String(500))
     parent_id = Column(Integer, ForeignKey('folders.id'))
     repository_id = Column(Integer, ForeignKey(Repository.id))
+    created_at = Column(DateTime, default=func.now())
     owner_id = Column(Integer, ForeignKey(User.id))
 
     owner = relationship(User, backref=backref('library_folders',
@@ -114,7 +114,8 @@ class Folder(TableBase):
                           remote_side=[id],
                           backref=backref('subfolders', cascade="delete"))
     scripts = relationship('Script')
-    repository = relationship(Repository, backref=backref('folders'))
+    repository = relationship(Repository, backref=backref('folders',
+                                                          cascade="delete"))
 
     @staticmethod
     def visible(ctx, repository, parent=None):
@@ -158,7 +159,8 @@ class Revision(TableBase):
 
     script_id = Column(Integer, ForeignKey('scripts.id'))
 
-    script = relationship('Script', backref=backref('history'))
+    script = relationship('Script', backref=backref('history',
+                                                    cascade="delete"))
 
 
 @event.listens_for(Revision, 'before_insert')
@@ -194,11 +196,11 @@ class Script(TableBase):
     created_at = Column(DateTime, default=func.now())
     mime_type = Column(String(255), default="text/plain")
     allow_sudo = Column(Boolean)
-    link_key = Column(String(50), default=lambda ctx: uuid.uuid4().hex)
 
     owner_id = Column(Integer, ForeignKey(User.id))
 
-    folder = relationship(Folder)
+    folder = relationship(Folder, backref=backref('folder_scripts',
+                                                  cascade="delete"))
     owner = relationship(User, backref=backref('library_scripts',
                                                cascade="delete"))
 

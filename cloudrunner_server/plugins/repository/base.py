@@ -10,7 +10,11 @@ class PluginRepoBase(object):
         raise NotImplementedError()
 
     @abc.abstractmethod
-    def contents(self, path, rev=None):
+    def browse(self, repo, path):
+        return None
+
+    @abc.abstractmethod
+    def contents(self, repo, path, rev=None):
         return None
 
     @staticmethod
@@ -26,7 +30,11 @@ class NotModified(Exception):
     pass
 
 
-def retry(count=3):
+class NotAccessible(Exception):
+    pass
+
+
+def retry(count=3, default=None):
 
     def decorator(f):
         @wraps(f)
@@ -42,7 +50,7 @@ def retry(count=3):
                 except Exception:
                     cnt_retry -= 1
                     if not cnt_retry:
-                        return None, None, None
+                        return default
         return wrapper
 
     return decorator

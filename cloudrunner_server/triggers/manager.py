@@ -528,7 +528,7 @@ def _parse_script_name(ctx, path):
                         repo.credentials.auth_pass)
         try:
             contents, last_modified, rev = plugin.contents(
-                full_path, rev=rev,
+                repo_name, full_path, rev=rev,
                 last_modified=s.contents(ctx).created_at)
             exists = s.contents(ctx, rev=rev)
             if not exists:

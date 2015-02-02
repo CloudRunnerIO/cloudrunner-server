@@ -67,7 +67,8 @@ class Task(TableBase):
     revision_id = Column(Integer, ForeignKey('revisions.id'))
 
     owner = relationship('User', backref=backref('tasks', cascade="delete"))
-    script_content = relationship(Revision)
+    script_content = relationship(Revision,
+                                  backref=backref('tasks', cascade="delete"))
     group = relationship(TaskGroup, backref=backref('tasks'))
     parent = relationship('Task',
                           remote_side=[id],
