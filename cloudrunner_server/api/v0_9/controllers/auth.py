@@ -33,6 +33,7 @@ from cloudrunner_server.util.cache import CacheRegistry
 
 DEFAULT_EXP = 1440
 LOG = logging.getLogger()
+MAX_EXP = 3 * 30 * 24 * 60  # 3 months/90 days
 
 
 @event.listens_for(Org, 'after_insert')
@@ -78,6 +79,9 @@ class Auth(HookController):
 
         try:
             expire = int(expire)
+            if expire < 0 or expire > MAX_EXP:
+                return O.error(msg='Invalid expire timeout, '
+                               'should be between 1 and %d minutes' % MAX_EXP)
         except:
             expire = DEFAULT_EXP
         token = User.create_token(request, user.id,
