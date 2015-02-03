@@ -525,7 +525,8 @@ def _parse_script_name(ctx, path):
             LOG.warn("No plugin found for repo %s" % (repo.type,))
             return None
         plugin = plugin(repo.credentials.auth_user,
-                        repo.credentials.auth_pass)
+                        repo.credentials.auth_pass,
+                        repo.credentials.auth_args)
         try:
             contents, last_modified, rev = plugin.contents(
                 repo_name, full_path, rev=rev,

@@ -68,7 +68,8 @@ class Library(HookController):
                     skip=['id', 'org_id', 'owner_id'],
                     rel=[('owner.username', 'owner'),
                          ('credentials.auth_user', 'key'),
-                         ('credentials.auth_pass', 'secret')]))
+                         ('credentials.auth_pass', 'secret',
+                          'credentials.auth_auth_args', 'args')]))
 
     @expose('json')
     def repo_plugins(self, *args, **kwargs):
@@ -114,11 +115,14 @@ class Library(HookController):
             repository.name = new_name
         repository.private = private
         if repository.type != 'cloudrunner':
-            key = kwargs.get('key')
+            user = kwargs.get('key')
+            repository.credentials.auth_user = user
             secret = kwargs.get('secret')
             if secret:
-                repository.credentials.auth_user = key
                 repository.credentials.auth_pass = secret
+            args = kwargs.get('args')
+            if args:
+                repository.credentials.auth_args = args
 
         request.db.add(repository)
 
@@ -184,7 +188,6 @@ class Library(HookController):
         show_versions = (bool(kwargs.get('show_versions'))
                          and not kwargs.get('show_versions')
                          in ['0', 'false', 'False'])
-
         if show_versions:
             rels.append(('history', 'versions', order))
         if repo.type == 'cloudrunner':
@@ -214,12 +217,14 @@ class Library(HookController):
                 return O.error("Plugin for repo type %s not found!" %
                                repo.type)
             plugin = plugin(repo.credentials.auth_user,
-                            repo.credentials.auth_pass)
+                            repo.credentials.auth_pass,
+                            repo.credentials.auth_args)
             subfolders, scripts = [], []
             try:
-                contents, last_modified = plugin.browse(
-                    repository, name, last_modified=folder.created_at)
+                contents, last_modified, etag = plugin.browse(
+                    repository, name, last_modified=folder.etag)
                 folder.created_at = last_modified
+                folder.etag = etag
 
                 subfolders = list(Folder.visible(
                     request, repository, parent=name).all())
@@ -261,7 +266,7 @@ class Library(HookController):
                                         created_at=NULL)
                     scripts.append(new_script)
                     try:
-                        cont, last_modified, rev = plugin.contents(
+                        cont, last_modified, rev, etag = plugin.contents(
                             repo.name, path.join(full_path, new_script.name))
                         rev = Revision(created_at=last_modified,
                                        version=rev, script=new_script,
@@ -269,6 +274,7 @@ class Library(HookController):
                         if parse_sections(cont):
                             new_script.mime_type = 'text/workflow'
                         new_script.created_at = last_modified
+                        new_script.etag = etag
                         request.db.add(rev)
                     except Exception, ex:
                         LOG.exception(ex)
@@ -277,9 +283,8 @@ class Library(HookController):
                 request.db.add(folder)
 
             except NotAccessible:
-                return O.error(msg="API limit reached, "
-                               "try again later or use authenticated user "
-                               "for higher limits")
+                return O.error(msg="Cannot connect to %s API" % plugin.type)
+
             except NotModified:
                 subfolders = Folder.visible(
                     request, repository, parent=name).all()
@@ -363,22 +368,15 @@ class Library(HookController):
                     for r in scr.history
                     if not r.draft], key=lambda r: r["created_at"],
                     reverse=True)
-                return O.script(name=scr.name,
-                                created_at=scr.created_at,
-                                owner=scr.owner.username,
-                                content=rev.content,
-                                version=rev.version,
-                                allow_sudo=scr.allow_sudo,
-                                mime=scr.mime_type,
-                                revisions=revisions)
+
             else:
                 plugin = PluginRepoBase.find(repo.type)
                 if not plugin:
                     return O.error("Plugin for repo type %s not found!" %
                                    repo.type)
                 plugin = plugin(repo.credentials.auth_user,
-                                repo.credentials.auth_pass)
-
+                                repo.credentials.auth_pass,
+                                repo.credentials.auth_args)
                 last_rev = scr.contents(request)
                 try:
                     contents, last_modified, rev = plugin.contents(
@@ -395,32 +393,33 @@ class Library(HookController):
                     request.db.add(exists)
                     rev = exists
 
-                    return O.script(name=scr.name,
-                                    created_at=scr.created_at,
-                                    owner=scr.owner.username,
-                                    content=rev.content,
-                                    version=rev.version,
-                                    allow_sudo=scr.allow_sudo,
-                                    mime=scr.mime_type,
-                                    revisions=[dict(version="HEAD",
-                                                    created_at=None)])
-
+                    revisions = [dict(version="HEAD", created_at=None)]
                 except NotModified:
-                    return O.script(name=scr.name,
-                                    created_at=scr.created_at,
-                                    owner=scr.owner.username,
-                                    content=last_rev.content,
-                                    version=last_rev.version,
-                                    allow_sudo=scr.allow_sudo,
-                                    mime=scr.mime_type,
-                                    revisions=[dict(version="HEAD",
-                                                    created_at=None)])
+                    revisions = [dict(version="HEAD", created_at=None)]
+                    rev = last_rev
                 except NotAccessible:
-                    return O.error(msg="API limit reached, "
-                                   "try again later or use authenticated user "
-                                   "for higher limits")
+                    return O.error(msg="Cannot connect to %s API" %
+                                   plugin.type)
 
-                return O.error(msg="Not found")
+            if request.if_modified_since:
+                req_modified = request.if_modified_since
+                script_modified = pytz.utc.localize(rev.created_at)
+                if req_modified == script_modified:
+                    return redirect(code=304)
+
+            response.last_modified = rev.created_at.strftime('%c')
+            response.cache_control.private = True
+            response.cache_control.max_age = 1
+
+            return O.script(name=scr.name,
+                            created_at=scr.created_at,
+                            owner=scr.owner.username,
+                            content=rev.content,
+                            version=rev.version,
+                            allow_sudo=scr.allow_sudo,
+                            mime=scr.mime_type,
+                            revisions=revisions)
+
         else:
             return O.error(msg="Not found")
         return O.script({})

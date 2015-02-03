@@ -175,7 +175,8 @@ class Jobs(HookController):
                         msg="Cannot find plugin for %s repo" % repo.type,
                         field='script')
                 plugin = plugin(repo.credentials.auth_user,
-                                repo.credentials.auth_pass)
+                                repo.credentials.auth_pass,
+                                repo.credentials.auth_auth_args)
                 content, last_modified, rev = plugin.contents(
                     "/".join([_dir, script_name]), rev=version)
                 if content is None:

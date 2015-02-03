@@ -101,12 +101,13 @@ class Folder(TableBase):
     )
 
     id = Column(Integer, primary_key=True)
-    name = Column(String(255))
-    full_name = Column(String(500))
+    name = Column(String(500))
+    full_name = Column(String(4000))
     parent_id = Column(Integer, ForeignKey('folders.id'))
     repository_id = Column(Integer, ForeignKey(Repository.id))
     created_at = Column(DateTime, default=func.now())
     owner_id = Column(Integer, ForeignKey(User.id))
+    etag = Column(String(100))
 
     owner = relationship(User, backref=backref('library_folders',
                                                cascade="delete"))
@@ -196,6 +197,7 @@ class Script(TableBase):
     created_at = Column(DateTime, default=func.now())
     mime_type = Column(String(255), default="text/plain")
     allow_sudo = Column(Boolean)
+    etag = Column(String(100))
 
     owner_id = Column(Integer, ForeignKey(User.id))
 

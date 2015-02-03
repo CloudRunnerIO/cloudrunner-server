@@ -25,6 +25,9 @@ from cloudrunner_server.api.decorators import wrap_command
 from cloudrunner_server.api.model import Script, Revision, Folder
 from cloudrunner_server.api.util import JsonOutput as O
 from cloudrunner_server.triggers.manager import _parse_script_name
+from cloudrunner_server.plugins.repository.base import (PluginRepoBase,
+                                                        NotModified,
+                                                        NotAccessible)
 
 LOG = logging.getLogger()
 
@@ -42,21 +45,56 @@ class Workflows(HookController):
         path = '/'.join(args)
         rev = kwargs.get("rev")
         script = Script.find(request, path).one()
+        repo_path, lib_path, scr_path, rev = Script.parse(path)
+        repo = script.folder.repository
 
-        revision = script.contents(request, rev=rev)
-        sections = parser.parse_sections(revision.content)
         data = []
+
+        if repo.type == "cloudrunner":
+            revision = script.contents(request, rev=rev)
+        else:
+            plugin = PluginRepoBase.find(repo.type)
+            if not plugin:
+                return O.error("Plugin for repo type %s not found!" %
+                               repo.type)
+            plugin = plugin(repo.credentials.auth_user,
+                            repo.credentials.auth_pass,
+                            repo.credentials.auth_args)
+
+            try:
+                contents, last_modified, rev, etag = plugin.contents(
+                    repo.name, "".join([lib_path, scr_path]),
+                    last_modified=script.etag, rev=rev)
+                script.created_at = last_modified
+                script.etag = etag
+                exists = script.contents(request, rev=rev)
+                if not exists:
+                    exists = Revision(created_at=last_modified,
+                                      version=rev, script=script,
+                                      content=contents)
+                else:
+                    exists.content = contents
+                    exists.created_at = last_modified
+                request.db.add(script)
+                revision = exists
+                request.db.add(revision)
+            except NotModified:
+                revision = script.contents(request, rev=rev)
+                sections = parser.parse_sections(revision.content)
+            except NotAccessible:
+                return O.error(msg="Cannot connect to %s API" % plugin.type)
 
         if request.if_modified_since:
             req_modified = request.if_modified_since
             script_modified = pytz.utc.localize(revision.created_at)
             if req_modified == script_modified:
                 return redirect(code=304)
-        else:
-            response.last_modified = revision.created_at.strftime('%c')
-            response.cache_control.private = True
-            response.cache_control.max_age = 1
 
+        response.last_modified = revision.created_at.strftime('%c')
+        response.cache_control.private = True
+        response.cache_control.max_age = 1
+
+        sections = parser.parse_sections(revision.content)
         for s in sections:
             atts = []
             include_before = []

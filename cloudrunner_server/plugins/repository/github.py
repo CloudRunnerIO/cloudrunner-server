@@ -15,7 +15,7 @@ class GithubPluginRepo(PluginRepoBase):
 
     type = 'github'
 
-    def __init__(self, auth_user, auth_pass):
+    def __init__(self, auth_user, auth_pass, *args):
         self.auth_user = auth_user
         self.auth_pass = auth_pass
         self.git_user = self.auth_user
@@ -30,8 +30,11 @@ class GithubPluginRepo(PluginRepoBase):
 
         headers = {}
         if last_modified:
-            headers['If-Modified-Since'] = last_modified.strftime(
-                TIME_FORMAT)
+            if isinstance(last_modified, datetime):
+                headers['If-Modified-Since'] = last_modified.strftime(
+                    TIME_FORMAT)
+            else:
+                headers['If-Modified-Since'] = last_modified
 
         auth = None
         if self.auth_pass:
@@ -51,8 +54,8 @@ class GithubPluginRepo(PluginRepoBase):
                  for f in git_contents
                  if f['type'] in ['file', 'symlink']],
                 key=lambda k: k['name'])
-            return contents, datetime.strptime(r.headers['Last-Modified'],
-                                               TIME_FORMAT)
+            last = datetime.strptime(r.headers['Last-Modified'], TIME_FORMAT)
+            return contents, last, last
         elif r.status_code == 304:
             LOG.info("Using cached, since %s" % last_modified)
             raise NotModified()
@@ -64,7 +67,7 @@ class GithubPluginRepo(PluginRepoBase):
             LOG.error(git_path)
             raise Exception("Cannot load script contents %s" % path)
 
-    # @retry(default=(None, None, None))
+    # @retry(default=(None, None, None, None))
     def contents(self, repo, path, rev=None, last_modified=None):
         attr = vars(self)
         attr['path'] = path.strip("/")
@@ -86,9 +89,9 @@ class GithubPluginRepo(PluginRepoBase):
         if r.status_code == 200:
             file_ = r.json()
             content = base64.b64decode(file_['content'])
-            return (content, datetime.strptime(r.headers['Last-Modified'],
-                                               TIME_FORMAT),
-                    rev or '__LAST__')
+            last_modified = datetime.strptime(r.headers['Last-Modified'],
+                                              TIME_FORMAT)
+            return (content, last_modified, rev or 'HEAD', last_modified)
         elif r.status_code == 304:
             LOG.info("Using cached")
             raise NotModified()
