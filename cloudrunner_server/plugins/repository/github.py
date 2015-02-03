@@ -79,13 +79,14 @@ class GithubPluginRepo(PluginRepoBase):
             git_path = git_path + REV % dict(rev=rev)
 
         headers = {}
+        auth = None
+        if self.auth_pass:
+            auth = (self.auth_user, self.auth_pass)
         if last_modified:
             headers['If-Modified-Since'] = last_modified.strftime(
                 TIME_FORMAT)
 
-        r = requests.get(git_path,
-                         auth=(self.auth_user, self.auth_pass),
-                         headers=headers)
+        r = requests.get(git_path, auth=auth, headers=headers)
         if r.status_code == 200:
             file_ = r.json()
             content = base64.b64decode(file_['content'])
@@ -101,4 +102,5 @@ class GithubPluginRepo(PluginRepoBase):
             raise NotAccessible()
         else:
             LOG.error(git_path)
-            raise Exception("Cannot load script contents %s" % path)
+            raise Exception("Cannot load script contents %s [%s] [%s]" %
+                            (path, r.status_code, r.reason))
