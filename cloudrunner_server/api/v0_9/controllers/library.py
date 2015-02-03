@@ -117,14 +117,9 @@ class Library(HookController):
             repository.name = new_name
         repository.private = private
         if repository.type != 'cloudrunner':
-            user = kwargs.get('key')
-            repository.credentials.auth_user = user
-            secret = kwargs.get('secret')
-            if secret:
-                repository.credentials.auth_pass = secret
-            args = kwargs.get('args')
-            if args:
-                repository.credentials.auth_args = args
+            repository.credentials.auth_user = kwargs.get('user')
+            repository.credentials.auth_pass = kwargs.get('pass')
+            repository.credentials.auth_args = kwargs.get('args')
 
         request.db.add(repository)
 
