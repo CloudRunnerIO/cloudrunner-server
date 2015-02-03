@@ -93,10 +93,12 @@ class Library(HookController):
                                 org=org)
         request.db.add(repository)
         if _type != 'cloudrunner':
-            key = kwargs.get('key')
-            secret = kwargs.get('secret')
-            creds = RepositoryCreds(provider=_type, auth_user=key,
-                                    auth_pass=secret, repository=repository)
+            auth_user = kwargs.get('user')
+            auth_pass = kwargs.get('pass')
+            auth_args = kwargs.get('args')
+            creds = RepositoryCreds(provider=_type, auth_user=auth_user,
+                                    auth_pass=auth_pass, auth_args=auth_args,
+                                    repository=repository)
             request.db.add(creds)
         # Create root folder for repo
         root = Folder(name="/", full_name="/", repository=repository,
