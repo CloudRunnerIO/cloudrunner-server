@@ -45,7 +45,7 @@ class Workflows(HookController):
         path = '/'.join(args)
         rev = kwargs.get("rev")
         script = Script.find(request, path).one()
-        repo_path, lib_path, scr_path, rev = Script.parse(path)
+        repo_path, lib_path, scr_path, _ = Script.parse(path)
         repo = script.folder.repository
 
         data = []
@@ -62,7 +62,7 @@ class Workflows(HookController):
                             repo.credentials.auth_args)
 
             try:
-                contents, last_modified, rev, etag = plugin.contents(
+                contents, last_modified, version, etag = plugin.contents(
                     repo.name, "".join([lib_path, scr_path]),
                     last_modified=script.etag, rev=rev)
                 script.created_at = last_modified
@@ -70,7 +70,7 @@ class Workflows(HookController):
                 exists = script.contents(request, rev=rev)
                 if not exists:
                     exists = Revision(created_at=last_modified,
-                                      version=rev, script=script,
+                                      version=version, script=script,
                                       content=contents)
                 else:
                     exists.content = contents
