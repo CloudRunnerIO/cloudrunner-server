@@ -68,8 +68,8 @@ class Library(HookController):
                     skip=['id', 'org_id', 'owner_id'],
                     rel=[('owner.username', 'owner'),
                          ('credentials.auth_user', 'key'),
-                         ('credentials.auth_pass', 'secret',
-                          'credentials.auth_auth_args', 'args')]))
+                         ('credentials.auth_pass', 'secret'),
+                         ('credentials.auth_args', 'args')]))
 
     @expose('json')
     def repo_plugins(self, *args, **kwargs):
