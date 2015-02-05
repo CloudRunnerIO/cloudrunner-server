@@ -113,7 +113,7 @@ class Jobs(HookController):
             rev = sorted(scr.history,
                          key=lambda x: x.created_at, reverse=True)
         if not rev:
-            return O.error("Invalid script/version")
+            return O.error(msg="Invalid script/version")
         rev = rev[0]
 
         user = request.db.query(User).filter(User.id == request.user.id).one()

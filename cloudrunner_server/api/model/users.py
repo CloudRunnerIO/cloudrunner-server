@@ -54,6 +54,7 @@ class User(TableBase):
     first_name = Column(String(100))
     last_name = Column(String(100))
     email = Column(String(100), unique=True)
+    phone = Column(String(100))
     position = Column(String(100))
     department = Column(String(100))
     password = Column(String(128))
@@ -66,11 +67,20 @@ class User(TableBase):
     roles = relationship('Role')
     tokens = relationship('Token', backref='user')
 
+    attrs = set(['username', 'first_name', 'last_name',
+                 'phone', 'department', 'position'])
+
     def set_password(self, password):
         self.password = hash_token(password)
 
     @staticmethod
     def visible(ctx):
+        return ctx.db.query(User).join(Org).filter(
+            Org.name == ctx.user.org
+        )
+
+    @staticmethod
+    def editable(ctx):
         return ctx.db.query(User).join(Org).filter(
             User.enabled == True,  # noqa
             Org.name == ctx.user.org

@@ -86,7 +86,7 @@ class Batches(HookController):
         folder = Folder.editable(request, repo, folder_path).first()
 
         if not folder:
-            return O.error("Folder not found")
+            return O.error(msg="Folder not found")
 
         batch_obj = _validate_batch(request, batch)
 

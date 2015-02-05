@@ -13,7 +13,7 @@
 #  *******************************************************/
 
 import logging
-from pecan import expose, request  # noqa
+from pecan import expose, request
 
 from cloudrunner_server.api.model import Group, Org, User, ApiKey, joinedload
 from cloudrunner_server.api.util import JsonOutput as O
@@ -22,14 +22,11 @@ from cloudrunner_server.api.decorators import wrap_command
 
 LOG = logging.getLogger()
 
-USER_ATTR = set(['username', 'email', 'first_name',
-                 'last_name', 'department', 'position'])
-
 
 class Users(object):
 
-    @check_policy('is_admin')
     @expose('json', generic=True)
+    @check_policy('is_admin')
     @wrap_command(User)
     def users(self, name=None, *args, **kwargs):
         def modifier(roles):
@@ -88,7 +85,14 @@ class Users(object):
         if not user:
             return O.error(msg="User not found")
 
-        for k in set(kwargs.keys()).intersection(USER_ATTR):
+        if not user.enabled:
+            # Allow only enabling
+            enable = kwargs.get("enable")
+            if not enable or enable not in ["1", "true", "True"]:
+                return O.error(msg="Cannot modify inactive user")
+            user.enabled = True
+
+        for k in set(kwargs.keys()).intersection(User.attrs):
             setattr(user, k, kwargs[k])
 
         groups = request.POST.getall('groups')
@@ -106,13 +110,16 @@ class Users(object):
         password = kwargs.get('password')
         if password:
             user.set_password(password)
+        phone = kwargs.get('phone')
+        if phone:
+            user.phone = phone
         request.db.add(user)
 
     @users.when(method='PUT', template='json')
     @users.wrap_modify()
     def update(self, *args, **kwargs):
         # assert all values
-        (kwargs['username'], kwargs['email'], kwargs['first_name'],
+        (kwargs['username'], kwargs['first_name'], kwargs['phone'],
          kwargs['last_name'], kwargs['department'], kwargs['position'])
         return self.patch(**kwargs)
 

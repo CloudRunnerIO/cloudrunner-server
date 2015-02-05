@@ -198,12 +198,12 @@ class TriggerManager(Daemon):
             if target_script.mime_type == 'text/batch':
                 batch = target_script.batch
                 if not batch:
-                    return O.error("Workflow seems to be a Batch, "
+                    return O.error(msg="Workflow seems to be a Batch, "
                                    "but no Batch found")
                 script_step = next((s for s in batch.scripts if s.root), None)
                 script = script_step.script
                 if not script:
-                    return O.error("Batch step points to invalid script")
+                    return O.error(msg="Batch step points to invalid script")
                 script_rev = _parse_script_name(ctx, script.full_path())
                 batch_id = batch.id
             else:

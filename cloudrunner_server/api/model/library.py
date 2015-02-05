@@ -60,6 +60,9 @@ class Repository(TableBase):
     def editable(self, ctx):
         return self.owner_id == int(ctx.user.id) and self.enabled
 
+    def removable(self, ctx):
+        return self.owner_id == int(ctx.user.id)
+
 
 def quotas(connection, target):
     total_allowed = target.org.tier.total_repos
@@ -157,9 +160,8 @@ class Folder(TableBase):
                 Folder.full_name == folder_path,
                 Org.name == ctx.user.org,
                 Repository.name == repository,
-                or_(Repository.owner_id == ctx.user.id,
-                    Repository.private != True),
-                    Repository.enabled == True
+                Repository.owner_id == ctx.user.id,
+                Repository.enabled == True
             )  # noqa
         return q
 
@@ -257,9 +259,8 @@ class Script(TableBase):
             Folder, Repository, User, Org).filter(
                 Org.name == ctx.user.org,
                 Repository.name == repository,
-                or_(Repository.owner_id == ctx.user.id,
-                    Repository.private != True),
-                    Repository.enabled == True,
+                Repository.owner_id == ctx.user.id,
+                Repository.enabled == True,
                 Folder.full_name == folder
             )  # noqa
         return q

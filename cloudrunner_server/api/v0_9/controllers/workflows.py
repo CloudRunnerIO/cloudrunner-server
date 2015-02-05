@@ -55,7 +55,7 @@ class Workflows(HookController):
         else:
             plugin = PluginRepoBase.find(repo.type)
             if not plugin:
-                return O.error("Plugin for repo type %s not found!" %
+                return O.error(msg="Plugin for repo type %s not found!" %
                                repo.type)
             plugin = plugin(repo.credentials.auth_user,
                             repo.credentials.auth_pass,
@@ -153,7 +153,7 @@ class Workflows(HookController):
             folder_path = folder_path + "/"
         folder = Folder.editable(request, repo, folder_path).first()
         if not folder:
-            return O.error("Folder not found")
+            return O.error(msg="Folder not found")
         script = Script(name=name,
                         mime_type='text/workflow',
                         owner_id=request.user.id,

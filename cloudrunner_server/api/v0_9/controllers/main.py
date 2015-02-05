@@ -16,7 +16,7 @@ import logging
 from pecan import expose, request
 from pecan.secure import secure
 
-from .auth import Auth
+from .auth import Auth, Profile
 # from .batches import Batches
 from .billing import Billing
 from .dispatch import Dispatch
@@ -75,6 +75,7 @@ class RestApi(object):
 
     auth = Auth()
     billing = secure(Billing(), 'authorize')
+    my = secure(Profile(), 'authorize')
     dispatch = secure(Dispatch(), 'authorize')
     workflows = secure(Workflows(), 'authorize')
     # batches = secure(Batches(), 'authorize')

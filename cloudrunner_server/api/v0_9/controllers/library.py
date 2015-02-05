@@ -115,25 +115,43 @@ class Library(HookController):
                       owner_id=request.user.id)
         request.db.add(root)
 
-    @repo.when(method='PUT', template='json')
+    @repo.when(method='PATCH', template='json')
     @repo.wrap_update()
     def repository_update(self, name=None, **kwargs):
         new_name = kwargs.get('new_name')
-        private = (bool(kwargs.get('private'))
-                   and not kwargs.get('private') in ['0', 'false', 'False'])
         repository = Repository.own(request).filter(
             Repository.name == name).one()
-        if not repository.editable(request):
-            return O.error("Cannot edit this repo")
-        if new_name:
+
+        if not repository:
+            return O.error("Cannot find repo")
+
+        enabled = kwargs.get("enabled")
+        if enabled and enabled in ['1', 'true', 'True']:
+            repository.enabled = True
+        elif not repository.editable(request):
+            return O.error(msg="Cannot edit this repo")
+        elif new_name:
             repository.name = new_name
-        repository.private = private
+        private = kwargs.get('private')
+        if private:
+            private = private not in ['0', 'false', 'False']
+            repository.private = private
+
         if repository.type != 'cloudrunner':
-            repository.credentials.auth_user = kwargs.get('user')
-            repository.credentials.auth_pass = kwargs.get('pass')
-            repository.credentials.auth_args = kwargs.get('args')
+            if kwargs.get('user'):
+                repository.credentials.auth_user = kwargs.get('user')
+            if kwargs.get('pass'):
+                repository.credentials.auth_pass = kwargs.get('pass')
+            if kwargs.get('args'):
+                repository.credentials.auth_args = kwargs.get('args')
 
         request.db.add(repository)
+
+    @repo.when(method='PUT', template='json')
+    @repo.wrap_update()
+    def repository_replace(self, name=None, **kwargs):
+        kwargs['private']  # assert value
+        return self.repository_update(name, **kwargs)
 
     @repo.when(method='DELETE', template='json')
     @repo.wrap_delete()
@@ -141,8 +159,8 @@ class Library(HookController):
         name = "/".join(args)
         repository = Repository.own(request).filter(
             Repository.name == name).one()
-        if not repository.editable(request):
-            return O.error("Cannot edit/delete this repo")
+        if not repository.removable(request):
+            return O.error(msg="Cannot edit/delete this repo")
         if repository.type == "cloudrunner" and any(
             [f for f in repository.folders
                 if f.name != "/" or f.full_name != "/"]):
