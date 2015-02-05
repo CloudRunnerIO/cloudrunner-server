@@ -83,8 +83,11 @@ class GithubPluginRepo(PluginRepoBase):
         if self.auth_pass:
             auth = (self.auth_user, self.auth_pass)
         if last_modified:
-            headers['If-Modified-Since'] = last_modified.strftime(
-                TIME_FORMAT)
+            if isinstance(last_modified, datetime):
+                headers['If-Modified-Since'] = last_modified.strftime(
+                    TIME_FORMAT)
+            else:
+                headers['If-Modified-Since'] = last_modified
 
         r = requests.get(git_path, auth=auth, headers=headers)
         if r.status_code == 200:

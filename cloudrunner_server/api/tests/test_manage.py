@@ -32,7 +32,7 @@ class TestManage(base.BaseRESTTestCase):
             {
                 "username": "testuser",
                 "first_name": "User",
-                "active": True,
+                "enabled": True,
                 "last_name": "One",
                 "created_at": "2014-08-01 00:00:00",
                 "groups": None,
@@ -43,7 +43,7 @@ class TestManage(base.BaseRESTTestCase):
             {
                 "username": "testuser2",
                 "first_name": "User",
-                "active": True,
+                "enabled": True,
                 "last_name": "Second",
                 "created_at": "2014-08-02 00:00:00",
                 "groups": ["admin"],
@@ -283,10 +283,10 @@ class SuperAdminTest(base.BaseRESTTestCase):
             uuid = org.pop('uid')
             self.assertEqual(len(uuid), 32)
         self.assertContains(resp_json['orgs'],
-                            {"active": True,
+                            {"enabled": True,
                              "name": "MyOrg"})
         self.assertContains(resp_json['orgs'],
-                            {"active": False,
+                            {"enabled": False,
                              "name": "MyOrg2"})
 
     def ztest_create_org(self):

@@ -16,7 +16,7 @@ import uuid
 from sqlalchemy.sql.expression import func
 from sqlalchemy import (Column, Boolean, Integer, String, DateTime, Text,
                         ForeignKey, UniqueConstraint,
-                        or_, select, distinct, event)
+                        and_, or_, select, distinct, event)
 from sqlalchemy.orm import relationship, backref
 
 from .base import TableBase
@@ -71,12 +71,29 @@ class Job(TableBase):
         )
 
 
-@event.listens_for(Job, 'before_insert')
-def job_before_insert(mapper, connection, target):
+def quotas(connection, target):
     allowed = target.owner.org.tier.cron_jobs
     current = connection.scalar(
-        select([func.count(distinct(Job.id))]).where(
-            Job.owner_id == target.owner_id))
+        select([func.count(distinct(Job.id))]).where(and_(
+            Job.owner_id == target.owner_id,
+            Job.enabled == True)))  # noqa
+    return allowed, current
+
+
+@event.listens_for(Job, 'before_insert')
+def job_before_insert(mapper, connection, target):
+    allowed, current = quotas(connection, target)
     if allowed <= current:
+        raise QuotaExceeded(msg="Quota exceeded(%d of %d used)" % (
+            current, allowed), model="Job")
+
+
+@event.listens_for(Job, 'before_update')
+def job_before_update(mapper, connection, target):
+    if not target.enabled:
+        return
+    allowed, current = quotas(connection, target)
+
+    if allowed < current:
         raise QuotaExceeded(msg="Quota exceeded(%d of %d used)" % (
             current, allowed), model="Job")

@@ -41,7 +41,7 @@ class Orgs(object):
     @orgs.wrap_create()
     def create_org(self, *args, **kwargs):
         name = kwargs['org']
-        org = Org(name=name, active=True)
+        org = Org(name=name, enabled=True)
         request.db.add(org)
 
     @orgs.when(method='PATCH', template='json')
@@ -52,10 +52,10 @@ class Orgs(object):
         status = status or kwargs['status']
         status = bool(status in ['1', 'True', 'true'])
         org = request.db.query(Org).filter(
-            Org.name == name, Org.active != status).first()
+            Org.name == name, Org.enabled != status).first()
 
         if org:
-            org.active = status
+            org.enabled = status
             request.db.add(org)
 
     @orgs.when(method='DELETE', template='json')
@@ -64,10 +64,10 @@ class Orgs(object):
     def remove(self, name=None, **kwargs):
         name = name or kwargs['name']
         org = request.db.query(Org).filter(
-            Org.name == name, Org.active != True).first()  # noqa
+            Org.name == name, Org.enabled != True).first()  # noqa
 
         if not org:
-            return O.error(msg="Organization not found, or is active")
+            return O.error(msg="Organization not found or is enabled")
 
         if org:
             request.db.delete(org)

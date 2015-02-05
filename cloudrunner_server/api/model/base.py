@@ -46,7 +46,7 @@ def getattr_func(x, y):
 class TableBase(Base):
     __abstract__ = True
 
-    def serialize(self, skip=[], rel=[]):
+    def serialize(self, skip=[], rel=[], **kwargs):
         columns = [c.key for c in class_mapper(self.__class__).columns]
         d = dict((c, getattr(self, c)) for c in columns if c not in skip)
         for r in rel:
@@ -59,4 +59,7 @@ class TableBase(Base):
                 d[k] = modifier(v)
             else:
                 d[k] = v
+        # Custom mappings
+        for add in kwargs:
+            d[add] = kwargs[add](self)
         return d

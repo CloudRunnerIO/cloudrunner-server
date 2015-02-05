@@ -136,7 +136,7 @@ class TriggerManager(Daemon):
     def get_user_ctx(self, user_id):
         user = self.db.query(User).join(
             Org).filter(User.id == user_id,
-                        User.active == True).one()  # noqa
+                        User.enabled == True).one()  # noqa
         return DictWrapper(
             db=self.db,
             _user=user,
@@ -301,12 +301,10 @@ class TriggerManager(Daemon):
                 self.db.rollback()
                 return
 
-            msg = Master(ctx.user.name).command('dispatch',
-                                                tasks=remote_tasks,
-                                                roles=self._roles(ctx),
-                                                includes=[],
-                                                attachments=[],
-                                                env=env)
+            msg = Master(ctx.user.name).command(
+                'dispatch', tasks=remote_tasks, roles=self._roles(ctx),
+                disabled_nodes=self.disabled_nodes(ctx), includes=[],
+                attachments=[], env=env)
             if not isinstance(msg, Queued):
                 return
 
@@ -383,12 +381,10 @@ class TriggerManager(Daemon):
             except Exception, ex:
                 LOG.exception(ex)
 
-            msg = Master(ctx.user.name).command('dispatch',
-                                                tasks=remote_tasks,
-                                                roles=self._roles(ctx),
-                                                includes=[],
-                                                attachments=[],
-                                                env=env)
+            msg = Master(ctx.user.name).command(
+                'dispatch', tasks=remote_tasks, roles=self._roles(ctx),
+                disabled_nodes=self.disabled_nodes(ctx), includes=[],
+                attachments=[], env=env)
             if not isinstance(msg, Queued):
                 return
             task.created_at = datetime.now()
@@ -409,6 +405,11 @@ class TriggerManager(Daemon):
             LOG.exception(ex)
             self.db.rollback()
         return {}
+
+    def disabled_nodes(self, ctx):
+        nodes = [node.name for node in ctx.db.query(Node).filter(
+            Node.enabled != True).all()]  # noqa
+        return nodes
 
     def _expand_target(self, target):
         targets = [t.strip() for t in target.split(" ")]

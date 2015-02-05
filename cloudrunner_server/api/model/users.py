@@ -16,7 +16,7 @@ from datetime import datetime, timedelta
 from sqlalchemy.sql.expression import func
 from sqlalchemy import (
     Table, Column, Boolean, Integer, String, Text, DateTime,
-    ForeignKey, UniqueConstraint, Enum, event, select, distinct)
+    ForeignKey, UniqueConstraint, Enum, event, select, distinct, join)
 from sqlalchemy.orm import relationship, backref
 import uuid
 
@@ -39,7 +39,7 @@ class Org(TableBase):
     name = Column(String(100), unique=True)
     cert_ca = Column(Text)
     cert_key = Column(Text)
-    active = Column(Boolean)
+    enabled = Column(Boolean)
     tier_id = Column(Integer, ForeignKey('usagetiers.id'), nullable=False)
 
     tier = relationship('UsageTier', backref=backref('orgs'))
@@ -57,7 +57,7 @@ class User(TableBase):
     position = Column(String(100))
     department = Column(String(100))
     password = Column(String(128))
-    active = Column(Boolean, default=True)
+    enabled = Column(Boolean, default=True)
 
     org_id = Column(Integer, ForeignKey('organizations.id'))
 
@@ -72,7 +72,7 @@ class User(TableBase):
     @staticmethod
     def visible(ctx):
         return ctx.db.query(User).join(Org).filter(
-            User.active == True,  # noqa
+            User.enabled == True,  # noqa
             Org.name == ctx.user.org
         )
 
@@ -105,8 +105,21 @@ def user_before_insert(mapper, connection, target):
     allowed = target.org.tier.users
     current = connection.scalar(
         select([func.count(distinct(User.id))]).where(
-            User.org_id == target.org.id))
+            User.org_id == target.org.id).where(
+            User.enabled == True))  # noqa
     if allowed <= current:
+        raise QuotaExceeded(msg="Quota exceeded(%d of %d used)" % (
+            current, allowed), model="User")
+
+
+@event.listens_for(User, 'before_update')
+def user_before_update(mapper, connection, target):
+    allowed = target.org.tier.users
+    current = connection.scalar(
+        select([func.count(distinct(User.id))]).where(
+            User.org_id == target.org.id).where(
+            User.enabled == True))  # noqa
+    if allowed < current:
         raise QuotaExceeded(msg="Quota exceeded(%d of %d used)" % (
             current, allowed), model="User")
 
@@ -202,7 +215,7 @@ class ApiKey(TableBase):
     user_id = Column(Integer, ForeignKey('users.id'))
     description = Column(String(500))
     last_used = Column(DateTime)
-    active = Column(Boolean, default=True)
+    enabled = Column(Boolean, default=True)
 
     user = relationship('User', backref="apikeys")
 
@@ -211,6 +224,33 @@ class ApiKey(TableBase):
         return ctx.db.query(ApiKey).join(User, Org).filter(
             Org.name == ctx.user.org
         )
+
+
+def quotas(connection, target):
+    allowed = target.user.org.tier.api_keys
+    current = connection.scalar(
+        select([func.count(distinct(ApiKey.id))]).select_from(
+            join(ApiKey, User)).where(
+            User.org_id == target.user.org.id).where(
+            User.id == target.user_id).where(
+            User.enabled == True))  # noqa
+    return allowed, current
+
+
+@event.listens_for(ApiKey, 'before_insert')
+def apikey_before_insert(mapper, connection, target):
+    allowed, current = quotas(connection, target)
+    if allowed <= current:
+        raise QuotaExceeded(msg="Quota exceeded(%d of %d used)" % (
+            current, allowed), model="User")
+
+
+@event.listens_for(ApiKey, 'before_update')
+def apikey_before_update(mapper, connection, target):
+    allowed, current = quotas(connection, target)
+    if allowed < current:
+        raise QuotaExceeded(msg="Quota exceeded(%d of %d used)" % (
+            current, allowed), model="User")
 
 
 class UsageTier(TableBase):
@@ -230,3 +270,4 @@ class UsageTier(TableBase):
     max_concurrent_tasks = Column(Integer)
     log_retention_days = Column(Integer)
     cron_jobs = Column(Integer)
+    api_keys = Column(Integer)

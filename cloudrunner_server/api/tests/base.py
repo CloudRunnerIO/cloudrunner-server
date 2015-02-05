@@ -55,10 +55,10 @@ class BaseRESTTestCase(BaseTestCase):
         metadata.create_all(Session.bind)
 
         # User data
-        org = Org(name='MyOrg', active=True)
+        org = Org(name='MyOrg', enabled=True)
         Session.add(org)
 
-        org2 = Org(name='MyOrg2', active=False)
+        org2 = Org(name='MyOrg2', enabled=False)
         Session.add(org2)
 
         p1 = Permission(name='is_admin')

@@ -138,8 +138,9 @@ class Users(object):
     @apikeys.wrap_create()
     def apikeys_create(self, *args, **kwargs):
         description = kwargs.get('description', "")
-        key = ApiKey(user_id=request.user.id, description=description,
-                     active=True)
+        user = request.db.query(User).filter(User.id == request.user.id).one()
+        key = ApiKey(user=user, description=description,
+                     enabled=True)
         request.db.add(key)
         request.db.commit()
         return O.key(**key.serialize(skip=['id', 'user_id']))
@@ -155,17 +156,18 @@ class Users(object):
         if 'description' in kwargs:
             description = kwargs['description']
             key.description = description
-        if 'active' in kwargs:
-            active = kwargs.get('active') not in ['0', 'false', 'False']
-            key.active = active
+        if 'enabled' in kwargs:
+            enabled = kwargs.get('enabled') not in ['0', 'false', 'False']
+            key.enabled = enabled
+        request.db.add(key)
 
     @apikeys.when(method='PUT', template='json')
     @apikeys.wrap_modify()
     def apikeys_replace(self, value, *args, **kwargs):
         description = kwargs['description']
-        active = kwargs['active']
+        enabled = kwargs['enabled']
         description = kwargs.get('description', "")
-        self.apikeys_modify(value, description=description, active=active)
+        self.apikeys_modify(value, description=description, enabled=enabled)
 
     @apikeys.when(method='DELETE', template='json')
     @apikeys.wrap_delete()

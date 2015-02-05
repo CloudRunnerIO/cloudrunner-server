@@ -158,7 +158,7 @@ class Execute(HookController):
 
 def get_api_key(key):
     api_key = request.db.query(ApiKey).filter(
-        ApiKey.value == key, ApiKey.active == True).first()  # noqa
+        ApiKey.value == key, ApiKey.enabled == True).first()  # noqa
     if api_key:
         api_key.last_used = datetime.utcnow()
         request.db.add(api_key)

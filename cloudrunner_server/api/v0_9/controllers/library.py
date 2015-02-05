@@ -34,7 +34,8 @@ from cloudrunner_server.plugins.repository.base import (PluginRepoBase,
                                                         NotAccessible)
 
 LOG = logging.getLogger()
-AVAILABLE_REPO_TYPES = set(['cloudrunner', 'github', 'bitbucket', 'dropbox'])
+AVAILABLE_REPO_TYPES = set(['cloudrunner'] +
+                           [p.type for p in PluginRepoBase.__subclasses__()])
 
 
 class Library(HookController):
@@ -50,7 +51,9 @@ class Library(HookController):
             tier = request.user.tier
             return O._anon(repositories=sorted([r.serialize(
                 skip=['id', 'org_id', 'owner_id'],
-                rel=[('owner.username', 'owner')]) for r in repos],
+                rel=[('owner.username', 'owner')],
+                editable=lambda r: r.editable(request))
+                for r in repos],
                 key=lambda l: l['name']),
                 quota=dict(total=tier.total_repos,
                            user=tier.total_repos,
@@ -59,22 +62,29 @@ class Library(HookController):
             repo_name = args[0]
             repo = Repository.visible(request).filter(
                 Repository.name == repo_name).first()
-            if repo.type == 'cloudrunner' or not repo.editable(request):
+            if repo.type == 'cloudrunner':
                 return O.repository(repo.serialize(
                     skip=['id', 'org_id', 'owner_id'],
-                    rel=[('owner.username', 'owner')]))
+                    rel=[('owner.username', 'owner')],
+                    editable=lambda r: r.editable(request)))
             else:
-                return O.repository(repo.serialize(
-                    skip=['id', 'org_id', 'owner_id'],
-                    rel=[('owner.username', 'owner'),
-                         ('credentials.auth_user', 'key'),
-                         ('credentials.auth_pass', 'secret'),
-                         ('credentials.auth_args', 'args')]))
+                if repo.editable(request):
+                    return O.repository(repo.serialize(
+                        skip=['id', 'org_id', 'owner_id'],
+                        rel=[('owner.username', 'owner'),
+                             ('credentials.auth_user', 'key'),
+                             ('credentials.auth_pass', 'secret'),
+                             ('credentials.auth_args', 'args')],
+                        editable=lambda r: True))
+                else:
+                    return O.repository(**repo.serialize(
+                        skip=['id', 'org_id', 'owner_id'],
+                        rel=[('owner.username', 'owner')],
+                        editable=lambda r: True))
 
     @expose('json')
     def repo_plugins(self, *args, **kwargs):
-        return O.plugins(_list=['cloudrunner'] +
-                         [p.type for p in PluginRepoBase.__subclasses__()])
+        return O.plugins(AVAILABLE_REPO_TYPES)
 
     @repo.when(method='POST', template='json')
     @repo.wrap_create()
@@ -82,7 +92,7 @@ class Library(HookController):
         private = (bool(kwargs.get('private'))
                    and not kwargs.get('private') in ['0', 'false', 'False'])
         _type = kwargs.get('type')
-        if _type not in (AVAILABLE_REPO_TYPES):
+        if _type not in AVAILABLE_REPO_TYPES:
             return O.error(msg="Repo type [%s] not available" % _type)
 
         org = request.db.query(Org).filter(
@@ -113,6 +123,8 @@ class Library(HookController):
                    and not kwargs.get('private') in ['0', 'false', 'False'])
         repository = Repository.own(request).filter(
             Repository.name == name).one()
+        if not repository.editable(request):
+            return O.error("Cannot edit this repo")
         if new_name:
             repository.name = new_name
         repository.private = private
@@ -129,6 +141,8 @@ class Library(HookController):
         name = "/".join(args)
         repository = Repository.own(request).filter(
             Repository.name == name).one()
+        if not repository.editable(request):
+            return O.error("Cannot edit/delete this repo")
         if repository.type == "cloudrunner" and any(
             [f for f in repository.folders
                 if f.name != "/" or f.full_name != "/"]):
@@ -199,13 +213,17 @@ class Library(HookController):
 
             folders = [f.serialize(
                 skip=['repository_id', 'parent_id', 'owner_id'],
-                rel=[('owner.username', 'owner')]) for f in subfolders]
+                rel=[('owner.username', 'owner')],
+                editable=lambda f: repo.editable(request))
+                for f in subfolders]
 
-            scripts = sorted([s.serialize(skip=['folder_id', 'owner_id'],
-                                          rel=rels)
-                              for s in scripts],
-                             key=lambda s: (s['mime_type'], s['name']))
+            scripts = sorted([s.serialize(
+                skip=['folder_id', 'owner_id'], rel=rels,
+                editable=lambda s: repo.editable(request))
+                for s in scripts],
+                key=lambda s: (s['mime_type'], s['name']))
             return O.contents(folders=folders, scripts=scripts,
+                              editable=repo.editable(request),
                               owner=folder.owner.username)
         else:
             # External repo
@@ -292,15 +310,18 @@ class Library(HookController):
                 folders = [f.serialize(
                     skip=['repository_id', 'parent_id', 'owner_id'],
                     rel=[('owner.username', 'owner'),
-                         ('created_at', 'created_at', created_at_eval)])
+                         ('created_at', 'created_at', created_at_eval)],
+                    editable=lambda s: False)
                     for f in subfolders]
 
                 scripts = sorted([s.serialize(skip=['folder_id', 'owner_id'],
-                                              rel=rels)
+                                              rel=rels,
+                                              editable=lambda s: False)
                                   for s in scripts],
                                  key=lambda s: (s['mime_type'], s['name']))
                 contents = dict(folders=folders, scripts=scripts)
             return O.contents(owner=request.user.username,
+                              editable=repo.editable(request),
                               **contents)
 
     @expose('json')
@@ -439,8 +460,9 @@ class Library(HookController):
             folder_path += "/"
 
         folder = Folder.editable(request, repository, folder_path).first()
-        if not folder:
-            return O.error(msg="Folder %s is not accessible" % folder_name)
+        if not folder or not folder.repository.editable(request):
+            return O.error(msg="Folder %s is not editable" % folder_name)
+
         scr = Script(name=name,
                      owner_id=request.user.id,
                      folder=folder,
@@ -462,9 +484,9 @@ class Library(HookController):
         if not folder_path.endswith('/'):
             folder_path += "/"
 
-        scr = Script.visible(request,
-                             repository,
-                             folder_path).filter(Script.name == name).first()
+        scr = Script.editable(request,
+                              repository,
+                              folder_path).filter(Script.name == name).first()
         if not scr:
             return O.error(msg="Script '%s' not found" % name)
 
@@ -499,10 +521,9 @@ class Library(HookController):
         if not folder_path.endswith('/'):
             folder_path += "/"
 
-        scr = Script.visible(request,
-                             repository,
-                             folder_path).filter(
-            Script.name == name).first()
+        scr = Script.editable(request,
+                              repository,
+                              folder_path).filter(Script.name == name).first()
         if not scr:
             return O.error(msg="Script '%s' not found" % name)
         request.db.delete(scr)
@@ -526,7 +547,7 @@ class Library(HookController):
 
         parent = Folder.editable(request, repository, folder_path).first()
         if not parent:
-            return O.error(msg="Parent folder '%s' is not accessible" %
+            return O.error(msg="Parent folder '%s' is not editable" %
                            folder_path)
         folder = Folder(name=name, repository=parent.repository,
                         owner_id=request.user.id,

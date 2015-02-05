@@ -36,6 +36,7 @@ class Node(TableBase):
     approved_at = Column(DateTime)
     meta = Column(Text)
     approved = Column(Boolean)
+    enabled = Column(Boolean, default=True)
 
     org_id = Column(Integer, ForeignKey(Org.id))
     org = relationship(Org, backref='nodes')
@@ -55,13 +56,29 @@ class Node(TableBase):
         return Node.visible(ctx).filter(Node.approved == True)  # noqa
 
 
-@event.listens_for(Node, 'before_insert')
-def user_before_insert(mapper, connection, target):
+def quotas(connection, target):
     allowed = target.org.tier.nodes
     current = connection.scalar(
         select([func.count(distinct(Node.id))]).where(
-            Node.org_id == target.org.id))
+            Node.org_id == target.org.id).where(Node.enabled == True))  # noqa
+
+    return allowed, current
+
+
+@event.listens_for(Node, 'before_insert')
+def node_before_insert(mapper, connection, target):
+    allowed, current = quotas(connection, target)
     if allowed <= current:
+        raise QuotaExceeded(msg="Quota exceeded(%d of %d used)" % (
+            current, allowed), model="Node")
+
+
+@event.listens_for(Node, 'before_update')
+def node_before_update(mapper, connection, target):
+    if not target.enabled:
+        return
+    allowed, current = quotas(connection, target)
+    if allowed < current:
         raise QuotaExceeded(msg="Quota exceeded(%d of %d used)" % (
             current, allowed), model="Node")
 

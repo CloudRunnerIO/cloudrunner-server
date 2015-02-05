@@ -20,7 +20,6 @@ import json
 import logging
 import os
 import random
-import re
 import shutil
 import stat
 from string import ascii_letters
@@ -1104,13 +1103,13 @@ class UserController(DbMixin):
     @yield_wrap
     def list(self, **kwargs):
         users = self.db.query(User).join(Org).all()
-        yield DATA, [(u.username, u.org.name, u.active) for u in users]
+        yield DATA, [(u.username, u.org.name, u.enabled) for u in users]
 
     @yield_wrap
     def list_orgs(self, **kwargs):
         orgs = self.db.query(Org).all()
         yield DATA, [(o.name,
-                      'Active' if o.active else 'Inactive',
+                      'Active' if o.enabled else 'Inactive',
                       o.uid, o.tier.name) for o in orgs]
 
     @yield_wrap
@@ -1157,7 +1156,7 @@ class UserController(DbMixin):
         if not org:
             yield ERR, "Organization not found"
             return
-        org.active = True
+        org.enabled = True
         self.db.add(org)
         self.db.commit()
         yield DATA, "Activated"
@@ -1168,7 +1167,7 @@ class UserController(DbMixin):
         if not org:
             yield ERR, "Organization not found"
             return
-        org.active = False
+        org.enabled = False
         self.db.add(org)
         self.db.commit()
         yield DATA, "Deactivated"

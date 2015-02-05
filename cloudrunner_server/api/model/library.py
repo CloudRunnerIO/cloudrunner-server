@@ -15,7 +15,7 @@
 from sqlalchemy.sql.expression import func
 from sqlalchemy import (Column, Integer, String, DateTime, Boolean, Text,
                         ForeignKey, UniqueConstraint,
-                        or_, event, select, distinct)
+                        or_, and_, event, select, distinct)
 from sqlalchemy.orm import relationship, backref, aliased
 from .base import TableBase
 from .users import User, Org
@@ -36,6 +36,7 @@ class Repository(TableBase):
     owner_id = Column(Integer, ForeignKey(User.id))
     private = Column(Boolean, default=False)
     org_id = Column(Integer, ForeignKey(Org.id))
+    enabled = Column(Boolean, default=True)
 
     org = relationship(Org, backref=backref('library_scripts',
                                             cascade="delete"))
@@ -57,19 +58,35 @@ class Repository(TableBase):
         )
 
     def editable(self, ctx):
-        return self.owner_id == int(ctx.user.id)
+        return self.owner_id == int(ctx.user.id) and self.enabled
 
 
-@event.listens_for(Repository, 'before_insert')
-def repo_before_insert(mapper, connection, target):
+def quotas(connection, target):
     total_allowed = target.org.tier.total_repos
 
     current_total = connection.scalar(
         select([func.count(distinct(Repository.id))]).where(
             Repository.org_id == target.org.id).where(
-                Repository.type == "cloudrunner"))
+                Repository.enabled == True))  # noqa
 
+    return total_allowed, current_total
+
+
+@event.listens_for(Repository, 'before_insert')
+def repo_before_insert(mapper, connection, target):
+
+    total_allowed, current_total = quotas(connection, target)
     if total_allowed <= current_total:
+        raise QuotaExceeded(msg="Quota exceeded(%d of %d used)" % (
+            current_total, total_allowed), model="Repository")
+
+
+@event.listens_for(Repository, 'before_update')
+def repo_before_update(mapper, connection, target):
+    if not target.enabled:
+        return
+    total_allowed, current_total = quotas(connection, target)
+    if total_allowed < current_total:
         raise QuotaExceeded(msg="Quota exceeded(%d of %d used)" % (
             current_total, total_allowed), model="Repository")
 
@@ -141,8 +158,9 @@ class Folder(TableBase):
                 Org.name == ctx.user.org,
                 Repository.name == repository,
                 or_(Repository.owner_id == ctx.user.id,
-                    Repository.private != True)  # noqa
-            )
+                    Repository.private != True),
+                    Repository.enabled == True
+            )  # noqa
         return q
 
 
@@ -231,6 +249,19 @@ class Script(TableBase):
                     Repository.private != True),  # noqa
                 Folder.full_name == folder
             )
+        return q
+
+    @staticmethod
+    def editable(ctx, repository, folder):
+        q = ctx.db.query(Script).join(
+            Folder, Repository, User, Org).filter(
+                Org.name == ctx.user.org,
+                Repository.name == repository,
+                or_(Repository.owner_id == ctx.user.id,
+                    Repository.private != True),
+                    Repository.enabled == True,
+                Folder.full_name == folder
+            )  # noqa
         return q
 
     @staticmethod

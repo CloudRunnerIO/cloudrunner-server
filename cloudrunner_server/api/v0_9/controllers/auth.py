@@ -71,7 +71,7 @@ class Auth(HookController):
 
         user = request.db.query(User).join(Org).outerjoin(
             Token, Permission).filter(
-                User.active == True,  # noqa
+                User.enabled == True,  # noqa
                 User.username == username,
                 User.password == hash_token(password)).first()
         if not user:
@@ -155,13 +155,13 @@ class Auth(HookController):
 
         plan = request.db.query(UsageTier).filter(
             UsageTier.name == plan_id).one()
-        org = Org(name="ORG-%s" % username, tier=plan, active=True)
+        org = Org(name="ORG-%s" % username, tier=plan, enabled=True)
         user = User(username=username, email=email, org=org,
                     first_name=kwargs["first_name"],
                     last_name=kwargs["last_name"],
                     department=kwargs.get("department"),
                     position=kwargs.get("position"),
-                    active=False)
+                    enabled=False)
         user.set_password(password)
 
         key = ApiKey(user=user)
@@ -239,8 +239,8 @@ class Auth(HookController):
             kwargs = request.json
         key = kwargs['code']
         user = request.db.query(User).join(Org, ApiKey).filter(
-            ApiKey.value == key, ApiKey.active == True).one()  # noqa
-        user.active = True
+            ApiKey.value == key, ApiKey.enabled == True).one()  # noqa
+        user.enabled = True
         api_key = request.db.query(ApiKey).filter(ApiKey.value == key).one()
         new_key = ApiKey(user=user)
 

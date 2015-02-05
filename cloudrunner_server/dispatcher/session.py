@@ -74,6 +74,8 @@ class JobSession(Thread):
         self.request = dict(env=self.env, script=self.task.body,
                             remote_user_map=self.remote_user_map)
         self.file_exports = {}
+        self.disabled_nodes = [n.lower() for n in
+                               kwargs.get("disabled_nodes", [])]
 
         self.kwargs = kwargs
 
@@ -371,6 +373,10 @@ class JobSession(Thread):
                         LOG.info("Node %s not allowed for user %s" % (
                             job_rep.hdr.peer,
                             self.user))
+                        node_map.pop(job_rep.hdr.peer)
+                        continue
+                    if job_rep.hdr.peer.lower() in self.disabled_nodes:
+                        LOG.info("Node %s is disabled" % job_rep.hdr.peer)
                         node_map.pop(job_rep.hdr.peer)
                         continue
                     # Send task to attached node
