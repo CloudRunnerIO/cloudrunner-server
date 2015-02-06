@@ -271,33 +271,3 @@ class Auth(HookController):
                   "to": [email],
                   "subject": "[CloudRunner.IO] Recover lost password",
                   "html": html})
-
-
-class Profile(HookController):
-
-    __hooks__ = [DbHook(), ErrorHook()]
-
-    @expose('json', generic=True)
-    @wrap_command(User)
-    def profile(self, *args, **kwargs):
-        user = User.visible(request).filter(
-            User.username == request.user.username).one()
-        return O.user(user.serialize(
-            skip=['id', 'org_id', 'password'],
-            rel=[('groups.name', 'groups')]))
-
-    @profile.when(method='PATCH', template='json')
-    @profile.wrap_modify()
-    def profile_update(self, **kwargs):
-        user = User.visible(request).filter(
-            User.username == request.user.username).one()
-        for k in set(kwargs.keys()).intersection(User.attrs):
-            setattr(user, k, kwargs[k])
-        request.db.add(user)
-
-    @profile.when(method='PUT', template='json')
-    @profile.wrap_modify()
-    def profile_replace(self, **kwargs):
-        for k in User.attrs:
-            kwargs[k]
-        return self.profile_update(**kwargs)

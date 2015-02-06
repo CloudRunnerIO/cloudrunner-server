@@ -158,6 +158,10 @@ function userModule.adjust_settings( ldtMap )
   local ldt_settings=require('ldt/settings_lstack');
   ldt_settings.use_package( ldtMap, "ListMediumObject" );
 
+  ldt_settings.set_store_limit( ldtMap, 10000 )
+
+  ldt_settings.set_ldr_entry_count_max( ldtMap, 10000 )
+
   ldt_settings.set_coldlist_max( ldtMap, 200 )
   ldt_settings.set_colddir_rec_max( ldtMap, 10000 )
 end

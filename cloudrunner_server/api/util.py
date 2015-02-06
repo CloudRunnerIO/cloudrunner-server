@@ -52,6 +52,7 @@ def random_token(*args, **kwargs):
 class Wrap(object):
 
     def __init__(self, **kwargs):
+        self._items = kwargs
         for k, v in kwargs.items():
             setattr(self, k, v)
 

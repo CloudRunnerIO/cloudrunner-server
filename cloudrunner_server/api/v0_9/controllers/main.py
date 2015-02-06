@@ -16,7 +16,7 @@ import logging
 from pecan import expose, request
 from pecan.secure import secure
 
-from .auth import Auth, Profile
+from .auth import Auth
 # from .batches import Batches
 from .billing import Billing
 from .dispatch import Dispatch
@@ -25,6 +25,7 @@ from .help import HtmlDocs
 from .jobs import Jobs
 from .library import Library
 from .logs import Logs
+from .profile import Profile
 from .manage import Manage
 from .status import EntityStatus
 from .workflows import Workflows
