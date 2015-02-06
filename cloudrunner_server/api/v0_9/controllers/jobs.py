@@ -26,12 +26,12 @@ from cloudrunner_server.api.hooks.perm_hook import PermHook
 from cloudrunner_server.api.model import (Job, Script, Repository, User)
 from cloudrunner_server.api.util import JsonOutput as O
 from cloudrunner_server.plugins.repository.base import PluginRepoBase
+from cloudrunner_server.plugins.scheduler import Period
 
 schedule_manager = conf.schedule_manager
 
 JOB_FIELDS = ('name', 'target', 'arguments', 'enabled', 'private')
 LOG = logging.getLogger()
-
 EXE_PATH = os.popen('which cloudrunner-trigger').read().strip()
 if not EXE_PATH:
     LOG.warn("Scheduler job executable not found on server")
@@ -40,9 +40,11 @@ else:
 
 
 def _get_script_data(r):
-    full_path = r.script.full_path()
-    path, _, name = full_path.rpartition('/')
-    return dict(path="/%s/" % path, name=name, rev=r.version)
+    if r:
+        full_path = r.script.full_path()
+        path, _, name = full_path.rpartition('/')
+        return dict(path="/%s/" % path, name=name, rev=r.version)
+    return dict(path="", name=None, rev=None)
 
 
 def _try_load(s):
@@ -100,9 +102,13 @@ class Jobs(HookController):
                 params = json.loads(params)
         else:
             params = {}
-        period = kwargs['period']
         private = (bool(kwargs.get('private'))
                    and not kwargs.get('private') in ['0', 'false', 'False'])
+
+        per = kwargs['period']
+        period = Period(per)
+        if not period.is_valid():
+            return O.error(msg="Period %s is not valid" % period)
 
         repo, _dir, script_name, version = Script.parse(script)
         scr = Script.visible(request, repo, _dir).filter(
@@ -119,7 +125,7 @@ class Jobs(HookController):
         user = request.db.query(User).filter(User.id == request.user.id).one()
         job = Job(name=name, owner=user, enabled=True,
                   params=json.dumps(params), script=rev, private=private,
-                  exec_period=period)
+                  exec_period=period._)
 
         request.db.add(job)
         request.db.commit()
@@ -131,7 +137,8 @@ class Jobs(HookController):
         if job.params:
             url = "%s -e '%s'" % (url, job.params)
         success, res = schedule_manager.add(request.user.username,
-                                            cron_name, period, url)
+                                            cron_name, period, url,
+                                            job.name)
 
     @jobs.when(method='PATCH', template='json')
     @jobs.wrap_update(model_name="Job")
@@ -144,11 +151,24 @@ class Jobs(HookController):
         if not job:
             return O.error(msg="Job %s not found" % name)
 
+        name_to_update = False
         if kwargs.get('new_name'):
             new_name = kwargs['new_name']
             job.name = new_name
+            name_to_update = True
 
         _script = kwargs.get('script')
+
+        period = None
+        per = kwargs.get('period')
+        period_to_update = False
+        if per:
+            period = Period(per)
+            if not period.is_valid():
+                return O.error(msg="Period %s is not valid" % period)
+
+            if period.is_only_minutes() and period.total_minutes < 5:
+                return O.error(msg="Period cannot be less than 5 minutes")
 
         if _script:
             _repo, _dir, script_name, version = Script.parse(_script)
@@ -192,10 +212,8 @@ class Jobs(HookController):
                 params = json.dumps(params)
             job.params = params
 
-        period = kwargs.get('period')
-        period_to_update = False
-        if period and period != job.exec_period:
-            job.exec_period = period
+        if period and period._ != job.exec_period:
+            job.exec_period = period._
             period_to_update = True
 
         enabled = kwargs.get('enabled')
@@ -213,11 +231,9 @@ class Jobs(HookController):
         request.db.add(job)
         request.db.commit()
 
-        if period_to_update:
+        if period_to_update or name_to_update:
             success, res = schedule_manager.edit(
-                request.user.username,
-                name=job.uid,
-                period=period)
+                request.user.username, job.uid, period, job.name)
 
         if enable_to_update:
             if job.enabled:
@@ -225,10 +241,9 @@ class Jobs(HookController):
                 schedule_manager.add(request.user.username,
                                      job.uid,
                                      job.exec_period,
-                                     url)
+                                     url, job.name)
             else:
-                schedule_manager.delete(
-                    user=request.user.username, name=job.uid)
+                schedule_manager.delete(request.user.username, job.uid)
 
     @jobs.when(method='PUT', template='json')
     def update(self, **kw):
@@ -252,10 +267,6 @@ class Jobs(HookController):
             job = Job.own(request).filter(
                 Job.name == job_name).first()
             if job:
-                # Cleanup
-                success, res = schedule_manager.delete(
-                    user=request.user.username, name=job.uid)
-
                 request.db.delete(job)
             else:
                 return O.error(msg="Job %s not found" % job_name)

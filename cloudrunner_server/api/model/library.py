@@ -15,7 +15,7 @@
 from sqlalchemy.sql.expression import func
 from sqlalchemy import (Column, Integer, String, DateTime, Boolean, Text,
                         ForeignKey, UniqueConstraint,
-                        or_, and_, event, select, distinct)
+                        or_, event, select, distinct)
 from sqlalchemy.orm import relationship, backref, aliased
 from .base import TableBase
 from .users import User, Org

@@ -12,6 +12,8 @@
 #  * without the express permission of CloudRunner.io
 #  *******************************************************/
 
+import logging
+from pecan import conf, request
 import uuid
 from sqlalchemy.sql.expression import func
 from sqlalchemy import (Column, Boolean, Integer, String, DateTime, Text,
@@ -24,6 +26,7 @@ from .users import User, Org
 from .library import Revision
 
 from cloudrunner_server.api.model.exceptions import QuotaExceeded
+LOG = logging.getLogger()
 
 
 class Job(TableBase):
@@ -45,7 +48,7 @@ class Job(TableBase):
     revision_id = Column(Integer, ForeignKey('revisions.id'))
     owner_id = Column(Integer, ForeignKey('users.id'))
 
-    script = relationship(Revision, backref=backref("jobs"))
+    script = relationship(Revision, backref=backref("jobs", cascade="delete"))
     owner = relationship(User, backref=backref("jobs"))
 
     @staticmethod
@@ -97,3 +100,12 @@ def job_before_update(mapper, connection, target):
     if allowed < current:
         raise QuotaExceeded(msg="Quota exceeded(%d of %d used)" % (
             current, allowed), model="Job")
+
+
+@event.listens_for(Job, 'after_delete')
+def job_after_delete(mapper, connection, target):
+    schedule_manager = conf.schedule_manager
+    success, res = schedule_manager.delete(
+        user=request.user.username, name=target.uid)
+    if not success:
+        LOG.error("Job[%s] not deleted: %s" % (target.uid, res))

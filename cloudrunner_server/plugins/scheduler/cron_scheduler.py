@@ -15,6 +15,8 @@
 from crontab import CronTab
 from crontab import __version__
 
+from cloudrunner_server.plugins.scheduler import Period
+
 if __version__ < '1.7':
     raise Exception("Scheduler plugin requires python-crontab >= 1.7")
 
@@ -50,8 +52,8 @@ class Job(object):
         return str(self.cron_job.slices)
 
     @staticmethod
-    def _prepare_job_meta(user, name):
-        comment = SEPARATOR.join([user, name])
+    def _prepare_job_meta(user, name, *args):
+        comment = SEPARATOR.join([user, name] + list(args))
         return comment
 
 
@@ -78,23 +80,22 @@ class CronScheduler(object):
 
         return jobs
 
-    def add(self, user, name, period, url, **kwargs):
+    def add(self, user, name, period, url, *args):
+        assert isinstance(period, Period)
         try:
             _cron = self.crontab()
             name = name.replace(SEPARATOR, '_')
             if self._jobs(user=user, name=name):
                 return (False, "Job with the name %s exists" % name)
 
-            comment = Job._prepare_job_meta(user, name)
+            comment = Job._prepare_job_meta(user, name, *args)
             url = url.replace('&', '\&').replace('$', '\$').replace('%', '\%')
             url = url.replace('"', '\"')
             cmd = '%s >/dev/null 2>&1' % url
 
             cron = _cron.new(command=cmd, comment=comment)
             try:
-                if not isinstance(period, list):
-                    period = period.split(' ')
-                cron.setall(*period)
+                cron.setall(*period.values())
             except:
                 return (False, 'Period is not valid: %s' % period)
 
@@ -113,7 +114,8 @@ class CronScheduler(object):
         if jobs:
             return jobs[0]
 
-    def edit(self, user, name, period):
+    def edit(self, user, name, period, *args):
+        assert isinstance(period, Period)
         name = name.replace(SEPARATOR, '_')
         _cron = self.crontab()
         jobs = self._jobs(user=user, name=name, cron=_cron)
@@ -121,10 +123,9 @@ class CronScheduler(object):
             return (False, 'Job %s not found' % name)
         job = jobs[0]
         try:
-            if not isinstance(period, list):
-                period = period.split(' ')
-            if period and job.period != period:
-                job.cron_job.setall(*period)
+            job.cron_job.comment = Job._prepare_job_meta(user, name, *args)
+            if period and job.period != period._:
+                job.cron_job.setall(*period.values())
                 _cron.write()
             return (True, "Updated")
 
