@@ -354,6 +354,31 @@ def main():
                           required=True)
     tier_add.add_argument('--cron_jobs', help='Tier cron jobs',
                           required=True)
+    tier_add.add_argument('--api_keys', help='Api keys',
+                          required=True)
+
+    tier_edit = tiers_actions.add_parser('edit',
+                                         help='Edit usage tier')
+    tier_edit.add_argument('name', help='Tier name').completer = _list_tiers
+    tier_edit.add_argument('--title', help='Tier title')
+    tier_edit.add_argument('--description', help='Tier description',)
+    tier_edit.add_argument('--total_repos', help='Tier total repos')
+    tier_edit.add_argument('--external_repos', help='Tier external repos',
+                           choices=['1', '0'], default=None)
+    tier_edit.add_argument('--nodes', help='Tier max nodes')
+    tier_edit.add_argument('--users', help='Tier max users')
+    tier_edit.add_argument('--groups', help='Tier max groups')
+    tier_edit.add_argument('--roles', help='Tier max roles')
+    tier_edit.add_argument('--max_timeout', help='Tier max timeout')
+    tier_edit.add_argument('--max_concurrent_tasks', help='Tier max tasks')
+    tier_edit.add_argument('--log_retention_days',
+                           help='Tier log retention days')
+    tier_edit.add_argument('--cron_jobs', help='Tier cron jobs')
+    tier_edit.add_argument('--api_keys', help='Api keys')
+
+    tier_remove = tiers_actions.add_parser('remove',
+                                           help='Remove usage tier')
+    tier_remove.add_argument('name', help='Tier name').completer = _list_tiers
 
     try:
         argcomplete.autocomplete(parser)
@@ -417,11 +442,11 @@ def main():
                         printables[i] = '\n'.join(
                             concat(p) for p in printables[i])
                 printables = [str(p) for p in printables]
-                print printers[_type]('\n'.join(printables))
+                print "P" # printers[_type]('\n'.join(printables))
             else:
                 print printables
     except Exception, ex:
-        print colors.red(str(ex))
+        print colors.red("%r" % ex)
 
 
 def concat(val):

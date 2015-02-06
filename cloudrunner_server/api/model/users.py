@@ -267,7 +267,7 @@ class UsageTier(TableBase):
     __tablename__ = 'usagetiers'
 
     id = Column(Integer, primary_key=True)
-    name = Column(String(100))
+    name = Column(String(100), unique=True)
     title = Column(String(100))
     description = Column(Text)
     total_repos = Column(Integer)

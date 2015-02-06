@@ -867,10 +867,10 @@ class ConfigController(object):
         # CA cert
         '''
 
-        ### M2Crypto has bug for adding 'authorityKeyIdentifier extension
-        ### https://bugzilla.osafoundation.org/show_bug.cgi?id=7530
-        ### https://bugzilla.osafoundation.org/show_bug.cgi?id=12151
-        ### So create CA crt using OpenSSL tool ...
+        # M2Crypto has bug for adding 'authorityKeyIdentifier extension
+        # https://bugzilla.osafoundation.org/show_bug.cgi?id=7530
+        # https://bugzilla.osafoundation.org/show_bug.cgi?id=12151
+        # So create CA crt using OpenSSL tool ...
 
         ca_crt = m.X509.X509()
         ca_crt.set_serial_number(serial)
@@ -897,7 +897,7 @@ class ConfigController(object):
             'basicConstraints', 'CA:TRUE'))
         ca_crt.add_ext(m.X509.new_extension('subjectKeyIdentifier',
                                             ca_crt.get_fingerprint()))
-        #ca_crt.add_ext(m.X509.new_extension('authorityKeyIdentifier',
+        # ca_crt.add_ext(m.X509.new_extension('authorityKeyIdentifier',
         #                                    'keyid:always', 0))
 
         ca_crt.sign(ca_key, 'sha1')
@@ -1237,7 +1237,12 @@ class TierController(DbMixin):
     @yield_wrap
     def list(self, **kwargs):
         tiers = self.db.query(UsageTier).all()
-        yield DATA, [t.serialize() for t in tiers]
+        if 'json' in kwargs:
+            yield DATA, [t.serialize() for t in tiers]
+        else:
+            lines = [pretty(**t.serialize()) for t in tiers]
+            for line in lines:
+                yield DATA, line
 
     @yield_wrap
     def create(self, **kwargs):
@@ -1245,6 +1250,18 @@ class TierController(DbMixin):
         self.db.add(tier)
         self.db.commit()
         yield DATA, "Added"
+
+    @yield_wrap
+    def edit(self, **kwargs):
+        tier = self.db.query(UsageTier).filter(
+            UsageTier.name == kwargs.pop('name')).one()
+        for k, v in kwargs.items():
+            if v is not None:
+                print "Setting tier.%s = %s" % (k, v)
+                setattr(tier, k, v)
+        self.db.add(tier)
+        self.db.commit()
+        yield DATA, "Updated"
 
     @yield_wrap
     def remove(self, name, **kwargs):
@@ -1258,3 +1275,14 @@ class TierController(DbMixin):
         self.db.commit()
 
         yield DATA, "Removed"
+
+
+def pretty(**kwargs):
+    ret = []
+    ret.append("=" * 20)
+    name = kwargs.pop("name")
+    if name:
+        ret.append("Name:%-40s" % name)
+    for k, v in sorted(kwargs.items()):
+        ret.append("%s: %-40s" % (k.title(), v))
+    return "\n".join(ret)
