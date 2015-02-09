@@ -42,7 +42,8 @@ class PermHook(PecanHook):
 
     def before(self, state):
         p = request.user.permissions
-
+        if not isinstance(p, set):
+            p = set(p)
         for check in self.checks:
             if not check(p):
                 abort(401)

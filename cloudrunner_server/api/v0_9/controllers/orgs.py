@@ -16,8 +16,8 @@ import logging
 from pecan import expose, request  # noqa
 
 from cloudrunner_server.api.decorators import wrap_command
-from cloudrunner_server.api.hooks.perm_hook import PermHook
 from cloudrunner_server.api.model import Org
+from cloudrunner_server.api.policy.decorators import check_policy
 from cloudrunner_server.api.util import JsonOutput as O
 
 LOG = logging.getLogger()
@@ -25,11 +25,11 @@ LOG = logging.getLogger()
 
 class Orgs(object):
 
-    __hooks__ = [PermHook(have=set(['is_super_admin']))]
     # ORGS ###########
     #
 
     @expose('json', generic=True)
+    @check_policy('is_super_admin')
     @wrap_command(Org, model_name='Organization')
     def orgs(self, *args, **kwargs):
         orgs = [o.serialize(skip=['id', 'cert_ca', 'cert_key'])
@@ -37,6 +37,7 @@ class Orgs(object):
         return O.orgs(_list=orgs)
 
     @orgs.when(method='POST', template='json')
+    @check_policy('is_super_admin')
     @orgs.wrap_create()
     def create_org(self, *args, **kwargs):
         name = kwargs['org']
@@ -44,6 +45,7 @@ class Orgs(object):
         request.db.add(org)
 
     @orgs.when(method='PATCH', template='json')
+    @check_policy('is_super_admin')
     @orgs.wrap_modify()
     def toggle(self, name=None, status=None, *args, **kwargs):
         name = name or kwargs['name']
@@ -57,6 +59,7 @@ class Orgs(object):
             request.db.add(org)
 
     @orgs.when(method='DELETE', template='json')
+    @check_policy('is_super_admin')
     @orgs.wrap_delete()
     def remove(self, name=None, **kwargs):
         name = name or kwargs['name']

@@ -18,16 +18,16 @@ from sqlalchemy.exc import IntegrityError
 
 from cloudrunner_server.api.decorators import wrap_command
 from cloudrunner_server.api.model import Group, Org, Role
-from cloudrunner_server.api.util import JsonOutput as O
 from cloudrunner_server.api.policy.decorators import check_policy
+from cloudrunner_server.api.util import JsonOutput as O
 
 LOG = logging.getLogger()
 
 
 class Groups(object):
 
-    @check_policy('is_admin')
     @expose('json', generic=True)
+    @check_policy('is_admin')
     @wrap_command(Group)
     def groups(self, name=None, *args):
         def modifier(roles):
@@ -46,8 +46,8 @@ class Groups(object):
             return O._anon(groups=groups,
                            quota=dict(allowed=request.user.tier.groups))
 
-    @check_policy('is_admin')
     @groups.when(method='POST', template='json')
+    @check_policy('is_admin')
     @groups.wrap_create()
     def add_group(self, name, *args, **kwargs):
         name = name or kwargs['name']
@@ -57,8 +57,8 @@ class Groups(object):
         request.db.add(group)
         request.db.commit()
 
-    @check_policy('is_admin')
     @groups.when(method='PUT', template='json')
+    @check_policy('is_admin')
     @groups.wrap_modify()
     def modify_group_roles(self, name, *args, **kwargs):
         name = name or kwargs['name']
@@ -89,8 +89,8 @@ class Groups(object):
             except IntegrityError:
                 request.db.rollback()
 
-    @check_policy('is_admin')
     @groups.when(method='DELETE', template='json')
+    @check_policy('is_admin')
     @groups.wrap_delete()
     def rm_group(self, name, *args):
         group = Group.visible(request).filter(Group.name == name).first()
