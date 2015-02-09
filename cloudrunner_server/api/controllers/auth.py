@@ -48,6 +48,15 @@ class Auth(HookController):
 
     @expose('json')
     def login(self, **kwargs):
+        """
+        .. http:post:: /auth/login/
+
+        Login and get authentication token
+
+            .. form username    User name
+            .. form password    User password
+            .. form password    User password
+        """
 
         if not kwargs:
             kwargs = request.json
@@ -110,6 +119,12 @@ class Auth(HookController):
 
     @expose('json')
     def logout(self):
+        """
+        .. http:get:: /auth/logout/
+
+        Log out the user
+
+        """
         user = request.headers.get('Cr-User')
         token = request.headers.get('Cr-Token')
 

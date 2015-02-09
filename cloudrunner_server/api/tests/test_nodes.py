@@ -52,7 +52,7 @@ class TestNodes(base.BaseRESTTestCase):
         resp_json = json.loads(resp.body)['items']
         self.assertEqual(resp_json, nodes, resp_json)
 
-    @patch('cloudrunner_server.api.v0_9.controllers.nodes.CertController')
+    @patch('cloudrunner_server.api.controllers.nodes.CertController')
     def test_sign_nodes(self, cert):
         cert().sign_node = Mock(return_value=('', 'file'))
 
@@ -76,7 +76,7 @@ class TestNodes(base.BaseRESTTestCase):
         self.assertEqual(resp_json, {'error': {'msg': 'Node not found'}},
                          resp_json)
 
-    @patch('cloudrunner_server.api.v0_9.controllers.nodes.CertController')
+    @patch('cloudrunner_server.api.controllers.nodes.CertController')
     def test_revoke_nodes(self, cert):
         cert().revoke = Mock(
             return_value=([1, ''],

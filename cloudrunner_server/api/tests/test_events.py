@@ -17,7 +17,6 @@ from cloudrunner_server.api.tests import base
 
 class TestEvents(base.BaseRESTTestCase):
 
-    # @patch('cloudrunner_server.api.v0_9.controllers.events.Event.next')
     def test_get(self):
         sse_data = """id: 10
 retry: 1000

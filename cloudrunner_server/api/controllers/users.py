@@ -139,7 +139,9 @@ class Users(object):
     def apikeys(self, *args):
         keys = request.db.query(ApiKey).join(User).filter(
             User.id == request.user.id).all()
-        return O.keys([k.serialize(skip=['id', 'user_id']) for k in keys])
+        return O._anon(keys=[k.serialize(skip=['id', 'user_id'])
+                             for k in keys],
+                       quota=dict(allowed=request.user.tier.api_keys))
 
     @apikeys.when(method='POST', template='json')
     @apikeys.wrap_create()
