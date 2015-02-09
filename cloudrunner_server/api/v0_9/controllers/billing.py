@@ -65,7 +65,7 @@ class Billing(HookController):
 
         TS = request.braintree.TransactionSearch
         history = request.braintree.Transaction.search([
-            TS.customer_email == request.user.email])
+            TS.customer_company == request.user.org])
         return O.billing(transactions=[serialize_t(h) for h in history.items],
                          plan=subs, cards=card)
 
@@ -76,7 +76,7 @@ class Billing(HookController):
             cc_data = kwargs['cc']
             CS = request.braintree.CustomerSearch
             customers = [c for c in request.braintree.Customer.search(
-                CS.email == request.user.email).items]
+                CS.company == request.user.org).items]
             if not customers:
                 return O.error("Customer not found")
 
