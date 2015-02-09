@@ -16,7 +16,6 @@ from cloudrunner import CONFIG_LOCATION
 from cloudrunner.util.config import Config
 from cloudrunner.util.loader import local_plugin_loader
 import cloudrunner_server.api
-from cloudrunner_server.api import VERSION
 from cloudrunner_server.api import model
 from pecan.hooks import RequestViewerHook, TransactionHook
 from cloudrunner_server.api.base import SseRenderer, LibraryRenderer
@@ -26,11 +25,9 @@ DEBUG = False
 
 APP_DIR = cloudrunner_server.api.__path__[0]
 
-API_VER = VERSION.replace('.', '_')
-
 # Pecan Application Configurations
 app = {
-    'root': 'cloudrunner_server.api.v%s.controllers.main.Main' % API_VER,
+    'root': 'cloudrunner_server.api.controllers.main.Main',
     'modules': ['cloudrunner_server.api'],
     'template_path': '%s/templates/rest/' % APP_DIR,
     'custom_renderers': {
