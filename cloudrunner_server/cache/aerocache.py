@@ -67,11 +67,11 @@ class AeroRegistry(object):
         self.client = client
 
     def check(self, org, target):
-        LOG.info(RegBase.key(TS_NS, org, target))
+        # LOG.info(RegBase.key(TS_NS, org, target))
         try:
             key, meta, last = self.client.get(
                 RegBase.key(TS_NS, org, target))
-            LOG.info(last)
+            # LOG.info(last)
             if last:
                 return last.get('ts', 0)
         except Exception, ex:

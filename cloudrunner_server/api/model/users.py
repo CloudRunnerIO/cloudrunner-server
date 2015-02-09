@@ -67,7 +67,7 @@ class User(TableBase):
     roles = relationship('Role')
     tokens = relationship('Token', backref='user')
 
-    attrs = set(['username', 'first_name', 'last_name',
+    attrs = set(['first_name', 'last_name',
                  'phone', 'department', 'position'])
 
     def set_password(self, password):
