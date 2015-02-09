@@ -41,8 +41,10 @@ class RestApi(object):
 
     @classmethod
     def authorize(cls):
-        username = request.headers.get('Cr-User')
-        token = request.headers.get('Cr-Token')
+        username = (request.headers.get('Cr-User')
+                    or request.headers.get('X-Cr-User'))
+        token = (request.headers.get('Cr-Token')
+                 or request.headers.get('X-Cr-Token'))
         if not username or not token:
             return False
 

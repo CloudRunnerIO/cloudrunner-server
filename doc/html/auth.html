@@ -1,216 +1,186 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
 
 
-<!DOCTYPE html>
-<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
-<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  
-  <title>Authentication module &mdash; api  documentation</title>
-  
-
-  
-  
-
-  
-  <link href='https://fonts.googleapis.com/css?family=Lato:400,700|Roboto+Slab:400,700|Inconsolata:400,700' rel='stylesheet' type='text/css'>
-
-  
-  
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
     
-
-  
-
-  
-  
-    <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
-  
-
-  
-    <link rel="top" title="api  documentation" href="index.html"/>
-        <link rel="next" title="Billing module" href="billing.html"/>
-        <link rel="prev" title="Welcome to CloudRunner REST API’s documentation!" href="index.html"/> 
-
-  
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/modernizr/2.6.2/modernizr.min.js"></script>
-
-</head>
-
-<body class="wy-body-for-nav" role="document">
-
-  <div class="wy-grid-for-nav">
-
+    <title>Authentication module &mdash; api  documentation</title>
     
-    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
-      <div class="wy-side-nav-search">
-        <a href="index.html" class="fa fa-home"> api</a>
-        <div role="search">
-  <form id ="rtd-search-form" class="wy-form" action="search.html" method="get">
-    <input type="text" name="q" placeholder="Search docs" />
-    <input type="hidden" name="check_keywords" value="yes" />
-    <input type="hidden" name="area" value="default" />
-  </form>
-</div>
-      </div>
-
-      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
-        
-        
-            <ul class="current">
-<li class="toctree-l1 current"><a class="current reference internal" href="">Authentication module</a></li>
-<li class="toctree-l1"><a class="reference internal" href="billing.html">Billing module</a></li>
-</ul>
-
-        
-      </div>
-      &nbsp;
-    </nav>
-
-    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
-
-      
-      <nav class="wy-nav-top" role="navigation" aria-label="top navigation">
-        <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
-        <a href="index.html">api</a>
-      </nav>
-
-
-      
-      <div class="wy-nav-content">
-        <div class="rst-content">
-          <div role="navigation" aria-label="breadcrumbs navigation">
-  <ul class="wy-breadcrumbs">
-    <li><a href="index.html">Docs</a> &raquo;</li>
-      
-    <li>Authentication module</li>
-      <li class="wy-breadcrumbs-aside">
-        
-          <a href="_sources/auth.txt" rel="nofollow"> View page source</a>
-        
-      </li>
+    <link rel="stylesheet" href="_static/sphinxdoc.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    './',
+        VERSION:     '',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <link rel="top" title="api  documentation" href="index.html" />
+    <link rel="next" title="Billing module" href="billing.html" />
+    <link rel="prev" title="Welcome to CloudRunner REST API’s documentation!" href="index.html" /> 
+  </head>
+  <body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="http-routingtable.html" title="HTTP Routing Table"
+             >routing table</a> |</li>
+        <li class="right" >
+          <a href="billing.html" title="Billing module"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="index.html" title="Welcome to CloudRunner REST API’s documentation!"
+             accesskey="P">previous</a> |</li>
+        <li><a href="index.html">api  documentation</a> &raquo;</li> 
+      </ul>
+    </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="index.html"
+                        title="previous chapter">Welcome to CloudRunner REST API&#8217;s documentation!</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="billing.html"
+                        title="next chapter">Billing module</a></p>
+  <h3>This Page</h3>
+  <ul class="this-page-menu">
+    <li><a href="_sources/auth.txt"
+           rel="nofollow">Show Source</a></li>
   </ul>
-  <hr/>
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
 </div>
-          <div role="main">
-            
-  <div class="section" id="module-cloudrunner_server.api.controllers.auth">
-<span id="authentication-module"></span><h1>Authentication module<a class="headerlink" href="#module-cloudrunner_server.api.controllers.auth" title="Permalink to this headline">¶</a></h1>
-<dl class="class">
-<dt id="cloudrunner_server.api.controllers.auth.Auth">
-<em class="property">class </em><tt class="descclassname">cloudrunner_server.api.controllers.auth.</tt><tt class="descname">Auth</tt><a class="headerlink" href="#cloudrunner_server.api.controllers.auth.Auth" title="Permalink to this definition">¶</a></dt>
-<dd><p>Bases: <tt class="xref py py-class docutils literal"><span class="pre">pecan.hooks.HookController</span></tt></p>
-<dl class="method">
-<dt id="cloudrunner_server.api.controllers.auth.Auth.activate">
-<tt class="descname">activate</tt><big>(</big><em>*args</em>, <em>**kwargs</em><big>)</big><a class="headerlink" href="#cloudrunner_server.api.controllers.auth.Auth.activate" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
 
-<dl class="method">
-<dt id="cloudrunner_server.api.controllers.auth.Auth.login">
-<tt class="descname">login</tt><big>(</big><em>**kwargs</em><big>)</big><a class="headerlink" href="#cloudrunner_server.api.controllers.auth.Auth.login" title="Permalink to this definition">¶</a></dt>
-<dd><dl class="post">
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="authentication-module">
+<h1>Authentication module<a class="headerlink" href="#authentication-module" title="Permalink to this headline">¶</a></h1>
+<dl class="post">
 <dt id="post--auth-login-">
 <tt class="descname">POST </tt><tt class="descname">/auth/login/</tt><a class="headerlink" href="#post--auth-login-" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Login and get authentication token</p>
+<p><strong>Example response</strong>:</p>
+<div class="highlight-http"><div class="highlight"><pre><span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span> <span class="m">200</span> <span class="ne">OK</span>
+<span class="na">Content-Type</span><span class="o">:</span> <span class="l">application/json; charset=UTF-8</span>
 
-<p>Login and get authentication token</p>
-<blockquote>
-<div></div></blockquote>
+<span class="p">{</span>
+  <span class="nt">&quot;login&quot;</span><span class="p">:</span> <span class="p">{</span>
+    <span class="nt">&quot;token&quot;</span><span class="p">:</span> <span class="s2">&quot;nFLfLCqv2O61_Wh-flEcTY~CX1JBjclqrqfbD9zGQbAgt56RBrc-tt_q4NcEWgYu&quot;</span><span class="p">,</span>
+    <span class="nt">&quot;expire&quot;</span><span class="p">:</span> <span class="s2">&quot;2016-02-11 00:33:01&quot;</span><span class="p">,</span>
+    <span class="nt">&quot;user&quot;</span><span class="p">:</span> <span class="s2">&quot;Username&quot;</span><span class="p">,</span>
+    <span class="nt">&quot;org&quot;</span><span class="p">:</span> <span class="s2">&quot;Organization&quot;</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name" colspan="2">Form Parameters:</th></tr>
+<tr class="field-odd field"><td>&nbsp;</td><td class="field-body"><ul class="first simple">
+<li><strong>username</strong> &#8211; User name</li>
+<li><strong>password</strong> &#8211; User password</li>
+<li><strong>expire</strong> &#8211; Expire for the token in minutes(Default=1440)</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name" colspan="2">Request Headers:</th></tr>
+<tr class="field-even field"><td>&nbsp;</td><td class="field-body"><ul class="first simple">
+<li><strong>X-Cr-User</strong> &#8211; User name</li>
+<li><strong>X-Cr-Token</strong> &#8211; Auth token</li>
+</ul>
+</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Status Codes:</th><td class="field-body"><ul class="first last simple">
+<li><a class="reference external" href="http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html#sec10.2.1">200 OK</a> &#8211; no error</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
 </dd></dl>
 
-<dl class="method">
-<dt id="cloudrunner_server.api.controllers.auth.Auth.logout">
-<tt class="descname">logout</tt><big>(</big><big>)</big><a class="headerlink" href="#cloudrunner_server.api.controllers.auth.Auth.logout" title="Permalink to this definition">¶</a></dt>
-<dd><dl class="get">
+<dl class="get">
 <dt id="get--auth-logout-">
 <tt class="descname">GET </tt><tt class="descname">/auth/logout/</tt><a class="headerlink" href="#get--auth-logout-" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<p>Log out the user</p>
-</dd></dl>
-
-<dl class="method">
-<dt id="cloudrunner_server.api.controllers.auth.Auth.payment_token">
-<tt class="descname">payment_token</tt><big>(</big><big>)</big><a class="headerlink" href="#cloudrunner_server.api.controllers.auth.Auth.payment_token" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="method">
-<dt id="cloudrunner_server.api.controllers.auth.Auth.register">
-<tt class="descname">register</tt><big>(</big><em>*args</em>, <em>**kwargs</em><big>)</big><a class="headerlink" href="#cloudrunner_server.api.controllers.auth.Auth.register" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="method">
-<dt id="cloudrunner_server.api.controllers.auth.Auth.reset">
-<tt class="descname">reset</tt><big>(</big><em>*args</em>, <em>**kwargs</em><big>)</big><a class="headerlink" href="#cloudrunner_server.api.controllers.auth.Auth.reset" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
+<dd><p>Logout and destroy session</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name" colspan="2">Request Headers:</th></tr>
+<tr class="field-odd field"><td>&nbsp;</td><td class="field-body"><ul class="first simple">
+<li><strong>X-Cr-User</strong> &#8211; User name</li>
+<li><strong>X-Cr-Token</strong> &#8211; Auth token</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Status Codes:</th><td class="field-body"><ul class="first last simple">
+<li><a class="reference external" href="http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html#sec10.2.1">200 OK</a> &#8211; no error</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
 </dd></dl>
 
 </div>
 
 
           </div>
-          <footer>
-  
-    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
-      
-        <a href="billing.html" class="btn btn-neutral float-right" title="Billing module"/>Next <span class="fa fa-arrow-circle-right"></span></a>
-      
-      
-        <a href="index.html" class="btn btn-neutral" title="Welcome to CloudRunner REST API’s documentation!"><span class="fa fa-arrow-circle-left"></span> Previous</a>
-      
-    </div>
-  
-
-  <hr/>
-
-  <div role="contentinfo">
-    <p>
-        &copy; Copyright 2015, CloudRunner.io.
-    </p>
-  </div>
-
-  <a href="https://github.com/snide/sphinx_rtd_theme">Sphinx theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>
-</footer>
         </div>
       </div>
-
-    </section>
-
-  </div>
-  
-
-
-  
-
-    <script type="text/javascript">
-        var DOCUMENTATION_OPTIONS = {
-            URL_ROOT:'./',
-            VERSION:'',
-            COLLAPSE_INDEX:false,
-            FILE_SUFFIX:'.html',
-            HAS_SOURCE:  true
-        };
-    </script>
-      <script type="text/javascript" src="_static/jquery.js"></script>
-      <script type="text/javascript" src="_static/underscore.js"></script>
-      <script type="text/javascript" src="_static/doctools.js"></script>
-
-  
-
-  
-  
-    <script type="text/javascript" src="_static/js/theme.js"></script>
-  
-
-  
-  
-  <script type="text/javascript">
-      jQuery(function () {
-          SphinxRtdTheme.StickyNav.enable();
-      });
-  </script>
-   
-
-</body>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="http-routingtable.html" title="HTTP Routing Table"
+             >routing table</a> |</li>
+        <li class="right" >
+          <a href="billing.html" title="Billing module"
+             >next</a> |</li>
+        <li class="right" >
+          <a href="index.html" title="Welcome to CloudRunner REST API’s documentation!"
+             >previous</a> |</li>
+        <li><a href="index.html">api  documentation</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2015, CloudRunner.io.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.2.3.
+    </div>
+  </body>
 </html>

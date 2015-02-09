@@ -29,6 +29,13 @@ class Billing(HookController):
 
     @expose('json', generic=True)
     def account(self, *args, **kwargs):
+        """
+        .. http:get:: /billing/account
+
+            Returns basic account information
+
+            >header:    Auth token
+        """
         CS = request.braintree.CustomerSearch
         customers = [c for c in request.braintree.Customer.search(
             CS.company == request.user.org).items]

@@ -67,7 +67,7 @@ test:
 
 .PHONY: docs
 docs:
-	cd cloudrunner_server/api/docs/ && make html
+	sphinx-build -a -c doc doc/sources/ doc/html 
 
 .PHONY: clean
 clean:

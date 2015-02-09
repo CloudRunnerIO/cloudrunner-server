@@ -11,6 +11,8 @@ Contents:
 
    auth
    billing
+   execute
+   jobs
 
 Indices and tables
 ==================
