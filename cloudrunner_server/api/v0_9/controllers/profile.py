@@ -17,9 +17,11 @@ class Profile(HookController):
     def profile(self, *args, **kwargs):
         user = User.visible(request).filter(
             User.username == request.user.username).one()
-        return O.user(quotas=request.user.tier._items, **user.serialize(
-            skip=['id', 'org_id', 'password'],
-            rel=[('groups.name', 'groups')]))
+        return O.user(quotas=request.user.tier._items,
+                      plan=request.user.tier.name,
+                      **user.serialize(
+                          skip=['id', 'org_id', 'password'],
+                          rel=[('groups.name', 'groups')]))
 
     @profile.when(method='PATCH', template='json')
     @profile.wrap_modify()
