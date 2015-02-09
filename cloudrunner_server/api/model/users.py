@@ -109,6 +109,11 @@ class User(TableBase):
         ctx.db.commit()
         return token
 
+    @staticmethod
+    def count(ctx):
+        return ctx.db.query(User).join(Org).filter(
+            Org.name == ctx.user.org).count()
+
 
 @event.listens_for(User, 'before_insert')
 def user_before_insert(mapper, connection, target):
@@ -190,6 +195,11 @@ class Group(TableBase):
             Org.name == ctx.user.org
         )
 
+    @staticmethod
+    def count(ctx):
+        return ctx.db.query(Group).join(Org).filter(
+            Org.name == ctx.user.org).count()
+
 
 @event.listens_for(Group, 'before_insert')
 def group_before_insert(mapper, connection, target):
@@ -234,6 +244,11 @@ class ApiKey(TableBase):
         return ctx.db.query(ApiKey).join(User, Org).filter(
             Org.name == ctx.user.org
         )
+
+    @staticmethod
+    def count(ctx):
+        return ctx.db.query(ApiKey).join(User, Org).filter(
+            Org.name == ctx.user.org).count()
 
 
 def quotas(connection, target):

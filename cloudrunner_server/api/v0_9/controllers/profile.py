@@ -18,7 +18,8 @@ from pecan.hooks import HookController
 from cloudrunner_server.api.decorators import wrap_command
 from cloudrunner_server.api.hooks.db_hook import DbHook
 from cloudrunner_server.api.hooks.error_hook import ErrorHook
-from cloudrunner_server.api.model import User
+from cloudrunner_server.api.model import (User, Repository, Node, Group,
+                                          Job, ApiKey)
 from cloudrunner_server.api.util import JsonOutput as O
 
 
@@ -31,7 +32,18 @@ class Profile(HookController):
     def profile(self, *args, **kwargs):
         user = User.visible(request).filter(
             User.username == request.user.username).one()
-        return O.user(quotas=request.user.tier._items,
+        used = {'total_repos': 0, 'cron_jobs': 0,
+                'api_keys': 0, 'users': 0, 'groups': 0, 'nodes': 0}
+        used['total_repos'] = Repository.count(request)
+        used['cron_jobs'] = Job.count(request)
+        used['api_keys'] = ApiKey.count(request)
+        used['users'] = User.count(request)
+        used['groups'] = Group.count(request)
+        used['nodes'] = Node.count(request)
+        quotas = dict((k, dict(allowed=v, used=used[k]))
+                      for k, v in request.user.tier._items.items()
+                      if k in used)
+        return O.user(quotas=quotas,
                       plan=request.user.tier.name,
                       **user.serialize(
                           skip=['id', 'org_id', 'password'],

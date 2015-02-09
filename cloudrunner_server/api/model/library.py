@@ -63,6 +63,11 @@ class Repository(TableBase):
     def removable(self, ctx):
         return self.owner_id == int(ctx.user.id)
 
+    @staticmethod
+    def count(ctx):
+        return ctx.db.query(Repository).join(Org).filter(
+            Org.name == ctx.user.org).count()
+
 
 def quotas(connection, target):
     total_allowed = target.org.tier.total_repos

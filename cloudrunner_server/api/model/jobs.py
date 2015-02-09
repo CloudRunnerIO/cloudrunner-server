@@ -73,6 +73,11 @@ class Job(TableBase):
             Job.owner_id == ctx.user.id
         )
 
+    @staticmethod
+    def count(ctx):
+        return ctx.db.query(Job).join(User, Org).filter(
+            Org.name == ctx.user.org).count()
+
 
 def quotas(connection, target):
     allowed = target.owner.org.tier.cron_jobs

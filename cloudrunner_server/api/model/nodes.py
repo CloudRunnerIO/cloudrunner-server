@@ -55,6 +55,11 @@ class Node(TableBase):
     def signed(ctx):
         return Node.visible(ctx).filter(Node.approved == True)  # noqa
 
+    @staticmethod
+    def count(ctx):
+        return ctx.db.query(Node).join(Org).filter(
+            Org.name == ctx.user.org).count()
+
 
 def quotas(connection, target):
     allowed = target.org.tier.nodes

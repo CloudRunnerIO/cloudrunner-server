@@ -83,12 +83,57 @@ class AeroRegistry(object):
         if ttl:
             policy['ttl'] = ttl
 
-        self.client.put(RegBase.key(USER_NS, org, key),
-                        data, policy)
+        try:
+            self.client.put(RegBase.key(USER_NS, org, key),
+                            data, policy)
+            return True
+        except:
+            return False
 
     def get(self, org, key):
         k, m, data = self.client.get(RegBase.key(USER_NS, org, key))
         return data
+
+    def incr(self, org, key, what):
+        inc_ops = [
+            {
+                "op": aerospike.OPERATOR_INCR,
+                "bin": what,
+                "val": 1
+            },
+            {
+                "op": aerospike.OPERATOR_READ,
+                "bin": what
+            }
+        ]
+        inc_key = RegBase.key(USER_NS, org, key)
+        try:
+            _, _, data = self.client.operate(inc_key, inc_ops)
+            return data[what]
+        except Exception, (ecode, emsg, efile, eline):
+            if ecode == 2:
+                self.client.put(inc_key, {what: 0})
+            _, _, data = self.client.operate(inc_key, inc_ops)
+            return data[what]
+
+    def decr(self, org, key, what):
+        inc_ops = [
+            {
+                "op": aerospike.OPERATOR_INCR,
+                "bin": what,
+                "val": -1
+            },
+            {
+                "op": aerospike.OPERATOR_READ,
+                "bin": what
+            }
+        ]
+        inc_key = RegBase.key(USER_NS, org, key)
+        try:
+            _, _, data = self.client.operate(inc_key, inc_ops)
+            return data[what]
+        except:
+            return None
 
     @contextmanager
     def writer(self, org, _id):
