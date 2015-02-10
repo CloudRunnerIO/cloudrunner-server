@@ -729,6 +729,7 @@ basicConstraints = CA:true
         os.unlink(subca_csr_file)
         if ret:
             yield ERR, 'Error creating Org CA: %s' % ret
+            LOG.error('Error creating Org CA: %s' % ret)
             exit(1)
         yield DATA, 'Done'
 

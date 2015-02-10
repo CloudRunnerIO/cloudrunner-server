@@ -442,7 +442,7 @@ def main():
                         printables[i] = '\n'.join(
                             concat(p) for p in printables[i])
                 printables = [str(p) for p in printables]
-                print "P" # printers[_type]('\n'.join(printables))
+                printers[_type]('\n'.join(printables))
             else:
                 print printables
     except Exception, ex:

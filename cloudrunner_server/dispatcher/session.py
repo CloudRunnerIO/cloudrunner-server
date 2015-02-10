@@ -33,7 +33,6 @@ from cloudrunner.util.string import stringify
 from cloudrunner.util.string import stringify1
 
 from cloudrunner_server.util import timestamp
-
 LOG = logging.getLogger('ServerSession')
 
 

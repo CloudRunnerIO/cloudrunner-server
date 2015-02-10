@@ -120,7 +120,7 @@ class Users(object):
     def update(self, *args, **kwargs):
         # assert all values
         (kwargs['username'], kwargs['first_name'], kwargs['phone'],
-         kwargs['last_name'], kwargs['department'], kwargs['position'])
+            kwargs['last_name'], kwargs['department'], kwargs['position'])
         return self.patch(**kwargs)
 
     @users.when(method='DELETE', template='json')

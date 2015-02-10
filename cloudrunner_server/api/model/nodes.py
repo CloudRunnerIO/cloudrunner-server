@@ -39,7 +39,7 @@ class Node(TableBase):
     enabled = Column(Boolean, default=True)
 
     org_id = Column(Integer, ForeignKey(Org.id))
-    org = relationship(Org, backref='nodes')
+    org = relationship(Org, backref=backref('nodes', cascade='delete'))
 
     @staticmethod
     def visible(ctx):

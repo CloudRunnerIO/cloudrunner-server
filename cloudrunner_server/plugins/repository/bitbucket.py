@@ -23,7 +23,7 @@ class BitbucketPluginRepo(PluginRepoBase):
         self.owner = auth_owner
         self.client = o.Client(consumer)
 
-    # @retry(None, None, None)
+    @retry(None, None, None)
     def browse(self, repo, path, last_modified=None):
         args = dict(user=self.owner, repo=repo, path=path, rev='HEAD')
         bb_path = REPO_PATH % args
@@ -46,7 +46,7 @@ class BitbucketPluginRepo(PluginRepoBase):
         return dict(folders=folders,
                     scripts=scripts), modified, meta['last-modified']
 
-    # @retry(None, None, None, None)
+    @retry(None, None, None, None)
     def contents(self, repo, full_path, rev=None, last_modified=None):
         args = dict(user=self.owner, repo=repo, path=full_path,
                     rev=rev or 'HEAD')

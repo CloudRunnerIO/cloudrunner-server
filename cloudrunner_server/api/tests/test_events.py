@@ -13,6 +13,7 @@
 #  *******************************************************/
 
 from cloudrunner_server.api.tests import base
+from mock import MagicMock
 
 
 class TestEvents(base.BaseRESTTestCase):
@@ -24,6 +25,8 @@ event: 1234567
 data: 1234567
 
 """
+        self.aero.check = MagicMock(return_value=10)
+
         resp = self.app.get('/rest/status/get?1234567', headers={
             'Cr-Token': 'PREDEFINED_TOKEN',
             'Cr-User': 'testuser',
@@ -32,4 +35,4 @@ data: 1234567
         self.assertEqual(resp.status_int, 200, resp.status_int)
         self.assertEqual(resp.content_type, 'text/event-stream',
                          resp.content_type)
-        self.assertEqual(resp.body, sse_data, resp.body)
+        self.assertEqual(resp.body, sse_data)

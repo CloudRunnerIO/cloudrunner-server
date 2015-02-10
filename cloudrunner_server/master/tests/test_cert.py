@@ -56,12 +56,13 @@ class TestCert(base.BaseDBTestCase):
         messages = [x for x in CertController(base.CONFIG).list()]
 
         self.assertEqual(messages.pop(0), (1, 'Pending node requests:'))
-        self.assertEqual(messages.pop(0), (2, 'TEST_NODE'))
+        self.assertEqual(messages.pop(0), (2, 'TEST_NODE%39s' % "DEFAULT"))
         self.assertEqual(messages.pop(0), (1, 'Approved nodes:'))
         self.assertEqual(messages.pop(0), (2, '--None--'))
         self.assertEqual(messages, [])
 
-        messages = [x for x in CertController(base.CONFIG).sign(['TEST_NODE'])]
+        messages = [x for x in CertController(base.CONFIG).sign(['TEST_NODE'],
+                                                                ca="DEFAULT")]
         self.assertEqual(messages.pop(0), (1, 'Signing TEST_NODE'))
         self.assertEqual(messages.pop(0), (1, 'Setting serial to 3'))
         self.assertEqual(messages.pop(0), (2, 'TEST_NODE signed'))
@@ -72,26 +73,28 @@ class TestCert(base.BaseDBTestCase):
         self.assertEqual(messages.pop(0), (1, 'Pending node requests:'))
         self.assertEqual(messages.pop(0), (2, '--None--'))
         self.assertEqual(messages.pop(0), (1, 'Approved nodes:'))
-        self.assertEqual(messages.pop(0), (2, 'TEST_NODE'))
+        self.assertEqual(messages.pop(0), (2, 'TEST_NODE%39s' % "DEFAULT"))
         self.assertEqual(messages, [])
 
         self._create_csr('TEST_NODE_2')
         self._create_csr('TEST_NODE_PEND')
         messages = [x for x in CertController(
-            base.CONFIG).sign(['TEST_NODE_2'])]
+            base.CONFIG).sign(['TEST_NODE_2'], ca="DEFAULT")]
 
         self.assertEqual(messages.pop(0), (1, 'Signing TEST_NODE_2'))
         self.assertEqual(messages.pop(0), (1, 'Setting serial to 4'))
         self.assertEqual(messages.pop(0), (2, 'TEST_NODE_2 signed'))
 
         messages = [x for x in CertController(base.CONFIG).revoke(
-            ['TEST_NODE_2'])]
+            ['TEST_NODE_2'], ca="DEFAULT")]
         messages = [x for x in CertController(base.CONFIG).list()]
 
         self.assertEqual(messages.pop(0), (1, 'Pending node requests:'))
-        self.assertEqual(messages.pop(0), (2, 'TEST_NODE_PEND'))
+        self.assertEqual(messages.pop(0), (2, 'TEST_NODE_PEND%34s' %
+                                           "DEFAULT"))
         self.assertEqual(messages.pop(0), (1, 'Approved nodes:'))
-        self.assertEqual(messages.pop(0), (2, 'TEST_NODE'))
+        self.assertEqual(messages.pop(0), (2, 'TEST_NODE%39s' %
+                                           "DEFAULT"))
         self.assertEqual(messages, [])
 
         CertController(base.CONFIG).revoke(['TEST_NODE_2'])
@@ -99,14 +102,16 @@ class TestCert(base.BaseDBTestCase):
         messages = [x for x in CertController(base.CONFIG).list()]
 
         self.assertEqual(messages.pop(0), (1, 'Pending node requests:'))
-        self.assertEqual(messages.pop(0), (2, 'TEST_NODE_PEND'))
+        self.assertEqual(messages.pop(0), (2, 'TEST_NODE_PEND%34s' %
+                                           "DEFAULT"))
         self.assertEqual(messages.pop(0), (1, 'Approved nodes:'))
-        self.assertEqual(messages.pop(0), (2, 'TEST_NODE'))
+        self.assertEqual(messages.pop(0), (2, 'TEST_NODE%39s' %
+                                           "DEFAULT"))
         self.assertEqual(messages, [])
 
         messages = [x for x in CertController(base.CONFIG).sign(
             ['TEST_NODE_PEND'],
-            org="DEFAULT")]
+            ca="DEFAULT")]
 
         self.assertEqual(messages.pop(0), (1, 'Signing TEST_NODE_PEND'))
         self.assertEqual(messages.pop(0), (1, 'Setting serial to 5'))
@@ -118,7 +123,8 @@ class TestCert(base.BaseDBTestCase):
         self.assertEqual(messages.pop(0), (1, 'Approved nodes:'))
         nodes = [messages.pop(0), messages.pop(0)]
         self.assertEqual(sorted(nodes),
-                         sorted([(2, 'TEST_NODE_PEND'), (2, 'TEST_NODE')]))
+                         sorted([(2, 'TEST_NODE_PEND%34s' % "DEFAULT"),
+                                 (2, 'TEST_NODE%39s' % "DEFAULT")]))
         self.assertEqual(messages, [])
 
         self._create_csr('INVALID NAME')
@@ -140,7 +146,7 @@ class TestCert(base.BaseDBTestCase):
         self._create_csr('VALID_NAME.DOMAIN')
         messages = [x for x in CertController(base.CONFIG).sign(
             ['VALID_NAME.DOMAIN'],
-            org="DEFAULT")]
+            ca="DEFAULT")]
 
         self.assertEqual(messages.pop(0), (1, 'Signing VALID_NAME.DOMAIN'))
         self.assertEqual(messages.pop(0), (1, 'Setting serial to 6'))

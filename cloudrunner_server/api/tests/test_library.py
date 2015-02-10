@@ -21,21 +21,29 @@ class TestLibrary(base.BaseRESTTestCase):
 
     def test_list_repos(self):
         cr_data = {'repositories': [
-            {'owner': 'testuser',
-             'type': None,
-             'name': 'cloudrunner',
-             'private': False},
-            {'owner': 'testuser',
-             'type': None,
-             'name': 'empty_repo',
-             'private': False}]}
+            {
+                'name': 'cloudrunner',
+                'editable': True,
+                'enabled': True,
+                'private': False,
+                'owner': 'testuser',
+                'type': 'cloudrunner'
+            }, {
+                'name': 'empty_repo',
+                'editable': True,
+                'enabled': True,
+                'private': False,
+                'owner': 'testuser',
+                'type': 'cloudrunner'}
+        ],
+            'quota': {'total': 5, 'external': False, 'user': 5}}
 
         resp = self.app.get('/rest/library/repo', headers={
             'Cr-Token': 'PREDEFINED_TOKEN', 'Cr-User': 'testuser'})
         self.assertEqual(resp.status_int, 200, resp.status_int)
         resp_json = json.loads(resp.body)
 
-        self.assertEqual(resp_json, cr_data, resp_json)
+        self.assertEqual(resp_json, cr_data)
 
     def test_create_repo(self):
         resp = self.app.post('/rest/library/repo',
@@ -124,20 +132,21 @@ class TestLibrary(base.BaseRESTTestCase):
                          resp_json)
 
     def test_list_scripts(self):
-        cr_data = {'folders': [
-                   {'owner': 'testuser',
-                    'id': 4,
-                    'full_name': '/folder1/',
-                    'name': '/folder1'}
-                   ],
-                   'owner': 'testuser',
-                   'scripts': []}
+        cr_data = {'folders': [{
+            'name': '/folder1',
+            'created_at': '2014-01-10 00:00:00',
+            'editable': True,
+            'etag': None,
+            'full_name': '/folder1/',
+            'owner': 'testuser',
+            'id': 4}],
+            'owner': 'testuser', 'editable': True, 'scripts': []
+        }
 
         resp = self.app.get('/rest/library/browse/cloudrunner/', headers={
             'Cr-Token': 'PREDEFINED_TOKEN', 'Cr-User': 'testuser'})
         self.assertEqual(resp.status_int, 200, resp.status_int)
         resp_json = json.loads(resp.body)
-
         self.assertEqual(resp_json['contents'], cr_data, resp_json['contents'])
 
     def test_show_script(self):
@@ -146,14 +155,21 @@ class TestLibrary(base.BaseRESTTestCase):
             headers={'Cr-Token': 'PREDEFINED_TOKEN', 'Cr-User': 'testuser'})
         self.assertEqual(resp.status_int, 200, resp.status_int)
         resp_json = json.loads(resp.body)
-        result = {"script": {
-                  "content": "Version 4 Final",
-                  "owner": "testuser",
-                  "mime": "text/workflow",
-                  'created_at': '2014-01-20 00:00:00',
-                  "name": "test2",
-                  "version": "4"}}
-        self.assertEqual(resp_json, result)
+        result = {'script': {
+            'name': 'test2',
+            'created_at': '2014-01-20 00:00:00',
+            'content': 'Version 4 Final',
+            'version': '4',
+            'mime': 'text/workflow',
+            'allow_sudo': None,
+            'owner': 'testuser',
+            'revisions': [
+                {'created_at': '2014-01-01 10:00:00', 'version': '4'},
+                {'created_at': '2014-01-01 08:00:00', 'version': '3'},
+                {'created_at': '2014-01-01 07:00:00', 'version': '2'},
+                {'created_at': '2014-01-01 06:00:00', 'version': '1'}]}
+        }
+        self.assertEqual(resp_json['script'], result['script'])
 
         resp = self.app.get(
             '/rest/library/script/cloudrunner/folder1/test1',
@@ -161,14 +177,20 @@ class TestLibrary(base.BaseRESTTestCase):
         self.assertEqual(resp.status_int, 200, resp.status_int)
         resp_json = json.loads(resp.body)
 
-        result = {"script": {
-                  "content": "Version 7",
-                  "owner": "testuser",
-                  "mime": "text/plain",
-                  'created_at': '2014-01-10 00:00:00',
-                  "name": "test1",
-                  'version': '2'}}
-        self.assertEqual(resp_json, result)
+        result = {'script': {
+            'name': 'test1',
+            'created_at': '2014-01-10 00:00:00',
+            'content': 'Version 7',
+            'version': '2',
+            'mime': 'text/plain',
+            'allow_sudo': None,
+            'owner': 'testuser',
+            'revisions': [
+                {'created_at': '2014-01-01 12:00:00', 'version': '2'},
+                {'created_at': '2014-01-01 11:00:00', 'version': '1'}]}
+        }
+
+        self.assertEqual(resp_json['script'], result['script'])
 
     def test_create_script(self):
         resp = self.app.post('/rest/library/script',
@@ -190,12 +212,17 @@ class TestLibrary(base.BaseRESTTestCase):
         resp_json = json.loads(resp.body)
 
         resp_json['script'].pop('created_at')
+        for rev in resp_json['script']['revisions']:
+            rev.pop('created_at')
         result = {"script": {
-                  "content": "some content",
-                  "owner": "testuser",
-                  "mime": "text/plain",
-                  "name": "scr1",
-                  'version': '1'}}
+            "allow_sudo": None,
+            "content": "some content",
+            "owner": "testuser",
+            "mime": "text/plain",
+            "name": "scr1",
+            'version': '1',
+            'revisions': [{'version': '1'}]
+        }}
         self.assertEqual(resp_json, result)
 
     def test_create_fail_script(self):
@@ -210,7 +237,7 @@ class TestLibrary(base.BaseRESTTestCase):
 
         self.assertEqual(
             resp_json, {
-                "error": {"msg": "Folder private/folder1/ is not accessible"}},
+                "error": {"msg": "Folder private/folder1/ is not editable"}},
             resp.body)
 
     def test_update_script(self):
@@ -225,6 +252,28 @@ class TestLibrary(base.BaseRESTTestCase):
 
         self.assertEqual(resp_json, {"success": {"status": "ok"}},
                          resp.body)
+
+        resp = self.app.get(
+            '/rest/library/script/cloudrunner/folder1/test1',
+            headers={'Cr-Token': 'PREDEFINED_TOKEN', 'Cr-User': 'testuser'})
+        self.assertEqual(resp.status_int, 200, resp.status_int)
+        resp_json = json.loads(resp.body)
+        result = {'script': {
+            'name': 'test1',
+            'created_at': '2014-01-10 00:00:00',
+            'content': 'some modified content',
+            'version': '3',
+            'mime': 'text/plain',
+            'allow_sudo': None,
+            'owner': 'testuser',
+            'revisions': [
+                {'version': '3'},
+                {'version': '2'},
+                {'version': '1'}]}
+        }
+        for rev in resp_json['script']['revisions']:
+            rev.pop('created_at')
+        self.assertEqual(resp_json['script'], result['script'])
 
     def test_delete_script(self):
         resp = self.app.delete(

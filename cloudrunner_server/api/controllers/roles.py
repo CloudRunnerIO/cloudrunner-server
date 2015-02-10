@@ -28,11 +28,11 @@ LOG = logging.getLogger()
 
 class Roles(object):
 
-    @check_policy('is_admin')
     @expose('json', generic=True)
+    @check_policy('is_admin')
     @wrap_command(Role)
     def roles(self, username=None, *args):
-        user = User.visible(request).filter(User.username == username).first()
+        user = User.visible(request).filter(User.username == username).one()
         roles = []
 
         def append_roles(r):
@@ -45,22 +45,22 @@ class Roles(object):
             rel=([('group.name', 'group')])) for r in roles],
             quota=dict(allowed=request.user.tier.roles))
 
-    @check_policy('is_admin')
     @roles.when(method='POST', template='json')
+    @check_policy('is_admin')
     @roles.wrap_create()
     def add_role(self, username=None, **kwargs):
-        user = User.visible(request).filter(User.username == username).first()
+        user = User.visible(request).filter(User.username == username).one()
         as_user = kwargs['as_user']
         servers = kwargs['servers']
         role = Role(as_user=as_user, servers=servers)
         user.roles.append(role)
         request.db.commit()
 
-    @check_policy('is_admin')
     @roles.when(method='DELETE', template='json')
+    @check_policy('is_admin')
     @roles.wrap_modify()
     def rm_role(self, username=None, as_user=None, servers=None):
-        user = User.visible(request).filter(User.username == username).first()
+        user = User.visible(request).filter(User.username == username).one()
         role = [r for r in user.roles
                 if r.as_user == as_user and r.servers == servers]
 

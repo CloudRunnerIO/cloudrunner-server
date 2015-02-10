@@ -13,7 +13,10 @@
 #  *******************************************************/
 import json
 from mock import Mock, patch
+from unittest import SkipTest
+raise SkipTest()
 
+from cloudrunner.core import message as M
 from cloudrunner_server.api.tests import base
 
 ctx_mock = Mock()
@@ -25,11 +28,39 @@ class TestDispatch(base.BaseRESTTestCase):
 
     @patch('zmq.Context', Mock(return_value=ctx_mock))
     def test_list_active_nodes(self):
-        return
-        sock_mock.recv_multipart.return_value = [
-            json.dumps(([True, [True, ("Node", 15)]]))]
+
+        nodes_list = {
+            "nodes": [{
+                "usage": {
+                    "CPU_TIMES_IDLE": 100.0,
+                    "AVAIL_MEM": 3171,
+                    "CPU_USAGE": 0.0,
+                    "CPU_TIMES_SYS": 0.0,
+                    "CPU_TIMES_USER": 0.0,
+                    "FREE_MEM": 563,
+                    "TOTAL_MEM": 7896
+                },
+                "name": "yoga7",
+                "last_seen": 11
+            }]}
+
+        sock_mock.recv.return_value = M.Nodes([
+            {
+                'usage': {
+                    'CPU_TIMES_IDLE': 100.0,
+                    'AVAIL_MEM': 3171,
+                    'CPU_USAGE': 0.0,
+                    'CPU_TIMES_SYS': 0.0,
+                    'CPU_TIMES_USER': 0.0,
+                    'FREE_MEM': 563,
+                    'TOTAL_MEM': 7896
+                },
+                'name': 'yoga7',
+                'last_seen': 11
+            }]
+        )._
         resp = self.app.get('/rest/dispatch/active_nodes', headers={
             'Cr-Token': 'PREDEFINED_TOKEN', 'Cr-User': 'testuser'})
         self.assertEqual(resp.status_int, 200, resp.status_int)
         resp_json = json.loads(resp.body)
-        self.assertEqual(resp_json, {'nodes': ['Node', 15]}, resp_json)
+        self.assertEqual(resp_json, nodes_list)

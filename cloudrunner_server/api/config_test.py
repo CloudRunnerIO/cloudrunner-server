@@ -12,11 +12,11 @@
 #  * without the express permission of CloudRunner.io
 #  *******************************************************/
 
+from cloudrunner import CONFIG_LOCATION
+from cloudrunner.util.config import Config
 from cloudrunner_server.tests.base import CONFIG
 from cloudrunner.util.loader import local_plugin_loader
-from cloudrunner.util.loader import load_plugins
 import cloudrunner_server.api
-from cloudrunner_server.api import VERSION
 from cloudrunner_server.api import model
 from pecan.hooks import TransactionHook
 from cloudrunner_server.api.base import SseRenderer
@@ -25,20 +25,16 @@ DEBUG = False
 # DEBUG = True
 
 # Server Specific Configurations
-server = {
-    'port': '5558',
-    'host': '0.0.0.0'
-}
+cr_config = Config(CONFIG_LOCATION)
 
 REST_SERVER_URL = "https://localhost/rest/"
+DASH_SERVER_URL = cr_config.dash_api_url or "http://localhost/"
 
 APP_DIR = cloudrunner_server.api.__path__[0]
 
-API_VER = VERSION.replace('.', '_')
-
 # Pecan Application Configurations
 app = {
-    'root': 'cloudrunner_server.api.v%s.controllers.main.Main' % API_VER,
+    'root': 'cloudrunner_server.api.controllers.main.Main',
     'modules': ['cloudrunner_server.api'],
     'template_path': '%s/templates/rest/' % APP_DIR,
     'custom_renderers': {
@@ -50,14 +46,10 @@ app = {
     }
 }
 
-cr_config = CONFIG
-
 schedule_manager = local_plugin_loader(CONFIG.scheduler)()
-loaded_plugins = load_plugins(CONFIG)
 
 zmq = {
-    'server_uri': "ipc:///home/ttrifonov/.cloudrunner/"
-    "var/run/sock/cloudrunner//local-api.sock"
+    'server_uri': "ipc:///tmp/local-api.sock"
 }
 
 sqlalchemy = {

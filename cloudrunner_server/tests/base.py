@@ -13,6 +13,7 @@
 #  *******************************************************/
 
 import logging
+from mock import MagicMock, patch
 import os
 from unittest import TestCase
 from sqlalchemy import create_engine
@@ -27,18 +28,26 @@ CONFIG = Config(os.path.join(os.path.dirname(__file__), 'test.config'))
 LOG = logging.getLogger("BaseTest")
 
 _plugins = [('common',
-            os.path.join(os.path.dirname(plugins.__file__),
-                         "state/functions.py")),
+             os.path.join(os.path.dirname(plugins.__file__),
+                          "state/functions.py")),
             # ('signals', "cloudrunner_server.plugins.signals.signal_handler")]
             ]
 CONFIG.plugins.items = lambda: _plugins
 engine = None
 
+util = MagicMock(timestamp=MagicMock(return_value=123456789),
+                 cache=MagicMock())
+
 
 class BaseTestCase(TestCase):
+    modules = {
+        'cloudrunner_server.util': util
+    }
 
     @classmethod
     def setUpClass(cls):
+        cls.module_patcher = patch.dict('sys.modules', cls.modules)
+        cls.module_patcher.start()
         load_plugins(CONFIG)
         if hasattr(cls, 'fixture_class'):
             cls.fixture_class()
@@ -55,9 +64,9 @@ class BaseTestCase(TestCase):
     def tearDownClass(cls):
         if hasattr(cls, 'release_class'):
             cls.release_class()
+        cls.module_patcher.stop()
 
     def setUp(self):
-
         if hasattr(self, 'fixture'):
             self.fixture()
 

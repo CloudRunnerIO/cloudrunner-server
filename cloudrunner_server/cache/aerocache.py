@@ -94,6 +94,20 @@ class AeroRegistry(object):
         k, m, data = self.client.get(RegBase.key(USER_NS, org, key))
         return data
 
+    def add_token(self, username, token, expire):
+        ttl = {'ttl': expire * 60}
+        token['username'] = username
+        key = RegBase.key(AUTH_NS, AUTH_TOKEN_SET, token['token'])
+        self.client.put(key, token, ttl)
+
+    def revoke_token(self, token):
+        key = RegBase.key(AUTH_NS, AUTH_TOKEN_SET, token)
+        try:
+            self.client.remove(key)
+            return True
+        except:
+            return False
+
     def incr(self, org, key, what):
         inc_ops = [
             {
@@ -232,12 +246,6 @@ class RegWriter(RegBase):
         ttl = {'ttl': ttl or DAYS30}
         self.client.put(key, dict(uuid=self.id, org=self.org,
                                   type="meta", result=result))
-
-    def add_token(self, username, token, expire):
-        ttl = {'ttl': expire * 60}
-        token['username'] = username
-        key = self.key(AUTH_NS, AUTH_TOKEN_SET, token['token'])
-        self.client.put(key, token, ttl)
 
     def incr(self, org, what):
         self.client.put(

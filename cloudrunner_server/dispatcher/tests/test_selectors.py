@@ -13,9 +13,7 @@
 #  *******************************************************/
 
 from contextlib import nested
-from mock import call
-from mock import Mock
-from mock import patch
+from mock import Mock, patch
 
 from cloudrunner.core import parser
 from cloudrunner_server.dispatcher import server, TaskQueue
@@ -91,83 +89,6 @@ whoami
             """
             self.assertTrue(ret.tasks[0].session_id, '1234-5678-9012')
 
-    def _test_returns(self):
-        """
-        expected = [  # noqa
-            call('*', {'libs': [], 'remote_user_map': access_map,
-                       'env': {'next_step': ['linux', 'windows'],
-                               'NEXT_NODE': ['host2', 'host9'],
-                               'KEY': 'VALUE'},
-                       'script':
-                       '\ntest_1\nexport NEXT_NODE=\'host2\'\n\n'},
-                 timeout=200),
-            call(
-                'host2 host9', {'libs': [], 'remote_user_map': access_map,
-                                'env': {'next_step': ['linux', 'windows'],
-                                        'NEXT_NODE': ['host2', 'host9'],
-                                        'KEY': 'VALUE'},
-                                'script':
-                                '\nhostname\n\nexport '
-                                'next_step=\'linux\'\n\n'},
-                timeout=200),
-            call(
-                'os=linux os=windows', {
-                    'libs': [],
-                    'remote_user_map': access_map,
-                    'env': {
-                        'next_step': ['linux', 'windows'],
-                        'NEXT_NODE': ['host2', 'host9'],
-                        'KEY': 'VALUE'},
-                    'script': '\nwhoami\n'},
-                timeout=200)]
-        self.assertTrue(disp.publisher.send.call_args_list == expected,
-                        disp.publisher.send.call_args_list)
-
-        expected_resp = [  # noqa
-            {'nodes': [{'run_as': 'root', 'node': 'NODE1', 'ret_code': 1},
-                       {'run_as': 'root', 'node': 'NODE6', 'ret_code': 1}],
-                'args': [], 'targets': '*', 'jobid': 'JOB_ID'},
-            {'nodes': [{'run_as': 'admin', 'node': 'NODE2', 'ret_code': 2},
-                       {'run_as': 'admin', 'node': 'NODE4', 'ret_code': 0}],
-                'args': [], 'targets': 'host2 host9', 'jobid': 'JOB_ID'},
-            {'nodes': [{'run_as': 'admin', 'node': 'NODE3', 'ret_code': 0}],
-             'args': [], 'targets': 'os=linux os=windows', 'jobid': 'JOB_ID'}]
-
-        _ = [call(['PART', '1385031137', '', 'some_user', 'admin',  # noqa
-                   '"[\\"TAG1\\", \\"TAG2\\"]"',
-                   '416728b2-52a4-11e3-ae16-00247e6dff02',
-                   'JOB_ID', '["admin", "[\\"STDOUT\\", \\"BLA\\"]"]']),
-             call([
-                  'PART', '1385031137', '',
-                  'some_user', 'admin', '"[\\"TAG1\\", \\"TAG2\\"]"',
-                  '416728b2-52a4-11e3-ae16-00247e6dff02',
-                  'JOB_ID', '["admin", "[\\"STDOUT\\", \\"RUN 2 OUT\\"]"]']),
-             call([
-                  'PART', '1385031137', '', 'some_user', 'admin',
-                  '"[\\"TAG1\\", \\"TAG2\\"]"',
-                  '416728b2-52a4-11e3-ae16-00247e6dff02', 'JOB_ID',
-                  '["admin", "[\\"STDOUT\\", \\"RUN 3 OUT\\"]"]']),
-             call([
-                  'END', '1385031137', '', 'some_user',
-                  '"[\\"TAG1\\", \\"TAG2\\"]"',
-                  '416728b2-52a4-11e3-ae16-00247e6dff02',
-                  '"\\n#! switch [*]\\ntest_1\\nexport '
-                  'NEXT_NODE=\'host2\'\\n\\n'
-                  '#! switch [$NEXT_NODE] --plugin-dir\\nhostname\\n\\n'
-                  'export next_step=\'linux\'\\n\\n#! switch '
-                  '[os=$next_step]\\nwhoami\\n"',
-                  '[{"nodes": [{"run_as": "root", "node": "NODE1", '
-                  '"ret_code": 1}, {"run_as": "root", "node": "NODE6", '
-                  '"ret_code": 1}], "args": [], "targets": "*", '
-                  '"jobid": "JOB_ID"}, '
-                  '{"nodes": [{"run_as": "admin", "node": "NODE2", '
-                  '"ret_code": 2}, {"run_as": "admin", "node": "NODE4", '
-                  '"ret_code": 0}], "args": [], "targets": "host2 host9", '
-                  '"jobid": "JOB_ID"}, {"nodes": [{"run_as": "admin", "node": '
-                  '"NODE3", "ret_code": 0}], "args": [], '
-                  '"targets": "os=linux os=windows", "jobid": "JOB_ID"}]'])]
-        """
-
     def test_session(self):
 
         class Ctx(object):
@@ -190,10 +111,11 @@ whoami
                 job = Mock()
                 job.receive = Mock(side_effect=[("READY",)])
                 self.backend = Mock()
-
+                self.register_session = Mock()
                 self.config = Mock()
 
         remote_user_map = {'org': 'DEFAULT', 'roles': {'*': '@'}}
+        ctx = Ctx()
 
         class PluginCtx(object):
 
@@ -205,12 +127,14 @@ whoami
         env = {'NEXT_NODE': ['host2', 'host9']}
         queue = Mock(return_value=Mock(get=lambda *args: [env, None]))
         session = JobSession(
-            Ctx(), 'user', SESSION,
+            ctx, 'user', SESSION,
             {'target': '*', 'body': "\ntest_1\nexport NEXT_NODE='host2'\n\n"},
-            remote_user_map, queue(), queue(), None)
+            remote_user_map, queue(), queue(), None, None)
+        session._reply = Mock()
 
         ret_data1 = [
-            ['PIPE', 'JOB_ID', 'admin', '["STDOUT", "BLA"]'],
+            ['PIPE', 'JOB_ID', 123456789.101, 'admin',
+                'NODE1', '["STDOUT", "BLA"]'],
             [
                 'JOB_ID', [{'node': "NODE1",
                             'remote_user': 'root',
@@ -225,10 +149,11 @@ whoami
         ]
 
         with nested(
-            patch.multiple(session,
-                           exec_section=Mock(side_effect=[iter(ret_data1)]))):
+                patch.multiple(session,
+                               read=Mock(side_effect=[iter(ret_data1)]))):
             session.run()
 
+            """
             expected = [
                 call('*',
                      {'remote_user_map': remote_user_map,
@@ -238,4 +163,8 @@ whoami
                      timeout=120)]
 
             self.assertEqual(
-                session.exec_section.call_args_list, expected)
+                ctx.register_session.call_args_list, [call("1234-5678-9012")])
+
+            #self.assertEqual(
+            #    session._reply.call_args_list[0], expected[0])
+            """

@@ -49,7 +49,7 @@ class Job(TableBase):
     owner_id = Column(Integer, ForeignKey('users.id'))
 
     script = relationship(Revision, backref=backref("jobs", cascade="delete"))
-    owner = relationship(User, backref=backref("jobs"))
+    owner = relationship(User, backref=backref("jobs", cascade='delete'))
 
     @staticmethod
     def visible(ctx):

@@ -16,7 +16,7 @@ import logging
 from pecan import expose, request  # noqa
 
 from cloudrunner_server.api.decorators import wrap_command
-from cloudrunner_server.api.model import Org
+from cloudrunner_server.api.model import Org, UsageTier
 from cloudrunner_server.api.policy.decorators import check_policy
 from cloudrunner_server.api.util import JsonOutput as O
 
@@ -41,15 +41,17 @@ class Orgs(object):
     @orgs.wrap_create()
     def create_org(self, *args, **kwargs):
         name = kwargs['org']
-        org = Org(name=name, enabled=True)
+        tier = kwargs['tier']
+        tier = request.db.query(UsageTier).filter(UsageTier.name == tier).one()
+        org = Org(name=name, enabled=True, tier=tier)
         request.db.add(org)
 
     @orgs.when(method='PATCH', template='json')
     @check_policy('is_super_admin')
     @orgs.wrap_modify()
     def toggle(self, name=None, status=None, *args, **kwargs):
-        name = name or kwargs['name']
-        status = status or kwargs['status']
+        name = name
+        status = status
         status = bool(status in ['1', 'True', 'true'])
         org = request.db.query(Org).filter(
             Org.name == name, Org.enabled != status).first()

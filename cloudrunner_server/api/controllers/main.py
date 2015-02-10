@@ -31,7 +31,7 @@ from .status import EntityStatus
 from .workflows import Workflows
 
 from cloudrunner_server.api import VERSION
-from cloudrunner_server.api.util import (Wrap)
+from cloudrunner_server.api.util import Wrap
 from cloudrunner_server.util.cache import CacheRegistry
 
 LOG = logging.getLogger()

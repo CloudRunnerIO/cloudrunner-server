@@ -15,10 +15,8 @@
 import hashlib
 import logging
 import requests
-import time
 from pecan import conf, expose, request, render
 from pecan.hooks import HookController
-from sqlalchemy import event
 from sqlalchemy.exc import IntegrityError
 
 from cloudrunner_server.api.decorators import wrap_command
@@ -38,8 +36,12 @@ MAX_EXP = 3 * 30 * 24 * 60  # 3 months/90 days
 
 @event.listens_for(Org, 'after_insert')
 def org_after_insert(mapper, connection, target):
-    ccont = CertController(conf.cr_config, db=connection)
-    ccont.create_ca(target.name)
+    try:
+        ccont = CertController(conf.cr_config, db=connection)
+        ccont.create_ca(target.name)
+    except Exception, ex:
+        if LOG:
+            LOG.exception(ex)
 
 
 class Auth(HookController):
@@ -98,8 +100,7 @@ class Auth(HookController):
                             email_hash=email_hash)
 
         cache = CacheRegistry()
-        with cache.writer('', '') as cache:
-            cache.add_token(username, cached_token, expire)
+        cache.add_token(username, cached_token, expire)
 
         return O.login(user=username,
                        email_hash=email_hash,
@@ -133,14 +134,8 @@ class Auth(HookController):
                 LOG.error(ex)
                 return O.error(msg="Cannot logout")
             finally:
-                key = CACHE_AUTH_TOKEN % user
-                key_perm = CACHE_AUTH_PERMS % user
-                # Remove current token
-                r.zrem(key, token)
-                r.delete(key_perm)
-                ts_now = time.mktime(datetime.now().timetuple())
-                # Remove expired tokens
-                r.zremrangebyscore(key, 0, ts_now)
+                cache = CacheRegistry()
+                cache.revoke_token(token)
         return O.error(msg="Cannot logout")
 
     @expose('json')

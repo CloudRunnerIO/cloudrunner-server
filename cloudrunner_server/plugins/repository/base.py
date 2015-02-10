@@ -19,6 +19,8 @@ class PluginRepoBase(object):
 
     @staticmethod
     def find(repo_type):
+        if not repo_type:
+            return 'cloudrunner'
         plugin = [p for p in PluginRepoBase.__subclasses__()
                   if p.type == repo_type]
         if not plugin:

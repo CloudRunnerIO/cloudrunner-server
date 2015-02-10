@@ -20,7 +20,7 @@ class GithubPluginRepo(PluginRepoBase):
         self.auth_pass = auth_pass
         self.git_user = self.auth_user
 
-    # @retry(default={})
+    @retry(default={})
     def browse(self, repo, path, last_modified=None):
         attr = vars(self)
         attr['repo'] = repo.strip("/")
@@ -67,7 +67,7 @@ class GithubPluginRepo(PluginRepoBase):
             LOG.error(git_path)
             raise Exception("Cannot load script contents %s" % path)
 
-    # @retry(default=(None, None, None, None))
+    @retry(default=(None, None, None, None))
     def contents(self, repo, path, rev=None, last_modified=None):
         attr = vars(self)
         attr['path'] = path.strip("/")

@@ -13,11 +13,8 @@
 #  *******************************************************/
 
 from contextlib import nested
-from mock import call
-from mock import Mock
-from mock import patch
+from mock import call, Mock, patch
 
-from cloudrunner_server.dispatcher.session import JobSession
 from cloudrunner_server.tests import base
 
 SESSION = "1234-5678-9012"
@@ -26,6 +23,8 @@ SESSION = "1234-5678-9012"
 class TestDispatch(base.BaseTestCase):
 
     def test_session(self):
+
+        from cloudrunner_server.dispatcher.session import JobSession
 
         class Ctx(object):
 
@@ -50,8 +49,12 @@ class TestDispatch(base.BaseTestCase):
                 self.backend = Mock()
 
                 self.config = Mock()
+                self.publisher = Mock()
+                self.register_session = Mock()
 
         remote_user_map = {'org': 'DEFAULT', 'roles': {'*': '@'}}
+
+        ctx = Ctx()
 
         class PluginCtx(object):
 
@@ -64,12 +67,15 @@ class TestDispatch(base.BaseTestCase):
         queue = Mock(return_value=Mock(get=lambda *args: [env, None]))
 
         session = JobSession(
-            Ctx(), 'user', SESSION,
+            ctx, 'user', SESSION,
             {'target': '*', 'body': "\ntest_1\nexport NEXT_NODE='host2'\n\n"},
-            remote_user_map, queue(), queue(), None)
+            remote_user_map, queue(), queue(), None, None)
 
+        session._reply = Mock()
+        session._create_ts = Mock(return_value=123456789.101)
         ret_data1 = [
-            ['PIPE', 'JOB_ID', 'admin', '["STDOUT", "BLA"]'],
+            ['PIPE', 'JOB_ID', 123456789.101, 'admin',
+                'NODE1', '["STDOUT", "BLA"]'],
             [
                 'JOB_ID', [{'node': "NODE1",
                             'remote_user': 'root',
@@ -82,20 +88,38 @@ class TestDispatch(base.BaseTestCase):
                 []
             ]
         ]
-
         with nested(
-            patch.multiple(session,
-                           exec_section=Mock(side_effect=[iter(ret_data1)]))):
+                patch.multiple(session,
+                               read=Mock(side_effect=[iter(ret_data1)]))):
             session.run()
 
             expected = [
-                call(
-                    '*',
-                    {'remote_user_map': remote_user_map,
-                     'attachments': [],
-                     'env': {'NEXT_NODE': ['host2', 'host9']},
-                     'script': "\ntest_1\nexport NEXT_NODE='host2'\n\n"},
-                    timeout=120)]
+                {'hdr': {}, 'ts': 123456789.101,
+                 'session_id': '1234-5678-9012', 'kw':
+                 ['org', 'user', 'session_id', 'ts'],
+                 'user': 'user', 'org': 'DEFAULT'},
+                {'node': 'NODE1',
+                 'hdr': {},
+                 'kw': ['node', 'stdout', 'run_as', 'ts',
+                        'session_id', 'user', 'org'],
+                 'stdout': '["STDOUT", "BLA"]',
+                 'run_as': 'admin',
+                 'ts': 123456789.101,
+                 'session_id': 'JOB_ID',
+                 'user': 'user', 'org': 'DEFAULT'},
+                {'hdr': {}, 'ts': 123456789.101, 'session_id': 'JOB_ID',
+                 'kw': ['ts', 'session_id', 'user', 'env',
+                        'org', 'result'],
+                 'user': 'user', 'env': {'NEXT_NODE': ['host2', 'host9']},
+                 'org': 'DEFAULT', 'result': {
+                     'NODE1': {'remote_user': 'root', 'ret_code': 1},
+                     'NODE6': {'remote_user': 'root', 'ret_code': 1}}}]
+            self.assertEqual(
+                ctx.register_session.call_args_list, [call("1234-5678-9012")])
 
             self.assertEqual(
-                session.exec_section.call_args_list, expected)
+                vars(session._reply.call_args_list[0][0][0]), expected[0])
+            self.assertEqual(
+                vars(session._reply.call_args_list[1][0][0]), expected[1])
+            self.assertEqual(
+                vars(session._reply.call_args_list[2][0][0]), expected[2])

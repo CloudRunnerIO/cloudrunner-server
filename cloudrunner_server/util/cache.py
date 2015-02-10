@@ -12,4 +12,5 @@
 #  * without the express permission of CloudRunner.io
 #  *******************************************************/
 
-from cloudrunner_server.cache.aerocache import AeroRegistry as CacheRegistry
+import cloudrunner_server.cache.aerocache as aero
+CacheRegistry = aero.AeroRegistry

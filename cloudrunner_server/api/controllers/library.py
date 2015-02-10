@@ -156,7 +156,7 @@ class Library(HookController):
     @repo.when(method='DELETE', template='json')
     @repo.wrap_delete()
     def repository_delete(self, *args, **kwargs):
-        name = "/".join(args)
+        name = args[0]
         repository = Repository.own(request).filter(
             Repository.name == name).one()
         if not repository.removable(request):

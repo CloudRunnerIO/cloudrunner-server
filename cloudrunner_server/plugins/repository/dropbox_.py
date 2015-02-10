@@ -15,7 +15,7 @@ class DropboxPluginRepo(PluginRepoBase):
     def __init__(self, auth_user, auth_pass, *args):
         self.client = DropboxClient(auth_user)
 
-    # @retry(default=(None, None, None))
+    @retry(default=(None, None, None))
     def browse(self, repo, path, last_modified=None):
         folders = []
         scripts = []
@@ -48,7 +48,7 @@ class DropboxPluginRepo(PluginRepoBase):
             LOG.exception(ex)
             raise NotAccessible()
 
-    # @retry(default=(None, None, None, None))
+    @retry(default=(None, None, None, None))
     def contents(self, repo, path, rev=None, last_modified=None):
         if rev:
             revisions = self.client.revisions(path)
