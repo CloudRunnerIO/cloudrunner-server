@@ -13,7 +13,10 @@
 #  *******************************************************/
 
 from cloudrunner_server.api.tests import base
-from unittest import SkipTest
+try:
+    from unittest import SkipTest
+except ImportError:
+    from unittest2 import SkipTest
 raise SkipTest()
 
 
