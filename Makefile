@@ -63,11 +63,15 @@ userinstall: gen_stubs
 
 .PHONY: test
 test:
-	nosetests cloudrunner_server && flake8 cloudrunner_server
+	nosetests cloudrunner_server
+	flake8 cloudrunner_server
 
 .PHONY: docs
 docs:
-	sphinx-build -a -c doc doc/sources/ doc/html 
+	sphinx-build -a -c doc doc/sources/ doc/html
+	mkdir -p build
+	cd doc/html/ && zip -r api-docs.zip .
+	mv doc/html/api-docs.zip build/
 
 .PHONY: clean
 clean:

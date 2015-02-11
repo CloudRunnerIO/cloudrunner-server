@@ -1,6 +1,7 @@
 include README.rst
 include MANIFEST.in
-include requirements.txt
+include requirements-py26.txt
+include requirements-py27.txt
 include version.py
 
 recursive-include conf *.conf
@@ -11,4 +12,5 @@ graft conf
 graft cloudrunner_server/db
 graft cloudrunner_server/api
 graft cloudrunner_server/cache/functions
+graft cloudrunner_server/plugins
 graft etc

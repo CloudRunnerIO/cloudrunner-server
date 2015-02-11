@@ -12,6 +12,7 @@
 #  * without the express permission of CloudRunner.io
 #  *******************************************************/
 
+from os import path
 import sys
 
 common = []
@@ -21,18 +22,23 @@ if sys.version_info < (2, 7):
     # http://bugs.python.org/issue15881#msg170215
     import multiprocessing  # noqa
     common = ['ordereddict']
+    req_file = path.join(path.dirname(path.abspath(__file__)),
+                         'requirements-py26.txt')
+else:
+    import os
+    os.system('ls %s' % path.dirname(path.abspath(__file__)))
+    req_file = path.join(path.dirname(path.abspath(__file__)),
+                         'requirements-py27.txt')
 
 from distutils.core import setup
 from setuptools import find_packages
 
 from cloudrunner_server.version import VERSION
 
-common = common + ['cloudrunner>=1.0', 'pecan', 'pytz', 'pyzmq',
-                   'sqlalchemy', 'httplib2', 'M2Crypto', 'redis',
-                   'msgpack-python', 'requests']
-requirements = common + ['python-crontab']
-test_requirements = common + ['tox>=1.8', 'mock', 'coverage', 'flake8',
-                              'braintree']
+requirements = [req.strip() for req in open(req_file).read().split()]
+
+common = common + requirements
+test_requirements = common + ['mock', 'coverage', 'flake8']
 
 setup(
     name='cloudrunner_server',

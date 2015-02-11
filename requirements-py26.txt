@@ -1,0 +1,12 @@
+cloudrunner>=1.1
+pecan
+pytz
+pyzmq
+sqlalchemy
+httplib2
+M2Crypto
+redis
+msgpack-python>=0.4
+requests
+python-crontab
+braintree
