@@ -17,13 +17,10 @@ from mock import MagicMock
 import os
 from pecan.testing import load_test_app
 from pecan import conf as p_conf, set_config
-import sqlalchemy as sqla
 
 from cloudrunner.util.crypto import hash_token
 from ...tests.base import BaseTestCase
 from ..model import *  # noqa
-
-engine = None
 
 aerospike = MagicMock()
 aerospike_p = MagicMock()
@@ -50,6 +47,10 @@ class BaseRESTTestCase(BaseTestCase):
     def setUp(self):
         super(BaseRESTTestCase, self).setUp()
 
+        os.environ['CR_CONFIG'] = os.path.join(
+            os.path.dirname(__file__), '../../api',
+            'cr_test.conf'
+        )
         self.app = load_test_app(os.path.join(
             os.path.dirname(__file__), '../../api',
             'config_test.py'
@@ -59,11 +60,9 @@ class BaseRESTTestCase(BaseTestCase):
         self.aero = self.cache.CacheRegistry()
         self.aero_reader = self.aero.reader().__enter__()
         self.modules = modules
-        global engine
-        engine = sqla.create_engine(
-            'sqlite+pysqlite://',
-            connect_args={'check_same_thread': False},
-            poolclass=sqla.pool.StaticPool)
+        # assert correct database
+        self.assertIsNone(p_conf.sqlalchemy.engine.url.database)
+        self.assertEquals(p_conf.sqlalchemy.engine.url.drivername, "sqlite")
 
         token = dict(uid=1, org="MyOrg", email="email@domain.com",
                      email_hash="123hash", token="1234567890",
@@ -75,14 +74,13 @@ class BaseRESTTestCase(BaseTestCase):
         get_token = MagicMock(return_value=token)
         self.aero_reader.get_user_token = get_token
         self.populate()
-        p_conf.sqlalchemy.engine = engine
 
     def tearDown(self):
         super(BaseRESTTestCase, self).tearDown()
         set_config({}, overwrite=True)
 
     def populate(self):
-        Session.bind = engine
+        Session.bind = p_conf.sqlalchemy.engine
         metadata.bind = Session.bind
 
         # metadata.drop_all(Session.bind)

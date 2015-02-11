@@ -164,12 +164,12 @@ class Logs(HookController):
         return self.all(run_uuids=filtered_uuids.keys(), marker=marker)
 
     @expose('json')
-    def get(self, group_id=None, task_ids=None, run_uuids=None,
+    def get(self, group=None, task_ids=None, run_uuids=None,
             nodes=None, etag=None, script_name=None):
         try:
             groups = TaskGroup.unique(request).order_by(Task.created_at.desc())
-            if group_id:
-                groups = groups.filter(TaskGroup.id == group_id)
+            if group:
+                groups = groups.filter(TaskGroup.id == group)
             else:
                 if run_uuids:
                     run_uuids = run_uuids.split(',')

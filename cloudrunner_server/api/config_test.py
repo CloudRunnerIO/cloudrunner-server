@@ -11,6 +11,8 @@
 #  * CloudRunner Server can not be copied and/or distributed
 #  * without the express permission of CloudRunner.io
 #  *******************************************************/
+import os
+from pecan.hooks import TransactionHook
 
 from cloudrunner import CONFIG_LOCATION
 from cloudrunner.util.config import Config
@@ -18,14 +20,16 @@ from cloudrunner_server.tests.base import CONFIG
 from cloudrunner.util.loader import local_plugin_loader
 import cloudrunner_server.api
 from cloudrunner_server.api import model
-from pecan.hooks import TransactionHook
 from cloudrunner_server.api.base import SseRenderer
 
 DEBUG = False
 # DEBUG = True
 
 # Server Specific Configurations
-cr_config = Config(CONFIG_LOCATION)
+if os.environ.get('CR_CONFIG'):
+    cr_config = Config(os.environ.get('CR_CONFIG'))
+else:
+    cr_config = Config(CONFIG_LOCATION)
 
 REST_SERVER_URL = "https://localhost/rest/"
 DASH_SERVER_URL = cr_config.dash_api_url or "http://localhost/"

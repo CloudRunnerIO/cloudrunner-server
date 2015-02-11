@@ -30,7 +30,6 @@ LOG = logging.getLogger("BaseTest")
 _plugins = [('common',
              os.path.join(os.path.dirname(plugins.__file__),
                           "state/functions.py")),
-            # ('signals', "cloudrunner_server.plugins.signals.signal_handler")]
             ]
 CONFIG.plugins.items = lambda: _plugins
 engine = None

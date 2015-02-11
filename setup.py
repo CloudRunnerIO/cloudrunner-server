@@ -31,7 +31,7 @@ common = common + ['cloudrunner>=1.0', 'pecan', 'pytz', 'pyzmq',
                    'sqlalchemy', 'httplib2', 'M2Crypto', 'redis',
                    'msgpack-python', 'requests']
 requirements = common + ['python-crontab']
-test_requirements = common + ['nose>=1.0', 'mock', 'coverage', 'flake8']
+test_requirements = common + ['tox>=1.8', 'mock', 'coverage', 'flake8']
 
 setup(
     name='cloudrunner_server',
