@@ -20,7 +20,7 @@ all: sdist prepare
 	./scripts/rpm/rpm-mock.sh fedora-19-x86_64
 	./scripts/rpm/rpm-mock.sh fedora-20-x86_64
 	./scripts/rpm/rpm-mock.sh fedora-21-x86_64
-	rm -rf cloudrunner-server.spec
+	rm -rf cloudrunner_server.spec
 
 .PHONY: sdist
 sdist: clean
@@ -33,42 +33,42 @@ rpm: sdist
 	rm -rf ~/rpmbuild/RPMS/noarch/cloudrunner-server*.rpm
 	rm -rf ~/rpmbuild/SRPMS/cloudrunner-server*.src.rpm
 	cp dist/cloudrunner_server*.tar.gz ~/rpmbuild/SOURCES/
-	cp cloudrunner-server.spec.in cloudrunner-server.spec
-	sed -i 's/^Release:.*/Release:        $(RELEASE)%{?dist}/g' cloudrunner-server.spec
-	sed -i 's/^Version:.*/Version:        $(VERSION)/g' cloudrunner-server.spec
-	rpmbuild -ba cloudrunner-server.spec
-	rm cloudrunner-server.spec
+	cp cloudrunner-server.spec.in cloudrunner_server.spec
+	sed -i 's/^Release:.*/Release:        $(RELEASE)%{?dist}/g' cloudrunner_server.spec
+	sed -i 's/^Version:.*/Version:        $(VERSION)/g' cloudrunner_server.spec
+	rpmbuild -ba cloudrunner_server.spec
+	rm cloudrunner_server.spec
 
 .PHONY: prepare
 prepare:
-	cp cloudrunner-server.spec.in cloudrunner-server.spec
-	sed -i 's/^Release:.*/Release:        $(RELEASE)%{?dist}/g' cloudrunner-server.spec
-	sed -i 's/^Version:.*/Version:        $(VERSION)/g' cloudrunner-server.spec
+	cp cloudrunner-server.spec.in cloudrunner_server.spec
+	sed -i 's/^Release:.*/Release:        $(RELEASE)%{?dist}/g' cloudrunner_server.spec
+	sed -i 's/^Version:.*/Version:        $(VERSION)/g' cloudrunner_server.spec
 
 .PHONY: rpm-el6_x64
 rpm-el6_x64: sdist prepare
 	./scripts/rpm/rpm-mock.sh epel-6-x86_64
-	rm cloudrunner-server.spec
+	rm cloudrunner_server.spec
 
 .PHONY: rpm-el7_x64
 rpm-el7_x64: sdist prepare
 	./scripts/rpm/rpm-mock.sh epel-7-x86_64
-	rm cloudrunner-server.spec
+	rm cloudrunner_server.spec
 
 .PHONY: rpm-f19_x64
 rpm-f19_x64: sdist prepare
 	./scripts/rpm/rpm-mock.sh fedora-19-x86_64
-	rm cloudrunner-server.spec
+	rm cloudrunner_server.spec
 
 .PHONY: rpm-f20_x64
 rpm-f20_x64: sdist prepare
 	./scripts/rpm/rpm-mock.sh fedora-20-x86_64
-	rm cloudrunner-server.spec
+	rm cloudrunner_server.spec
 
 .PHONY: rpm-f21_x64
 rpm-f21_x64: sdist prepare
 	./scripts/rpm/rpm-mock.sh fedora-21-x86_64
-	rm cloudrunner-server.spec
+	rm cloudrunner_server.spec
 
 .PHONY: clean
 clean:
