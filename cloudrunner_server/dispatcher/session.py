@@ -180,7 +180,7 @@ class JobSession(Thread):
             self._execute()
 
         result = {}
-        env = {}
+        env = self.env
         msg_ret = []
 
         try:
@@ -258,6 +258,7 @@ class JobSession(Thread):
                                       result=result,
                                       env=env)
             self._reply(message)
+
             self.env_out.put((env, self.file_exports))
 
         self.session_event.set()
@@ -490,7 +491,7 @@ class JobSession(Thread):
                             ['%s%s' % (sel, val) for val in param_val])
                     else:
                         repl_params = sel + param_val
-                    self.task.target = self.task.replace(
+                    self.task.target = self.task.target.replace(
                         sel + param, repl_params)
 
 
