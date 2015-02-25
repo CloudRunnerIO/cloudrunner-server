@@ -10,12 +10,6 @@ SERVICE CONFIGURATION
 
 * Initial setup
 
-Decide whether to use multi-tenant or single-tenant:
-
-.. code-block:: bash
-
-    cloudrunner-master config set security.use_org=True|False
-
 Then configure server
 
 .. code-block:: bash
