@@ -13,6 +13,32 @@ SERVICE CONFIGURATION
 
 Add CloudRunner Yum Repo
 
+.. code-block::
+    
+    # Create the file /etc/yum.repos.d/cloudrunner-stable.repo
+    # with the following contents:
+    
+    # For Centos 6 (EPEL6):
+
+    [cloudrunner-stable]
+    name=CloudRunner Stable Repo
+    baseurl=https://user:pass@repo-stable.cloudrunner.io/el6/
+    # mirrorlist=
+    enabled=1
+    gpgcheck=1
+    gpgkey=https://repo-stable.cloudrunner.io/repo-stable.cloudrunner.io.pub.asc
+
+
+    # For Centos 7 (EPEL7):
+
+    [cloudrunner-stable]
+    name=CloudRunner Stable Repo
+    baseurl=https://user:pass@repo-stable.cloudrunner.io/el7/
+    # mirrorlist=
+    enabled=1
+    gpgcheck=1
+    gpgkey=https://repo-stable.cloudrunner.io/repo-stable.cloudrunner.io.pub.asc
+
 
 then install the packages
 
