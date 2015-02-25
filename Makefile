@@ -5,6 +5,7 @@ BRANCH := $(shell ./scripts/rpm/getbranch.sh | sed 's|-|_|' | sed 's|\.||')
 VERSION := $(shell ./scripts/rpm/getrev.sh | cut -d "." -f 1-3 )
 RELEASE := $(shell ./scripts/rpm/getrev.sh | cut -d "." -f 4 )
 
+SRC=src/
 PY=`python -c 'import sys; print sys.version[:3]'`
 __python=$(shell V=$$(python -V 2>&1 | awk '{ print $$2 }' | sed 's/\(.*\)\..*/\1/g'); if [[ "$$V" < '2.6' ]]; then echo 'python2.6'; else echo 'python$$PY'; fi)
 
@@ -13,8 +14,13 @@ __python=$(shell V=$$(python -V 2>&1 | awk '{ print $$2 }' | sed 's/\(.*\)\..*/\
 default_target: all
 
 .PHONY: all
-all: clean
-	$(__python) setup.py build
+all: sdist prepare
+	./scripts/rpm/rpm-mock.sh epel-6-x86_64
+	./scripts/rpm/rpm-mock.sh epel-7-x86_64
+	./scripts/rpm/rpm-mock.sh fedora-19-x86_64
+	./scripts/rpm/rpm-mock.sh fedora-20-x86_64
+	./scripts/rpm/rpm-mock.sh fedora-21-x86_64
+	rm -rf cloudrunner-server.spec
 
 .PHONY: sdist
 sdist: clean
@@ -33,45 +39,36 @@ rpm: sdist
 	rpmbuild -ba cloudrunner-server.spec
 	rm cloudrunner-server.spec
 
-.PHONY: rpm-el5_64
-rpm-el5_64: sdist
-	./scripts/rpm/rpm-mock.sh epel-5-x86_64
+.PHONY: prepare
+prepare:
+	cp cloudrunner-server.spec.in cloudrunner-server.spec
+	sed -i 's/^Release:.*/Release:        $(RELEASE)%{?dist}/g' cloudrunner-server.spec
+	sed -i 's/^Version:.*/Version:        $(VERSION)/g' cloudrunner-server.spec
 
-.PHONY: rpm-el6_64
-rpm-el6_64: sdist
+.PHONY: rpm-el6_x64
+rpm-el6_x64: sdist prepare
 	./scripts/rpm/rpm-mock.sh epel-6-x86_64
+	rm cloudrunner-server.spec
 
-.PHONY: rpm-f19_64
-rpm-f19_64: sdist
+.PHONY: rpm-el7_x64
+rpm-el7_x64: sdist prepare
+	./scripts/rpm/rpm-mock.sh epel-7-x86_64
+	rm cloudrunner-server.spec
+
+.PHONY: rpm-f19_x64
+rpm-f19_x64: sdist prepare
 	./scripts/rpm/rpm-mock.sh fedora-19-x86_64
+	rm cloudrunner-server.spec
 
-.PHONY: rpm-el5_32
-rpm-el5_32: sdist
-	./scripts/rpm/rpm-mock.sh epel-5-i386
+.PHONY: rpm-f20_x64
+rpm-f20_x64: sdist prepare
+	./scripts/rpm/rpm-mock.sh fedora-20-x86_64
+	rm cloudrunner-server.spec
 
-.PHONY: rpm-el6_32
-rpm-el6_32: sdist
-	./scripts/rpm/rpm-mock.sh epel-6-i386
-
-.PHONY: rpm-f19_32
-rpm-f19_32: sdist
-	./scripts/rpm/rpm-mock.sh fedora-19-i386
-
-.PHONY: userinstall
-userinstall: gen_stubs
-	$(__python) setup.py install --user
-
-.PHONY: test
-test:
-	nosetests cloudrunner_server
-	flake8 cloudrunner_server
-
-.PHONY: docs
-docs:
-	sphinx-build -a -c doc doc/sources/ doc/html
-	mkdir -p build
-	cd doc/html/ && zip -r api-docs.zip .
-	mv doc/html/api-docs.zip build/
+.PHONY: rpm-f21_x64
+rpm-f21_x64: sdist prepare
+	./scripts/rpm/rpm-mock.sh fedora-21-x86_64
+	rm cloudrunner-server.spec
 
 .PHONY: clean
 clean:
@@ -79,3 +76,7 @@ clean:
 	echo "Remove other temporary files..."
 	rm -rf easy_install* src/*.egg-info .coverage
 	rm -rf build
+
+.PHONY: test
+test:
+	tox

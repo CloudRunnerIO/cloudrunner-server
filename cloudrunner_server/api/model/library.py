@@ -27,7 +27,7 @@ from cloudrunner_server.api.model.exceptions import QuotaExceeded
 class Repository(TableBase):
     __tablename__ = 'repositories'
     __table_args__ = (
-        UniqueConstraint("name", 'org_id', name="name__org_id"),
+        UniqueConstraint('org_id', 'name'),
     )
 
     id = Column(Integer, primary_key=True)
@@ -58,7 +58,8 @@ class Repository(TableBase):
         )
 
     def editable(self, ctx):
-        return self.owner_id == int(ctx.user.id) and self.enabled
+        return self.owner_id == int(ctx.user.id) and self.enabled and \
+            self.type == "cloudrunner"
 
     def removable(self, ctx):
         return self.owner_id == int(ctx.user.id)
@@ -120,9 +121,8 @@ class Folder(TableBase):
     __tablename__ = 'folders'
 
     __table_args__ = (
-        UniqueConstraint("name", "parent_id", name="name__parent_id"),
-        UniqueConstraint("full_name", 'repository_id',
-                         name="name__repository_id"),
+        UniqueConstraint("name", "parent_id"),
+        UniqueConstraint("full_name", 'repository_id'),
     )
 
     id = Column(Integer, primary_key=True)
@@ -142,6 +142,16 @@ class Folder(TableBase):
     scripts = relationship('Script')
     repository = relationship(Repository, backref=backref('folders',
                                                           cascade="delete"))
+
+    @staticmethod
+    def find(ctx, full_path):
+        repository, _, path = full_path.lstrip('/').partition("/")
+
+        path = "/" + path
+        q = Folder.visible(ctx, repository).filter(
+            Folder.full_name == path)
+
+        return q
 
     @staticmethod
     def visible(ctx, repository, parent=None):
@@ -170,12 +180,15 @@ class Folder(TableBase):
             )  # noqa
         return q
 
+    def can_edit(self, ctx,):
+        return (self.repository.owner_id == ctx.user.id and
+                self.repository.enabled == True
+                and self.repository.type == "cloudrunner")  # noqa
+
 
 class Revision(TableBase):
     __tablename__ = 'revisions'
-    __table_args__ = (
-        UniqueConstraint("script_id", "version", name="script_id__version"),
-    )
+    __table_args__ = (UniqueConstraint("script_id", "version"), )
 
     id = Column(Integer, primary_key=True)
     created_at = Column(DateTime, default=func.now())
@@ -213,7 +226,7 @@ def revision_before_insert(mapper, connection, target):
 class Script(TableBase):
     __tablename__ = 'scripts'
     __table_args__ = (
-        UniqueConstraint("name", "folder_id", name="name__folder_id"),
+        UniqueConstraint("name", "folder_id"),
     )
 
     id = Column(Integer, primary_key=True)

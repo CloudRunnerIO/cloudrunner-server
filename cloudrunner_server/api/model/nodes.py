@@ -27,7 +27,7 @@ from cloudrunner_server.api.model.exceptions import QuotaExceeded
 class Node(TableBase):
     __tablename__ = 'nodes'
     __table_args__ = (
-        UniqueConstraint("name", 'org_id', name="name__org_id"),
+        UniqueConstraint("name", 'org_id'),
     )
 
     id = Column(Integer, primary_key=True)
@@ -96,7 +96,7 @@ node2group_rel = Table('node2group', TableBase.metadata,
 class NodeGroup(TableBase):
     __tablename__ = 'nodegroups'
     __table_args__ = (
-        UniqueConstraint("name", 'org_id', name="name__org_id"),
+        UniqueConstraint("name", 'org_id'),
     )
 
     id = Column(Integer, primary_key=True)
@@ -122,3 +122,39 @@ class NodeTag(TableBase):
 
     node_id = Column(Integer, ForeignKey(Node.id))
     node = relationship(Node, backref=backref("tags", cascade="delete"))
+
+
+class ApiService(TableBase):
+    __tablename__ = 'apiservices'
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String(1000))
+
+    username = Column(String(1000))
+    password = Column(String(1000))
+    key = Column(String(1000))
+
+    org_id = Column(Integer, ForeignKey(Org.id))
+    org = relationship(Org, backref=backref("reservations",
+                                            cascade="delete"))
+
+
+class Reservation(TableBase):
+    __tablename__ = 'nodereservations'
+
+    id = Column(Integer, primary_key=True)
+    created_at = Column(DateTime)
+
+    address = Column(String(255))
+    username = Column(String(255))
+    password = Column(String(255))
+    ssh_pubkey = Column(String(1000))
+    disable_pass = Column(Boolean)
+
+    node_id = Column(Integer, ForeignKey(Node.id))
+    node = relationship(Node, backref=backref("reservations",
+                                              cascade="delete"))
+
+    service_id = Column(Integer, ForeignKey(ApiService.id))
+    service = relationship(ApiService, backref=backref("reservations",
+                                                       cascade="delete"))

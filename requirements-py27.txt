@@ -1,8 +1,8 @@
-cloudrunner>=1.1.3
+cloudrunner>=1.1
 pecan
 pytz
 pyzmq
-sqlalchemy
+sqlalchemy>=0.7
 httplib2
 M2Crypto
 redis
@@ -10,3 +10,4 @@ msgpack-python>=0.4
 requests
 python-crontab
 braintree
+aerospike>=1.0.35

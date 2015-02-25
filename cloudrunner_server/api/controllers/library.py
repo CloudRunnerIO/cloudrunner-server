@@ -20,6 +20,7 @@ import pytz
 
 from pecan import expose, request, response, redirect
 from pecan.hooks import HookController
+from sqlalchemy.orm import make_transient
 
 from cloudrunner.core.parser import parse_sections
 from cloudrunner_server.api.decorators import wrap_command
@@ -415,7 +416,7 @@ class Library(HookController):
                                 repo.credentials.auth_args)
                 last_rev = scr.contents(request)
                 try:
-                    contents, last_modified, rev = plugin.contents(
+                    contents, last_modified, rev, etag = plugin.contents(
                         repo.name, full_path, last_modified=last_rev.created_at
                         if last_rev else None)
                     exists = scr.contents(request, rev=rev)
@@ -591,6 +592,68 @@ class Library(HookController):
         if not folder:
             return O.error(msg="Folder '%s' not found" % full_path)
         request.db.delete(folder)
+
+    @expose('json')
+    @wrap_command(Script)
+    def copy(self, *args, **kwargs):
+        src = kwargs['from']
+        dest = kwargs['to']
+
+        script = Script.find(request, src).first()
+        if not script:
+            return O.error(msg="Cannot find script %s" % src)
+
+        folder = Folder.find(request, dest).first()
+        new_name = script.name
+        if not folder:
+            dest, _, new_name = dest.rpartition("/")
+            folder = Folder.find(request, dest).first()
+            if not folder:
+                return O.error(msg="Invalid path %s" % dest)
+
+        if not folder.can_edit(request):
+            return O.error(msg="Cannot copy to %s" % dest)
+
+        rev = script.contents(request)
+        rev.id = None
+        script.id = None
+
+        request.db.expunge(script)
+        request.db.expunge(rev)
+        make_transient(script)
+        make_transient(rev)
+        script.history.append(rev)
+        script.name = new_name
+        rev.version = 1
+        rev.draft = False
+        rev.created_at = datetime.now()
+
+        script.folder = folder
+        request.db.add(script)
+        request.db.add(rev)
+
+    @expose('json')
+    @wrap_command(Script)
+    def move(self, *args, **kwargs):
+        src = kwargs['from']
+        dest = kwargs['to']
+
+        script = Script.find(request, src).first()
+        if not script:
+            return O.error(msg="Cannot find script %s" % src)
+
+        folder = Folder.find(request, dest).first()
+        if not folder:
+            dest, _, new_name = dest.rpartition("/")
+            folder = Folder.find(request, dest).first()
+            if not folder:
+                return O.error(msg="Invalid path %s" % dest)
+
+            script.name = new_name
+        if not folder.can_edit(request):
+            return O.error(msg="Cannot copy to %s" % dest)
+        script.folder = folder
+        request.db.add(script)
 
 
 def created_at_eval(c):

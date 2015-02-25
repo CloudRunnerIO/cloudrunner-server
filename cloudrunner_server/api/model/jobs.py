@@ -32,7 +32,7 @@ LOG = logging.getLogger()
 class Job(TableBase):
     __tablename__ = 'cronjobs'
     __table_args__ = (
-        UniqueConstraint("name", "owner_id", name="name__owner_id"),
+        UniqueConstraint("name", "owner_id"),
     )
 
     id = Column(Integer, primary_key=True)

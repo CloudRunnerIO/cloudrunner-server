@@ -178,7 +178,7 @@ user2group_rel = Table('user2group', TableBase.metadata,
 class Group(TableBase):
     __tablename__ = 'groups'
     __table_args__ = (
-        UniqueConstraint("name", 'org_id', name="name__org_id"),
+        UniqueConstraint("name", 'org_id'),
     )
 
     id = Column(Integer, primary_key=True)

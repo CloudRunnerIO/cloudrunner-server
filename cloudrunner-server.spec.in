@@ -61,14 +61,6 @@ This package contains common libs and files.
 #CloudRunner engine for running scripts in cloud environment.
 #This package contains Dispatcher node service software.
 
-%package plugin-openstack-master
-Summary:    CloudRunner OpenStack plugin
-Group:      Cloud tools
-Requires:   %{name} = %{version}-%{release}
-%description plugin-openstack-master
-CloudRunner engine for running scripts in cloud environment.
-This package contains OpenStack auto-configure plugin for Master
-
 %prep
 %setup -q -n %{unmanaged_name}-%{version}
 
@@ -165,11 +157,10 @@ fi
 
 %{python_sitelib}/cloudrunner_server/db
 
-%files plugin-openstack-master
-%{python_sitelib}/cloudrunner_server/plugins/auth/openstack_verifier.py
-%{_bindir}/cloudrunner-plugins-openstack-master
-
 %changelog
+* Sun Feb 22 2015 Tihomir Trifonov <ttrifonov at cloudrunner dot io> - 1.1.0-1
+- Cleanup, version 1.1.0
+
 * Fri Sep 12 2014 Tihomir Trifonov <ttrifonov at cloudrunner dot io> - 1.0-1
 - removed stale plugins, added new binaries
 

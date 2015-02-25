@@ -14,6 +14,7 @@
 
 from functools import wraps, partial
 import logging
+import re
 from sqlalchemy.exc import IntegrityError
 from pecan import request, response, core
 
@@ -21,11 +22,11 @@ from cloudrunner_server.api.util import JsonOutput as O
 from cloudrunner_server.api.model.exceptions import QuotaExceeded
 
 LOG = logging.getLogger()
+DUPL_SEARCH = re.compile(r'\'(.*)-\d+')
 
 
 def wrap_command(model=None, model_name=None, method=None, key_error=None,
-                 generic_error=None,
-                 integrity_error=None):
+                 generic_error=None, integrity_error=None, dup_key_index=0):
 
     def decorator(f):
         kw = dict(model=model,
@@ -92,11 +93,19 @@ def wrap_command(model=None, model_name=None, method=None, key_error=None,
                 if integrity_error and callable(integrity_error):
                     return integrity_error(ierr)
 
-                if isinstance(ierr.orig.args,
-                              tuple) and len(ierr.orig.args) > 1:
-                    msg = ierr.orig.args[1]
-                elif hasattr(ierr.orig, 'message'):
-                    # generic
+                try:
+                    if isinstance(ierr.orig.args,
+                                  tuple) and len(ierr.orig.args) > 1:
+                        if ierr.orig.args[0] == 1062:
+                            msg = "Duplicate entry: %s" % (
+                                DUPL_SEARCH.findall(
+                                    ierr.orig.args[1])[dup_key_index])
+                        else:
+                            msg = ierr.orig.args[1]
+                    elif hasattr(ierr.orig, 'message'):
+                        # generic
+                        msg = "Duplicate entry into database. Check data"
+                except:
                     msg = "Duplicate entry into database. Check data"
                 return O.error(msg=msg, reason='duplicate')
 

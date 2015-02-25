@@ -95,6 +95,7 @@ class Workflows(HookController):
         response.cache_control.max_age = 1
 
         sections = parser.parse_sections(revision.content)
+
         for s in sections:
             atts = []
             include_before = []
@@ -110,6 +111,11 @@ class Workflows(HookController):
                                               for scr_name in vals])
                     elif arg == 'attach':
                         atts.extend([dict(path=scr_name) for scr_name in vals])
+                    elif arg == 'timeout':
+                        try:
+                            s.timeout = int(vals[0])
+                        except:
+                            pass
                     else:
                         options[arg] = vals
 

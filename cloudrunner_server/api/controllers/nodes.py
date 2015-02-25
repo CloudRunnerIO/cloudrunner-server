@@ -15,11 +15,13 @@
 import json
 import logging
 from pecan import expose, request, conf
+import threading
 
 from cloudrunner_server.api.decorators import wrap_command
 from cloudrunner_server.api.util import JsonOutput as O
 from cloudrunner_server.api.policy.decorators import check_policy
-from cloudrunner_server.api.model.nodes import Node, NodeGroup, Org
+from cloudrunner_server.api.model.nodes import (Node, NodeGroup, Org,
+                                                Reservation)
 from cloudrunner_server.master.functions import CertController
 
 LOG = logging.getLogger()
@@ -44,14 +46,67 @@ class Nodes(object):
                             key=lambda g: g.name)
             return O._anon(nodes=[n.serialize(
                 skip=['id', 'org_id'],
-                rel=[('meta', 'meta', json.loads),
-                     ('tags', 'tags', lambda lst: [x.value for x in lst])])
+                rel=[('meta', 'meta', lambda n: json.loads(n) if n else {}),
+                     ('tags', 'tags', lambda lst: [x.value for x in lst]
+                      if lst else [])])
                 for n in nodes],
                 groups=[g.serialize(
                     skip=['id', 'org_id'],
                     rel=[('nodes', 'members', _serialize)]
                 ) for g in groups],
                 quota=dict(allowed=request.user.tier.nodes))
+
+    @nodes.when(method='POST', template='json')
+    @check_policy('is_admin')
+    @nodes.wrap_create()
+    def register(self, node=None, **kwargs):
+        return O.error(msg="Not implemented")
+        node = node or kwargs['node']
+        org = request.db.query(Org).filter(
+            Org.name == request.user.org).one()
+        n = Node(name=node, org=org)
+        r = Reservation(node=n, username=kwargs['username'],
+                        password=kwargs['password'],
+                        ssh_pubkey=kwargs['ssh_pubkey'],
+                        disable_pass=kwargs.get('disable_pass')
+                        in ['1', 'true', 'True'])
+        request.db.add(n)
+        request.db.add(r)
+        request.db.commit()
+        t = threading.Thread(target=node_registration, args=n.serialize(
+            rel=['reservations', 'reservations']))
+        t.start()
+        return O.success(msg="Node registration started")
+
+    @nodes.when(method='PUT', template='json')
+    @check_policy('is_admin')
+    @nodes.wrap_modify()
+    def approve(self, node=None, **kwargs):
+        node = node or kwargs['node']
+        n = Node.visible(request).filter(Node.name == node,
+                                         Node.approved == False).first()  # noqa
+        if not n:
+            return O.error(msg="Node not found")
+        cert = CertController(conf.cr_config)
+        msg, crt_file = cert.sign_node(n.name, ca=request.user.org)
+        if not crt_file:
+            LOG.error(msg)
+            return O.error(msg="Cannot sign node")
+
+    @nodes.when(method='DELETE', template='json')
+    @check_policy('is_admin')
+    @nodes.wrap_modify()
+    def revoke(self, node):
+        n = Node.visible(request).filter(Node.name == node).first()
+        if not n:
+            return O.error(msg="Node not found")
+        cert = CertController(conf.cr_config)
+        if n.approved:
+            [m[1] for m in cert.revoke(n.name, ca=request.user.org)]
+            request.db.delete(n)
+        else:
+            [m[1] for m in cert.clear_req(n.name, ca=request.user.org)]
+            request.db.delete(n)
 
     @expose('json', generic=True)
     @check_policy('is_admin')
@@ -122,36 +177,7 @@ class Nodes(object):
 
         request.db.delete(group)
 
-    @nodes.when(method='PUT', template='json')
-    @check_policy('is_admin')
-    @nodes.wrap_modify()
-    def approve(self, node=None, **kwargs):
-        node = node or kwargs['node']
-        n = Node.visible(request).filter(Node.name == node,
-                                         Node.approved == False).first()  # noqa
-        if not n:
-            return O.error(msg="Node not found")
-        cert = CertController(conf.cr_config)
-        msg, crt_file = cert.sign_node(n.name, ca=request.user.org)
-        if not crt_file:
-            LOG.error(msg)
-            return O.error(msg="Cannot sign node")
 
-    @nodes.when(method='DELETE', template='json')
-    @check_policy('is_admin')
-    @nodes.wrap_modify()
-    def revoke(self, node):
-        n = Node.visible(request).filter(Node.name == node).first()
-        if not n:
-            return O.error(msg="Node not found")
-        cert = CertController(conf.cr_config)
-        if n.approved:
-            msgs = [m[1] for m in cert.revoke(n.name, ca=request.user.org)]
-            if ("Certificate for node [%s] revoked" % n.name not in msgs):
-                LOG.error(msgs)
-                return O.error(msg="Cannot revoke node")
-        else:
-            msgs = [m[1] for m in cert.clear_req(n.name, ca=request.user.org)]
-            if ("Request for node [%s] deleted" % n.name not in msgs):
-                LOG.error(msgs)
-                return O.error(msg="Cannot delete node request")
+def node_registration(data):
+
+    print data

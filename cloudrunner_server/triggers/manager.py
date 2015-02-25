@@ -268,7 +268,7 @@ class TriggerManager(Daemon):
                     if arg == 'include-after':
                         for scr in scr_names:
                             s = _parse_script_name(ctx, scr)
-                            parts.insert(ins, s.content)
+                            parts.append(s.content)
 
                 if section.args.attach:
                     atts = section.args.attach
