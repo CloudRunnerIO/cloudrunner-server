@@ -10,6 +10,17 @@ SERVICE CONFIGURATION
 
 * Initial setup
 
+
+Add CloudRunner Yum Repo
+
+
+then install the packages
+
+.. code-block:: bash
+
+    yum install cloudrunner-server
+
+
 Then configure server
 
 .. code-block:: bash
