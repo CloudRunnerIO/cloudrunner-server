@@ -1,5 +1,5 @@
 cloudrunner>=1.1
-pecan
+pecan>=0.8
 pytz
 pyzmq
 sqlalchemy>=0.7
