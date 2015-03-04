@@ -441,8 +441,8 @@ def main():
                     if isinstance(printables[i], list):
                         printables[i] = '\n'.join(
                             concat(p) for p in printables[i])
-                printables = [str(p) for p in printables]
-                printers[_type]('\n'.join(printables))
+                printables = [concat(p) for p in printables]
+                print printers[_type]('\n'.join([p for p in printables]))
             else:
                 print printables
     except Exception, ex:
