@@ -210,6 +210,7 @@ def revision_before_insert(mapper, connection, target):
         scr_id = target.script.id
     else:
         scr_id = None
+
     if scr_id and not target.version and not target.draft:
         q = select(
             [func.coalesce(
