@@ -219,6 +219,10 @@ class Auth(HookController):
                 for error in customer_reply.errors.deep_errors:
                     print vars(error)
 
+        bcc = []
+        if hasattr(conf, "registration_bcc") and conf.registration_bcc:
+            bcc = [conf.registration_bcc]
+
         html = render('email/activate.html',
                       dict(ACTION_URL=ACTION_URL, KEY=key.value))
         requests.post(
@@ -226,6 +230,7 @@ class Auth(HookController):
             auth=("api", "key-276qmsiyxi8z5tvie2bvxm2jhfxkhjh9"),
             data={"from": "CloudRunner.IO Team <no-reply@cloudrunner.io>",
                   "to": [email],
+                  "bcc": [bcc],
                   "subject": "[CloudRunner.IO] Complete your registration",
                   "html": html})
 

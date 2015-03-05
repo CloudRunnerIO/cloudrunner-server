@@ -252,7 +252,7 @@ class Script(TableBase):
         else:
             _rev = ctx.db.query(Revision).filter(
                 Revision.script_id == self.id,
-                func.coalesce(Revision.draft, False) != 1  # noqa
+                func.coalesce(Revision.draft, False) != False  # noqa
                 ).order_by(Revision.created_at.desc()).first()
         if _rev:
             return _rev
