@@ -106,6 +106,12 @@ def main():
     c_subcmd.add_parser('list_ca', help='List organizations/'
                         'Sub-CA certificates')
 
+    cert_update_ca = c_subcmd.add_parser('update_ca', help='Update CA keys')
+
+    cert_update_ca.add_argument('ca', help='Org/Sub-CA name')
+    cert_update_ca.add_argument('-k', '--ca-key', help='Org/Sub-CA key file')
+    cert_update_ca.add_argument('-c', '--ca-cert', help='Org/Sub-CA cert file')
+
     cert_auto_sign = c_subcmd.add_parser('autosign',
                                          help='Automatically sign a node '
                                          'certificate with the specified name,'

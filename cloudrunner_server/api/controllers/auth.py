@@ -18,6 +18,7 @@ import requests
 from pecan import conf, expose, request, render
 from pecan.hooks import HookController
 from sqlalchemy.exc import IntegrityError
+from os import path, unlink
 
 from cloudrunner_server.api.decorators import wrap_command
 from cloudrunner_server.api.hooks.braintree_hook import BrainTreeHook
@@ -34,14 +35,24 @@ LOG = logging.getLogger()
 MAX_EXP = 3 * 30 * 24 * 60  # 3 months/90 days
 
 
-@event.listens_for(Org, 'after_insert')
-def org_after_insert(mapper, connection, target):
+@event.listens_for(Org, 'before_insert')
+def org_before_insert(mapper, connection, target):
     try:
         ccont = CertController(conf.cr_config, db=connection)
         ccont.create_ca(target.name)
+
+        ca_dir = path.join(ccont.ca_path, 'org')
+
+        org_priv_key_file = path.join(ca_dir, target.name + '.key')
+        org_crt_file = path.join(ca_dir, target.name + ".ca.crt")
+
+        target.cert_ca = open(org_crt_file).read()
+        target.cert_key = open(org_priv_key_file).read()
+        unlink(org_crt_file)
+        unlink(org_priv_key_file)
     except Exception, ex:
-        if LOG:
-            LOG.exception(ex)
+        LOG.error("Cannot create certificates for org %s" % target.name)
+        LOG.exception(ex)
 
 
 class Auth(HookController):
@@ -190,31 +201,35 @@ class Auth(HookController):
             raise
         # send validation email
 
-        ACTION_URL = "%s/index.html#activate/%s" % (
-            conf.DASH_SERVER_URL.rstrip('/'), key.value)
+        ACTION_URL = "%s/index.html#activate/%s/%s" % (
+            conf.DASH_SERVER_URL.rstrip('/'), user.username, key.value)
 
         # Billing
         token = kwargs.get('payment_nonce')
-        customer_reply = request.braintree.Customer.create({
+        args = {
             "first_name": kwargs['first_name'],
             "last_name": kwargs['last_name'],
             "email": email,
-            "credit_card": {
+        }
+        if token:
+            args['credit_card'] = {
                 "payment_method_nonce": token,
                 "options": {
                     "verify_card": True,
                 }
             }
-        })
+
+        customer_reply = request.braintree.Customer.create(args)
         if plan_id != 'free':
             if customer_reply.is_success:
                 customer = request.braintree.Customer.find(
                     customer_reply.customer.id)
-                token = customer.credit_cards[0].token
-                request.braintree.Subscription.create({
-                    "payment_method_token": token,
-                    "plan_id": plan_id
-                })
+                if customer.credit_cards:
+                    token = customer.credit_cards[0].token
+                    request.braintree.Subscription.create({
+                        "payment_method_token": token,
+                        "plan_id": plan_id
+                    })
             else:
                 for error in customer_reply.errors.deep_errors:
                     print vars(error)
@@ -237,15 +252,26 @@ class Auth(HookController):
         return O.success(msg="Check your email how to activate your account")
 
     @expose('json')
-    @wrap_command(User, method='create', model_name='Account')
+    @wrap_command(User, method='activate', model_name='Account')
     def activate(self, **kwargs):
         if request.method != "POST":
             return O.none()
         if not kwargs:
             kwargs = request.json
+        username = kwargs['user']
         key = kwargs['code']
         user = request.db.query(User).join(Org, ApiKey).filter(
-            ApiKey.value == key, ApiKey.enabled == True).one()  # noqa
+            User.username == username,
+            ApiKey.value == key, ApiKey.enabled == True).first()  # noqa
+        if not user:
+            user = request.db.query(User).join(Org, ApiKey).filter(
+                User.username == username,
+                User.enabled == True).first()  # noqa
+            if user:
+                return O.error(msg="Already enabled")
+            else:
+                return O.error(msg="User not found")
+
         user.enabled = True
         api_key = request.db.query(ApiKey).filter(ApiKey.value == key).one()
         new_key = ApiKey(user=user)

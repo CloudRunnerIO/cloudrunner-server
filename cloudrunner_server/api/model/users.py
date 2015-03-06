@@ -39,6 +39,7 @@ class Org(TableBase):
     name = Column(String(100), unique=True)
     cert_ca = Column(Text)
     cert_key = Column(Text)
+
     enabled = Column(Boolean)
     tier_id = Column(Integer, ForeignKey('usagetiers.id'), nullable=False)
 
