@@ -95,7 +95,8 @@ class Admin(Thread):
                     rep = self.process(req)
                     if not rep:
                         continue
-                    LOG.info("ADMIN_TOWER reply: %s" % rep)
+                    LOG.info("ADMIN_TOWER reply: %s:%s" %
+                             (rep.control, rep.status))
                     rep.hdr.ident = req.hdr.ident
                     packets.append(rep)
                 while packets:
@@ -114,8 +115,6 @@ class Admin(Thread):
     def process(self, req):
         LOG.info("Received admin req: %s %s" % (req.control, req.node))
 
-        if req.control == 'ECHO':
-            return [req.node, req.data or 'ECHO']
         if req.control == 'REGISTER':
             try:
                 tags = []
@@ -165,6 +164,7 @@ class Admin(Thread):
 
                 for tag in tags:
                     t = NodeTag(value=tag)
+                    self.db.add(t)
                     node.tags.append(t)
 
                 if not self.ccont.can_approve(req.node):
@@ -188,6 +188,8 @@ class Admin(Thread):
                     else:
                         return Control(req.node, 'REJECTED', cert_or_msg)
                 else:
+                    self.db.delete(node)
+                    self.db.commit()
                     return Control(req.node, 'REJECTED', "APPR_FAIL")
             except Exception, ex:
                 self.db.rollback()

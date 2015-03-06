@@ -918,13 +918,13 @@ class Router(Thread):
         t.start()
 
         verify_loc = []
-        ca_path = os.path.dirname(os.path.abspath(self.config.security.ca))
         verify_loc.append(self.config.security.ca)
-        org_dir = os.path.join(ca_path, 'org')
-        for (dir, _, files) in os.walk(org_dir):
-            for _file in files:
-                if _file.endswith('.ca.crt'):
-                    verify_loc.append(os.path.join(dir, _file))
+        # ca_path = os.path.dirname(os.path.abspath(self.config.security.ca))
+        # org_dir = os.path.join(ca_path, 'org')
+        # for (dir, _, files) in os.walk(org_dir):
+        #     for _file in files:
+        #         if _file.endswith('.ca.crt'):
+        #             verify_loc.append(os.path.join(dir, _file))
 
         self.master_repl = TLSZmqServerSocket(
             self.repl_sock,

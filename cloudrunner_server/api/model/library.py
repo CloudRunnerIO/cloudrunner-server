@@ -15,7 +15,7 @@
 from sqlalchemy.sql.expression import func
 from sqlalchemy import (Column, Integer, String, DateTime, Boolean, Text,
                         ForeignKey, UniqueConstraint,
-                        or_, event, select, distinct)
+                        or_, event, select, distinct, cast)
 from sqlalchemy.orm import relationship, backref, aliased
 from .base import TableBase
 from .users import User, Org
@@ -210,11 +210,11 @@ def revision_before_insert(mapper, connection, target):
         scr_id = target.script.id
     else:
         scr_id = None
-    if scr_id and not target.version and not target.draft:
 
+    if scr_id and not target.version and not target.draft:
         q = select(
             [func.coalesce(
-                select([Revision.version + 1], limit=1).
+                select([cast(Revision.version, Integer) + 1], limit=1).
                 where(Revision.script_id == scr_id).
                 group_by(Revision.id).
              having(Revision.id == func.max(Revision.id)).
@@ -252,7 +252,7 @@ class Script(TableBase):
         else:
             _rev = ctx.db.query(Revision).filter(
                 Revision.script_id == self.id,
-                func.coalesce(Revision.draft, 0) != 1  # noqa
+                func.coalesce(Revision.draft, False) != True  # noqa
                 ).order_by(Revision.created_at.desc()).first()
         if _rev:
             return _rev

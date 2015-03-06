@@ -37,7 +37,7 @@ class TaskGroup(TableBase):
 
     @staticmethod
     def unique(ctx):
-        return ctx.db.query(distinct(TaskGroup.id)).join(
+        return ctx.db.query(distinct(TaskGroup.id), Task.created_at).join(
             Task, Run, User, Org).outerjoin(RunNode).filter(
                 Org.name == ctx.user.org)
 

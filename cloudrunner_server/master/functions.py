@@ -50,6 +50,7 @@ except:
     C = 'US'
 
 ENGINE = None
+logging.basicConfig()
 LOG = logging.getLogger("Functions")
 
 
@@ -170,7 +171,13 @@ class CertController(DbMixin):
                 try:
                     csr = m.X509.load_request(os.path.join(_dir, req))
                     subj = csr.get_subject()
-                    yield DATA, "%-40s %s" % (subj.CN, subj.OU)
+                    _org = self.db.query(Org).join(User, ApiKey).filter(
+                        ApiKey.value == subj.OU).first()
+                    if _org:
+                        yield DATA, "%-40s %s" % (subj.CN,
+                                                  _org.name)
+                    else:
+                        yield DATA, "%-40s %s" % (subj.CN, subj.OU)
                     total_cnt += 1
                 except:
                     pass
@@ -275,16 +282,23 @@ class CertController(DbMixin):
             messages.append((TAG, "Signing %s" % node))
             ca_cert_file = os.path.join(self.ca_path, 'org',
                                         ca + '.ca.crt')
+
+            ca_key_file = os.path.join(self.ca_path, 'org', ca + '.key')
             if not os.path.exists(ca_cert_file):
-                messages.append((
-                    ERR, "No CA certificate found "
-                    "for %s" % ca))
-                return messages, None
+                # DB lookup
+                _org = self.db.query(Org).filter(
+                    Org.name == ca).first()
+                if not _org or not (_org.cert_ca and _org.cert_key):
+                    messages.append((
+                        ERR, "No CA certificate found for %s" % ca))
+                    os.unlink(csr_file_name)
+                    return messages, None
+                with open(ca_cert_file, 'w') as f:
+                    f.write(_org.cert_ca)
+                with open(ca_key_file, 'w') as f:
+                    f.write(_org.cert_key)
             try:
-                ca_priv_key = m.RSA.load_key(
-                    os.path.join(self.ca_path, 'org',
-                                 ca + '.key'),
-                    self.pass_cb)
+                ca_priv_key = m.RSA.load_key(ca_key_file, self.pass_cb)
             except Exception, ca_ex:
                 messages.append((
                     ERR,
@@ -674,6 +688,7 @@ basicConstraints = CA:true
 
             open(conf_file, 'w').write(conf)
 
+        # Revoke if exists
         ca_priv_key_file = os.path.join(self.ca_path, 'ca.key')
         subca_priv_key_file = os.path.join(self.ca_path, 'org', ca + '.key')
         ca_cert_file = os.path.join(self.ca_path, 'ca.crt')
@@ -726,6 +741,45 @@ basicConstraints = CA:true
                                 str(s_subj),
                                 self.config.security.cert_pass))
         ret = os.system(create_interm_ca)
+        if ret == 256:
+            # Already exists in index.txt
+            index_file = os.path.join(ca_dir, "index.txt")
+            index_contents = open(index_file).readlines()
+            for line in index_contents:
+                data = line.strip().split("\t")
+                if data[0] != 'V':
+                    continue
+                x_subj = data[-1]
+                tokens = [t for t in x_subj.split("/") if t]
+                x_subj_O = ""
+                x_subj_CN = ""
+                for t in tokens:
+                    k, _, v = t.partition("=")
+                    if k == 'CN':
+                        x_subj_CN = v
+                    if k == 'O':
+                        x_subj_O = v
+
+                if x_subj_CN == s_subj.CN and x_subj_O == s_subj.O:
+                    old_cert_file = os.path.join(ca_dir, "newcerts",
+                                                 data[-3] + '.pem')
+
+                    revoke_interm_ca = ('openssl ca -revoke %s '
+                                        '-config %s '
+                                        '-keyfile "%s" '
+                                        '-cert "%s" '
+                                        '-passin pass:%s -batch' % (
+                                            old_cert_file,
+                                            conf_file,
+                                            ca_priv_key_file,
+                                            ca_cert_file,
+                                            self.config.security.cert_pass))
+                    os.system(revoke_interm_ca)
+                    # Create again
+                    ret = os.system(create_interm_ca)
+
+                    break
+
         os.unlink(subca_csr_file)
         if ret:
             yield ERR, 'Error creating Org CA: %s' % ret
@@ -747,6 +801,51 @@ basicConstraints = CA:true
         for _file in files:
             if _file.endswith('.ca.crt'):
                 yield DATA, _file.replace('.ca.crt', '')
+
+    @yield_wrap
+    def update_ca(self, ca, **kwargs):
+        if not os.path.exists(self.config.security.ca):
+            yield ERR, "CA key missing, probably Master is not configured yet"
+            return
+
+        org_path = os.path.join(self.ca_path, 'org')
+        ca_key = os.path.join(org_path, ca + '.key')
+        ca_crt = os.path.join(org_path, ca + '.ca.crt')
+
+        if kwargs.get("ca_key") and kwargs.get("ca_cert"):
+            # Validate
+            _root_ca_key = m.X509.load_cert(self.config.security.ca)
+            try:
+                m.RSA.load_key(kwargs['ca_key'], self.pass_cb)
+            except:
+                yield ERR, ("Either the key is invalid, or "
+                            "the master password cannot decrypt it")
+                return
+            _ca_crt = m.X509.load_cert(kwargs['ca_cert'])
+
+            _ca_crt.set_pubkey(_ca_crt.get_pubkey())
+            if not _ca_crt.verify(_root_ca_key.get_pubkey()):
+                yield ERR, ("The supplied certificate is not issued by the "
+                            "CloudRunner.IO ROOT CA")
+                return
+            ca_key = open(kwargs['ca_key']).read()
+            ca_crt = open(kwargs['ca_cert']).read()
+
+            _org = self.db.query(Org).filter(Org.name == ca).first()
+
+            if not _org:
+                yield ERR, "Organization %s not found" % ca
+                return
+
+            _org.cert_ca = ca_crt
+            _org.cert_key = ca_key
+
+            self.db.add(_org)
+            self.db.commit()
+
+            yield TAG, "Organization CA keys updated"
+        else:
+            yield ERR, "Keys not provided"
 
     @yield_wrap
     def revoke_ca(self, ca, **kwargs):
@@ -795,14 +894,14 @@ class ConfigController(object):
             for (dir, _, files) in os.walk(ca_path):
                 if files:
                     if not kwargs.get('overwrite', False):
-                        yield ERR, 'The dir %s already exists and ' \
-                            'is not empty. To force creation of ' \
-                            'new certificates there, use the ' \
-                            '--overwrite options' % ca_path
+                        yield ERR, ('The dir %s already exists and '
+                                    'is not empty. To force creation of '
+                                    'new certificates there, use the '
+                                    '--overwrite options' % ca_path)
                         return
                     else:
-                        yield DATA, 'Overwriting existing files in %s' % \
-                            ca_path
+                        yield DATA, ('Overwriting existing files in %s' %
+                                     ca_path)
                         break
         else:
             # Create it
