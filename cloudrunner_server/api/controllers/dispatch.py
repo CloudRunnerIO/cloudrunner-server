@@ -33,6 +33,5 @@ class Dispatch(HookController):
     def active_nodes(self):
         msg = request.zmq("list_active_nodes")
         if getattr(msg, 'control', '') == 'NODES':
-            print vars(msg)
             return O.nodes(_list=msg.nodes)
         return O.nodes(_list=[])
