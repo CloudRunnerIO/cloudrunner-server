@@ -51,8 +51,9 @@ def org_before_insert(mapper, connection, target):
         unlink(org_crt_file)
         unlink(org_priv_key_file)
     except Exception, ex:
-        LOG.error("Cannot create certificates for org %s" % target.name)
-        LOG.exception(ex)
+        if LOG:
+            LOG.error("Cannot create certificates for org %s" % target.name)
+            LOG.exception(ex)
 
 
 class Auth(HookController):
