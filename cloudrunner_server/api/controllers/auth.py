@@ -196,9 +196,23 @@ class Auth(HookController):
         try:
             request.db.commit()
         except IntegrityError, ierr:
-            LOG.error(ierr)
+            if hasattr(ierr, 'orig'):
+                LOG.error(ierr.orig)
+            else:
+                LOG.error(vars(ierr))
             request.db.rollback()
-            return O.error(msg="Duplicate", reason="duplicate")
+            if "uq_organizations_name" in str(ierr):
+                return O.error(
+                    msg="Ouch, someone already registered that username. "
+                    "Please choose another.", reason="duplicate")
+            elif "uq_users_email" in str(ierr):
+                return O.error(
+                    msg="The email is already registered. "
+                    "Please, sign-in.", reason="duplicate")
+            else:
+                return O.error(msg="Ouch, cannot register user. Try again "
+                               "later or contact us for help.",
+                               reason="duplicate")
         except:
             raise
         # send validation email
