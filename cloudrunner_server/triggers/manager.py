@@ -332,6 +332,8 @@ class TriggerManager(Daemon):
             task_runs = list(task.runs)
             task.id = None
             task.uuid = None
+            task.status = LOG_STATUS.Running
+            task.exit_code = -99
             self.db.expunge(task)
             make_transient(task)
             to_remove = []
@@ -360,6 +362,7 @@ class TriggerManager(Daemon):
 
                 run.id = None
                 run.uuid = None
+                run.exit_code = -99
                 run.exec_start = timestamp()
                 run.exec_user_id = ctx.user.id
                 self.db.expunge(run)

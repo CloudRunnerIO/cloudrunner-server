@@ -115,6 +115,7 @@ class Auth(HookController):
         cache.add_token(username, cached_token, expire)
 
         return O.login(user=username,
+                       email=user.email,
                        email_hash=email_hash,
                        token=token.value,
                        expire=token.expires_at,
