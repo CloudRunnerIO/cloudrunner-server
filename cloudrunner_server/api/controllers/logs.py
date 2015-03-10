@@ -56,6 +56,7 @@ class Logs(HookController):
         cache = CacheRegistry()
         max_score = 0
         uuids = []
+        total_logs = 0
         with cache.reader(request.user.org) as c:
             if etag:
                 max_score, uuids = c.get_uuid_by_score(min_score=etag)
