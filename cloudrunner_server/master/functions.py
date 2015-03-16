@@ -249,6 +249,21 @@ class CertController(DbMixin):
             for line in messages:
                 yield line
 
+    def restore_org_keys(self, ca):
+        ca_cert_file = os.path.join(self.ca_path, 'org',
+                                    ca + '.ca.crt')
+
+        ca_key_file = os.path.join(self.ca_path, 'org', ca + '.key')
+        _org = self.db.query(Org).filter(
+            Org.name == ca).first()
+        if not _org or not (_org.cert_ca and _org.cert_key):
+            return None, None
+        with open(ca_cert_file, 'w') as f:
+            f.write(_org.cert_ca)
+        with open(ca_key_file, 'w') as f:
+            f.write(_org.cert_key)
+        return ca_cert_file, ca_key_file
+
     def sign_node(self, node, **kwargs):
         is_signed = False
         messages = []
@@ -280,23 +295,20 @@ class CertController(DbMixin):
         try:
             csr = m.X509.load_request(csr_file_name)
             messages.append((TAG, "Signing %s" % node))
+
             ca_cert_file = os.path.join(self.ca_path, 'org',
                                         ca + '.ca.crt')
 
             ca_key_file = os.path.join(self.ca_path, 'org', ca + '.key')
             if not os.path.exists(ca_cert_file):
                 # DB lookup
-                _org = self.db.query(Org).filter(
-                    Org.name == ca).first()
-                if not _org or not (_org.cert_ca and _org.cert_key):
+                ca_cert_file, ca_key_file = self.restore_org_keys(ca)
+
+                if not ca_cert_file:
                     messages.append((
                         ERR, "No CA certificate found for %s" % ca))
                     os.unlink(csr_file_name)
                     return messages, None
-                with open(ca_cert_file, 'w') as f:
-                    f.write(_org.cert_ca)
-                with open(ca_key_file, 'w') as f:
-                    f.write(_org.cert_key)
             try:
                 ca_priv_key = m.RSA.load_key(ca_key_file, self.pass_cb)
             except Exception, ca_ex:

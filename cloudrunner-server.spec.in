@@ -64,6 +64,7 @@ This package contains common libs and files.
 %prep
 %setup -q -n %{unmanaged_name}-%{version}
 
+
 %build
 %{__python} setup.py build
 
@@ -95,8 +96,10 @@ mkdir -p $RPM_BUILD_ROOT/var/run/cloudrunner/
 mkdir -p $RPM_BUILD_ROOT/var/lib/cloudrunner/
 mkdir -p $RPM_BUILD_ROOT/var/lib/cloudrunner/plugins/
 
+
 %clean
 rm -rf %{buildroot}
+
 
 %post
 if [ -n "$(command -v alembic)" ]; then
@@ -108,9 +111,12 @@ if [ -n "$(command -v alembic)" ]; then
 		alembic upgrade head || echo "DB upgrade failed"
 	fi
 fi
+/sbin/chkconfig %{name} --add
+
 
 %postun
 /sbin/service %{name} condrestart > /dev/null 2>&1 || :
+
 
 %preun
 if [ "$1" = 0 ]
@@ -118,6 +124,7 @@ then
         /sbin/service %{name} stop > /dev/null 2>&1 || :
         /sbin/chkconfig %{name} --del
 fi
+
 
 %files
 %defattr(-,root,root,-)
@@ -157,7 +164,11 @@ fi
 
 %{python_sitelib}/cloudrunner_server/db
 
+
 %changelog
+* Thu Mar 12 2015 Tihomir Trifonov <ttrifonov at cloudrunner dot io> - 1.1.1-2
+- Added systemd scripts, version 1.1.1
+
 * Sun Feb 22 2015 Tihomir Trifonov <ttrifonov at cloudrunner dot io> - 1.1.0-1
 - Cleanup, version 1.1.0
 

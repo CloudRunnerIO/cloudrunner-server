@@ -1,0 +1,14 @@
+[Unit]
+Description=CloudRunner API Service
+After=syslog.target
+
+[Service]
+ExecStart=/usr/bin/uwsgi --ini /etc/uwsgi/cloudrunner-api.ini:cloudrunner-api
+Restart=always
+KillSignal=SIGQUIT
+Type=notify
+StandardError=syslog
+NotifyAccess=all
+
+[Install]
+WantedBy=multi-user.target
