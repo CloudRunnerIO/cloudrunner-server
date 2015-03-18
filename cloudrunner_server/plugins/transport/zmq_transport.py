@@ -24,6 +24,9 @@ import time
 import zmq
 from zmq.eventloop import ioloop
 
+from sqlalchemy import create_engine, event
+from sqlalchemy.orm import scoped_session, sessionmaker
+
 from cloudrunner.util.tlszmq import TLSZmqServerSocket
 from cloudrunner.core.message import *  # noqa
 from cloudrunner.plugins.transport.zmq_transport import (SockWrapper,
@@ -33,7 +36,9 @@ from cloudrunner.util.shell import Timer
 
 from cloudrunner_server.plugins.transport.base import (ServerTransportBackend,
                                                        Tenant, TenantDict)
+from cloudrunner_server.api.model import metadata, Org
 from cloudrunner_server.master.functions import CertController
+from cloudrunner_server.util.db import checkout_listener
 
 LOGR = logging.getLogger('ZMQ ROUTER')
 LOGA = logging.getLogger('ZMQ ACCESS')
@@ -161,10 +166,19 @@ class ZmqTransport(ServerTransportBackend):
         self._watch_dir('D', self.cert_dir, callback=self._nodes_changed)
 
         # init
+        self.db = None
+        self.db_path = config.db
         self.heartbeat_timeout = int(self.config.heartbeat_timeout or 30)
         self.tenants = TenantDict(refresh=self._cert_changed)
-        self._cert_changed()
-        self._nodes_changed(wait=False)
+
+    def set_context_from_config(self, **configuration):
+        session = scoped_session(sessionmaker())
+        engine = create_engine(self.db_path, **configuration)
+        if 'mysql+pymysql://' in self.db_path:
+            event.listen(engine, 'checkout', checkout_listener)
+        session.bind = engine
+        metadata.bind = session.bind
+        self.db = session
 
     def _watch_dir(self, mode, _dir, callback):
         cert_fd = os.open(_dir, 0)
@@ -223,6 +237,11 @@ class ZmqTransport(ServerTransportBackend):
                 LOGR.warn("Un-registering tenant %s" % org)
                 self.tenants.pop(org)
 
+        orgs = self.db.query(Org).filter(Org.enabled == True).all()  # noqa
+        for org in orgs:
+            if org.name not in self.tenants:
+                self.ccont.restore_org_keys(org.name)
+
     def register_session(self, session_id):
         self.managed_sessions[session_id] = True
 
@@ -239,6 +258,8 @@ class ZmqTransport(ServerTransportBackend):
         ioloop.IOLoop.instance().start()
 
     def prepare(self):
+        self._cert_changed()
+        self._nodes_changed(wait=False)
         # Run router devices
         self.router.start()
 

@@ -318,6 +318,7 @@ class Dispatcher(Daemon):
         self.stopping = threading.Event()
 
         self.backend = self.transport_class(self.config)
+        self.backend.set_context_from_config()
         self.backend.prepare()
 
         self.admin = Admin(self.config, self.backend)
