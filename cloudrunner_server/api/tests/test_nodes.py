@@ -27,7 +27,8 @@ class TestNodes(base.BaseRESTTestCase):
             u'joined_at': u'2014-01-01 00:00:00',
             u'meta': {u'ID': u'NODE1'},
             u'approved_at': u'2014-01-01 00:00:00',
-            u'approved': True
+            u'approved': True,
+            u'auto_cleanup': None
         }, {
             u'name': u'node3',
             u'tags': [],
@@ -35,7 +36,8 @@ class TestNodes(base.BaseRESTTestCase):
             u'joined_at': u'2014-09-01 00:00:00',
             u'meta': {u'ID': u'NODE3'},
             u'approved_at': u'2014-11-01 00:00:00',
-            u'approved': True
+            u'approved': True,
+            u'auto_cleanup': None
         }, {
             u'name': u'node4',
             u'tags': [],
@@ -43,7 +45,8 @@ class TestNodes(base.BaseRESTTestCase):
             u'joined_at': u'2014-09-01 00:00:00',
             u'meta': {u'ID': u'NODE4'},
             u'approved_at': None,
-            u'approved': False}
+            u'approved': False,
+            u'auto_cleanup': None}
         ]
 
         resp = self.app.get('/rest/manage/nodes', headers={
