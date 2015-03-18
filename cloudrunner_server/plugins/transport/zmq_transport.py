@@ -168,7 +168,6 @@ class ZmqTransport(ServerTransportBackend):
         self.db = None
         self.db_path = config.db
         self.heartbeat_timeout = int(self.config.heartbeat_timeout or 30)
-        self.heartbeat_timeout = 5
         self.tenants = TenantDict(refresh=self._cert_changed)
 
     def set_context_from_config(self, **configuration):
