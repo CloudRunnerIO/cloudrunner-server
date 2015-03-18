@@ -111,7 +111,6 @@ if [ -n "$(command -v alembic)" ]; then
 		alembic upgrade head || echo "DB upgrade failed"
 	fi
 fi
-/sbin/chkconfig %{name} --add
 
 
 %postun

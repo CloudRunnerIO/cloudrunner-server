@@ -118,13 +118,15 @@ class Admin(Thread):
         if req.control == 'REGISTER':
             try:
                 tags = []
+                node = None
                 try:
                     valid, msg, org, tags = self.ccont.validate_request(
                         req.node, req.data)
                     LOG.info("Validate req: %s:%s" % (org, valid))
                     _org = self.db.query(Org).filter(Org.name == org).one()
                     node = Node(name=req.node, meta=json.dumps(req.meta),
-                                approved=False, org=_org)
+                                approved=False, org=_org,
+                                auto_cleanup=bool(req.auto_cleanup))
                     self.db.add(node)
                     self.db.commit()
                 except IntegrityError, iex:
@@ -162,10 +164,11 @@ class Admin(Thread):
                     self.db.rollback()
                     return Control(req.node, 'REJECTED', "INV_CSR")
 
-                for tag in tags:
-                    t = NodeTag(value=tag)
-                    self.db.add(t)
-                    node.tags.append(t)
+                if node:
+                    for tag in tags:
+                        t = NodeTag(value=tag)
+                        self.db.add(t)
+                        node.tags.append(t)
 
                 if not self.ccont.can_approve(req.node):
                     return Control(req.node, 'REJECTED', 'PENDING')

@@ -37,6 +37,7 @@ class Node(TableBase):
     meta = Column(Text)
     approved = Column(Boolean)
     enabled = Column(Boolean, default=True)
+    auto_cleanup = Column(Boolean)
 
     org_id = Column(Integer, ForeignKey(Org.id))
     org = relationship(Org, backref=backref('nodes', cascade='delete'))

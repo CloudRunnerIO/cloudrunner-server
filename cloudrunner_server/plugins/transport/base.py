@@ -111,6 +111,14 @@ class Tenant(object):
     def active_nodes(self):
         return [node for node in self.nodes if node.refreshed > self.refreshed]
 
+    def inactive_nodes(self):
+        nodes = []
+        for node in self.nodes:
+            if node.refreshed <= self.refreshed:
+                nodes.append(node)
+                self.pop(node)
+        return nodes
+
 
 class TenantDict(dict):
 
@@ -125,3 +133,12 @@ class TenantDict(dict):
             LOG.warn("Hit miss from tenants for %s, trying refresh" % key)
             self.refresh()
             return super(TenantDict, self).__getitem__(key)
+
+    def purge_expired(self):
+        exp = []
+        for item in self.values():
+            expired = item.inactive_nodes()
+            if expired:
+                exp.append((item.name, expired))
+
+        return exp

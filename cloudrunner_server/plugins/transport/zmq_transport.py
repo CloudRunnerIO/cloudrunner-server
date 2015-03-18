@@ -36,7 +36,7 @@ from cloudrunner.util.shell import Timer
 
 from cloudrunner_server.plugins.transport.base import (ServerTransportBackend,
                                                        Tenant, TenantDict)
-from cloudrunner_server.api.model import metadata, Org
+from cloudrunner_server.api.model import metadata, Node, Org
 from cloudrunner_server.master.functions import CertController
 from cloudrunner_server.util.db import checkout_listener
 
@@ -44,7 +44,6 @@ LOGR = logging.getLogger('ZMQ ROUTER')
 LOGA = logging.getLogger('ZMQ ACCESS')
 LOGL = logging.getLogger('ZMQ LOGGER')
 LOGPUB = logging.getLogger('ZMQ PUBLISH')
-
 
 LOGL.setLevel(logging.ERROR)
 
@@ -169,6 +168,7 @@ class ZmqTransport(ServerTransportBackend):
         self.db = None
         self.db_path = config.db
         self.heartbeat_timeout = int(self.config.heartbeat_timeout or 30)
+        self.heartbeat_timeout = 5
         self.tenants = TenantDict(refresh=self._cert_changed)
 
     def set_context_from_config(self, **configuration):
@@ -412,6 +412,12 @@ class ZmqTransport(ServerTransportBackend):
                 msg.hdr.peer, msg.hdr.org))
             if msg.hdr.org in self.tenants:
                 self.tenants[msg.hdr.org].pop(msg.hdr.peer)
+            node = self.db.query(Node).join(Org).filter(
+                Node.name == msg.hdr.peer,
+                Org.name == msg.hdr.org).first()
+            if node and node.auto_cleanup:
+                LOGPUB.info("Auto-cleanup for node %s" % node.name)
+                self.ccont.revoke(node.name, ca=msg.hdr.org)
         elif msg.hdr.org not in self.tenants:
             LOGPUB.warn("Unrecognized node: %s" % msg)
         elif msg.control == 'PING':
@@ -474,6 +480,16 @@ class ZmqTransport(ServerTransportBackend):
             except Exception, ex:
                 LOGPUB.error(ex)
 
+            tens = self.tenants.purge_expired()
+            for (org, ts) in tens:
+                for t in ts:
+                    node = self.db.query(Node).join(Org).filter(
+                        Node.name == t.name,
+                        Org.name == org).first()
+                    if node and node.auto_cleanup:
+                        LOGPUB.info("Auto-cleanup for node %s" % node.name)
+                        self.ccont.revoke(node.name, ca=org)
+
         def translate(org_name):
             # Translate org_name to org_uid
             try:
@@ -533,7 +549,8 @@ class ZmqTransport(ServerTransportBackend):
                                     LOGPUB.info("Node dropped from %s" %
                                                 tenant.name)
                                     # Refresh HeartBeat
-                                    self.tenants[tenant.name].refresh()
+                                    self.tenants[tenant.name].refresh(
+                                        adjust=-self.heartbeat_timeout)
                                     xpub_listener.send_multipart(
                                         [target, HB()._])
                                     break
