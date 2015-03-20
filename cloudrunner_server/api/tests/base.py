@@ -187,12 +187,27 @@ class BaseRESTTestCase(BaseTestCase):
         repo2 = Repository(name='private', owner=user2, private=True,
                            enabled=True, org=org2, type='cloudrunner')
         Session.add(repo2)
+
+        ext_repo_link = Repository(name='ext_repo', owner=user, private=True,
+                                   enabled=True, org=org, type='github')
+        Session.add(ext_repo_link)
+        ext_repo = Repository(name='ext_repo', private=True,
+                              enabled=True, type='github',
+                              parent=ext_repo_link)
+        Session.add(ext_repo)
+
+        creds = RepositoryCreds(auth_user='gituser', auth_pass='gitsecret',
+                                repository=ext_repo_link)
+        Session.add(creds)
+
         root1 = Folder(name="/", full_name="/", repository=repo1, owner=user)
         Session.add(root1)
         root11 = Folder(name="/", full_name="/", repository=repo11, owner=user)
         Session.add(root11)
         root2 = Folder(name="/", full_name="/", repository=repo2, owner=user)
         Session.add(root2)
+        root_ext = Folder(name="/", full_name="/", repository=ext_repo)
+        Session.add(root_ext)
         folder1 = Folder(name="/folder1", full_name="/folder1/",
                          created_at=datetime(2014, 1, 10, 0, 0, 0),
                          repository=repo1, owner=user, parent=root1)
@@ -210,6 +225,7 @@ class BaseRESTTestCase(BaseTestCase):
 
                           repository=repo2, owner=user, parent=folder2)
         Session.add(folder21)
+
         Session.commit()
 
         wf1 = Script(name='test1', folder=folder1, owner=user,

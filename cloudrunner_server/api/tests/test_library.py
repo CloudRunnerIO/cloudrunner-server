@@ -13,8 +13,11 @@
 #  *******************************************************/
 
 import json
+from datetime import datetime
+from mock import patch, Mock
 
 from cloudrunner_server.api.tests import base
+from cloudrunner_server.plugins.repository.base import NotModified
 
 
 class TestLibrary(base.BaseRESTTestCase):
@@ -34,7 +37,14 @@ class TestLibrary(base.BaseRESTTestCase):
                 'enabled': True,
                 'private': False,
                 'owner': 'testuser',
-                'type': 'cloudrunner'}
+                'type': 'cloudrunner'
+            }, {
+                'name': 'ext_repo',
+                'editable': True,
+                'enabled': True,
+                'private': True,
+                'owner': 'testuser',
+                'type': 'github'}
         ],
             'quota': {'total': 5, 'external': False, 'user': 5}}
 
@@ -49,6 +59,19 @@ class TestLibrary(base.BaseRESTTestCase):
         resp = self.app.post('/rest/library/repo',
                              "name=newrepo&private=0&type=cloudrunner"
                              "&folder=cloudrunner/folder1/",
+                             headers={
+                                 'Cr-Token': 'PREDEFINED_TOKEN',
+                                 'Cr-User': 'testuser'})
+        self.assertEqual(resp.status_int, 200, resp.status_int)
+        resp_json = json.loads(resp.body)
+
+        self.assertEqual(resp_json, {'success': {'status': 'ok'}}, resp_json)
+
+    def test_create_ext_repo(self):
+        resp = self.app.post('/rest/library/repo',
+                             "name=newrepo&private=0&type=github"
+                             "&folder=cloudrunner/folder1/&user=gituser"
+                             "&pass=gitpass&args=gitargs",
                              headers={
                                  'Cr-Token': 'PREDEFINED_TOKEN',
                                  'Cr-User': 'testuser'})
@@ -131,7 +154,7 @@ class TestLibrary(base.BaseRESTTestCase):
                          {'success': {'status': 'ok'}},
                          resp_json)
 
-    def test_list_scripts(self):
+    def test_browse_repo(self):
         cr_data = {'folders': [{
             'name': '/folder1',
             'created_at': '2014-01-10 00:00:00',
@@ -139,7 +162,7 @@ class TestLibrary(base.BaseRESTTestCase):
             'etag': None,
             'full_name': '/folder1/',
             'owner': 'testuser',
-            'id': 4}],
+            'id': 5}],
             'owner': 'testuser', 'editable': True, 'scripts': []
         }
 
@@ -147,7 +170,51 @@ class TestLibrary(base.BaseRESTTestCase):
             'Cr-Token': 'PREDEFINED_TOKEN', 'Cr-User': 'testuser'})
         self.assertEqual(resp.status_int, 200, resp.status_int)
         resp_json = json.loads(resp.body)
-        self.assertEqual(resp_json['contents'], cr_data, resp_json['contents'])
+        self.assertEqual(resp_json['contents'], cr_data)
+
+    @patch('cloudrunner_server.plugins.repository.base.PluginRepoBase')
+    def test_browse_ext_repo(self, repobase):
+        github = Mock(type='github')
+        repobase.__subclasses__ = Mock(return_value=[github])
+        contents = {'folders': [{'name': 'ext_folder'}],
+                    'scripts': [{'name': 'ext_script'}]}
+        last = datetime(2015, 01, 01)
+        github().browse.side_effect = [(contents, last, last), NotModified()]
+
+        github().contents = Mock(return_value=("ext script content",
+                                               last, 'gitrev123', last))
+
+        cr_data = {'folders': [{
+            'name': 'ext_folder',
+            'created_at': None,
+            'editable': False,
+            'etag': None,
+            'full_name': '/ext_folder/',
+            'owner': 'github',
+            'id': 9}],
+            'owner': 'testuser', 'editable': False,
+            'scripts': [{'allow_sudo': None,
+                         'created_at': u'2015-01-01 00:00:00',
+                         'editable': False,
+                         'etag': u'2015-01-01 00:00:00',
+                         'id': 5,
+                         'mime_type': u'text/plain',
+                         'name': u'ext_script',
+                         'owner': u'github',
+                         'version': u'gitrev123'}]
+        }
+
+        resp = self.app.get('/rest/library/browse/ext_repo/', headers={
+            'Cr-Token': 'PREDEFINED_TOKEN', 'Cr-User': 'testuser'})
+        self.assertEqual(resp.status_int, 200, resp.status_int)
+        resp_json = json.loads(resp.body)
+        self.assertEqual(resp_json['contents'], cr_data)
+
+        resp = self.app.get('/rest/library/browse/ext_repo/', headers={
+            'Cr-Token': 'PREDEFINED_TOKEN', 'Cr-User': 'testuser'})
+        self.assertEqual(resp.status_int, 200, resp.status_int)
+        resp_json = json.loads(resp.body)
+        self.assertEqual(resp_json['contents'], cr_data)
 
     def test_show_script(self):
         resp = self.app.get(

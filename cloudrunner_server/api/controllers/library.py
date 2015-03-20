@@ -51,7 +51,7 @@ class Library(HookController):
             repos = Repository.visible(request).all()
             tier = request.user.tier
             repositories = sorted([r.serialize(
-                skip=['id', 'org_id', 'owner_id'],
+                skip=['id', 'org_id', 'owner_id', 'linked_id'],
                 rel=[('owner.username', 'owner')],
                 editable=lambda r: r.editable(request))
                 for r in repos],
@@ -196,8 +196,6 @@ class Library(HookController):
                 if f.name != "/" or f.full_name != "/"]):
             return O.error(msg="Cannot remove repo, "
                            "not empty")
-        for f in repository.folders:
-            request.db.delete(f)
         request.db.delete(repository)
 
     @expose('json')
@@ -358,12 +356,12 @@ class Library(HookController):
                 return O.error(msg="Cannot connect to %s API" % plugin.type)
 
             except NotModified:
-                subfolders = Folder.visible(
-                    request, repository, parent=name).all()
+                subfolders = root_folder.subfolders
                 scripts = request.db.query(Script).join(Folder).filter(
                     Script.folder == root_folder,
                     Folder.full_name == name).all()
             finally:
+                request.db.commit()
                 folders = [f.serialize(
                     skip=['repository_id', 'parent_id', 'owner_id'],
                     rel=[('owner.username', 'owner', lambda *args: repo.type),
