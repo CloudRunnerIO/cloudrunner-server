@@ -50,36 +50,45 @@ class Library(HookController):
         if not args:
             repos = Repository.visible(request).all()
             tier = request.user.tier
-            return O._anon(repositories=sorted([r.serialize(
+            repositories = sorted([r.serialize(
                 skip=['id', 'org_id', 'owner_id'],
                 rel=[('owner.username', 'owner')],
                 editable=lambda r: r.editable(request))
                 for r in repos],
-                key=lambda l: l['name']),
-                quota=dict(total=tier.total_repos,
-                           user=tier.total_repos,
-                           external=tier.external_repos == "True"))
+                key=lambda l: l['name'])
+            return O._anon(repositories=repositories,
+                           quota=dict(total=tier.total_repos,
+                                      user=tier.total_repos,
+                                      external=tier.external_repos == "True"))
         else:
             repo_name = args[0]
             repo = Repository.visible(request).filter(
                 Repository.name == repo_name).first()
+
+            def get_creds(repo):
+                parent = repo.parent
+                return dict(auth_user=parent.credentials.auth_user,
+                            auth_args=parent.credentials.auth_args or "")
+
             if repo.type == 'cloudrunner':
                 return O.repository(repo.serialize(
-                    skip=['id', 'org_id', 'owner_id'],
+                    skip=['id', 'org_id', 'owner_id', 'linked_id'],
                     rel=[('owner.username', 'owner')],
                     editable=lambda r: r.editable(request)))
             else:
                 if repo.editable(request):
                     return O.repository(repo.serialize(
-                        skip=['id', 'org_id', 'owner_id'],
+                        skip=['id', 'org_id', 'owner_id', 'linked_id'],
                         rel=[('owner.username', 'owner'),
-                             ('credentials.auth_user', 'key'),
-                             ('credentials.auth_pass', 'secret'),
-                             ('credentials.auth_args', 'args')],
+                             ('linked', 'credentials', get_creds),
+                             # ('credentials.auth_user', 'key'),
+                             # ('credentials.auth_pass', 'secret'),
+                             # ('credentials.auth_args', 'args')
+                             ],
                         editable=lambda r: True))
                 else:
                     return O.repository(**repo.serialize(
-                        skip=['id', 'org_id', 'owner_id'],
+                        skip=['id', 'org_id', 'owner_id', 'linked_id'],
                         rel=[('owner.username', 'owner')],
                         editable=lambda r: True))
 
@@ -98,23 +107,36 @@ class Library(HookController):
 
         org = request.db.query(Org).filter(
             Org.name == request.user.org).one()
-        repository = Repository(name=name, private=private,
-                                type=_type,
-                                owner_id=request.user.id,
-                                org=org)
-        request.db.add(repository)
+        repository_link = Repository(name=name, private=private,
+                                     type=_type,
+                                     owner_id=request.user.id,
+                                     org=org)
+
+        check_existing = request.db.query(Repository).filter(
+            Repository.type == _type,
+            Repository.org_id == None,
+            Repository.name == name).first()  # noqa
+        if check_existing:
+            repository = check_existing
+        else:
+            repository = Repository(name=name, private=private,
+                                    type=_type)
+            request.db.add(repository)
+            # Create root folder for repo
+            root = Folder(name="/", full_name="/", repository=repository)
+            request.db.add(root)
+
+        repository_link.linked = repository
+        request.db.add(repository_link)
+
         if _type != 'cloudrunner':
             auth_user = kwargs.get('user')
             auth_pass = kwargs.get('pass')
             auth_args = kwargs.get('args')
             creds = RepositoryCreds(provider=_type, auth_user=auth_user,
                                     auth_pass=auth_pass, auth_args=auth_args,
-                                    repository=repository)
+                                    repository=repository_link)
             request.db.add(creds)
-        # Create root folder for repo
-        root = Folder(name="/", full_name="/", repository=repository,
-                      owner_id=request.user.id)
-        request.db.add(root)
 
     @repo.when(method='PATCH', template='json')
     @repo.wrap_update()
@@ -142,9 +164,15 @@ class Library(HookController):
             if kwargs.get('user'):
                 repository.credentials.auth_user = kwargs.get('user')
             if kwargs.get('pass'):
-                repository.credentials.auth_pass = kwargs.get('pass')
+                if kwargs['pass'] == '---empty---':
+                    repository.credentials.auth_pass = ""
+                else:
+                    repository.credentials.auth_pass = kwargs.get('pass')
             if kwargs.get('args'):
-                repository.credentials.auth_args = kwargs.get('args')
+                if kwargs['args'] == '---empty---':
+                    repository.credentials.auth_args = ""
+                else:
+                    repository.credentials.auth_args = kwargs.get('args')
 
         request.db.add(repository)
 
@@ -152,6 +180,7 @@ class Library(HookController):
     @repo.wrap_update()
     def repository_replace(self, name=None, **kwargs):
         kwargs['private']  # assert value
+        kwargs['enabled']  # assert value
         return self.repository_update(name, **kwargs)
 
     @repo.when(method='DELETE', template='json')
@@ -194,9 +223,15 @@ class Library(HookController):
         if not repo:
             return O.error(msg="Repo not found")
 
-        folder = Folder.visible(request, repository, parent=parent).filter(
-            Folder.full_name == name)
-        folder = folder.one()
+        if repo.linked:
+            repo = repo.linked
+            repository = repo.name
+            root_folder = request.db.query(Folder).filter(
+                Folder.full_name == name, Folder.repository == repo).one()
+        else:
+            root_folder = Folder.visible(
+                request, repository, parent=parent).filter(
+                    Folder.full_name == name).one()
 
         def order(lst):
             return [r.version for r in sorted([item for item in lst],
@@ -227,7 +262,7 @@ class Library(HookController):
             scripts = request.db.query(Script).join(Folder).join(Revision)
 
             scripts = scripts.filter(
-                Script.folder == folder,
+                Script.folder == root_folder,
                 Folder.full_name == name).all()
 
             folders = [f.serialize(
@@ -243,27 +278,28 @@ class Library(HookController):
                 key=lambda s: (s['mime_type'], s['name']))
             return O.contents(folders=folders, scripts=scripts,
                               editable=repo.editable(request),
-                              owner=folder.owner.username)
+                              owner=root_folder.owner.username)
         else:
             # External repo
             plugin = PluginRepoBase.find(repo.type)
             if not plugin:
-                return O.error("Plugin for repo type %s not found!" %
+                return O.error(msg="Plugin for repo type %s not found!" %
                                repo.type)
-            plugin = plugin(repo.credentials.auth_user,
-                            repo.credentials.auth_pass,
-                            repo.credentials.auth_args)
+            plugin = plugin(repo.parent.credentials.auth_user,
+                            repo.parent.credentials.auth_pass,
+                            repo.parent.credentials.auth_args)
             subfolders, scripts = [], []
             try:
                 contents, last_modified, etag = plugin.browse(
-                    repository, name, last_modified=folder.etag)
-                folder.created_at = last_modified
-                folder.etag = etag
+                    repository, name, last_modified=root_folder.etag)
+                if not contents:
+                    return O.error(msg="Cannot browse %s repo" % repo.type)
+                root_folder.created_at = last_modified
+                root_folder.etag = etag
 
-                subfolders = list(Folder.visible(
-                    request, repository, parent=name).all())
+                subfolders = root_folder.subfolders
                 scripts = list(request.db.query(Script).join(Folder).filter(
-                    Script.folder == folder,
+                    Script.folder == root_folder,
                     Folder.full_name == name).all())
 
                 to_add = copy(contents['folders'])
@@ -275,14 +311,13 @@ class Library(HookController):
                         to_add = [f for f in to_add
                                   if _folder.name != f['name']]
                 for new_f in to_add:
-                    new_folder = Folder(name=new_f['name'], owner=repo.owner,
-                                        parent=folder, repository=repo,
-                                        created_at=NULL,
-                                        full_name=path.join(
-                                            folder.full_name,
+                    new_folder = Folder(
+                        name=new_f['name'], owner=repo.owner,
+                        parent=root_folder, repository=repo,
+                        created_at=NULL,
+                        full_name=path.join(root_folder.full_name,
                                             new_f['name']) + "/")
                     request.db.add(new_folder)
-                    subfolders.append(new_folder)
 
                 to_add = copy(contents['scripts'])
                 for _script in scripts:
@@ -294,7 +329,7 @@ class Library(HookController):
                                   if _script.name != s['name']]
                 for new_s in to_add:
                     mime = "text/plain"
-                    new_script = Script(name=new_s['name'], folder=folder,
+                    new_script = Script(name=new_s['name'], folder=root_folder,
                                         mime_type=mime,
                                         owner=repo.owner,
                                         created_at=NULL)
@@ -305,8 +340,11 @@ class Library(HookController):
                         rev = Revision(created_at=last_modified,
                                        version=rev, script=new_script,
                                        content=cont)
-                        if parse_sections(cont):
-                            new_script.mime_type = 'text/workflow'
+                        try:
+                            if parse_sections(cont):
+                                new_script.mime_type = 'text/workflow'
+                        except:
+                            pass
                         new_script.created_at = last_modified
                         new_script.etag = etag
                         request.db.add(rev)
@@ -314,7 +352,7 @@ class Library(HookController):
                         LOG.exception(ex)
                     request.db.add(new_script)
 
-                request.db.add(folder)
+                request.db.add(root_folder)
 
             except NotAccessible:
                 return O.error(msg="Cannot connect to %s API" % plugin.type)
@@ -323,16 +361,17 @@ class Library(HookController):
                 subfolders = Folder.visible(
                     request, repository, parent=name).all()
                 scripts = request.db.query(Script).join(Folder).filter(
-                    Script.folder == folder,
+                    Script.folder == root_folder,
                     Folder.full_name == name).all()
             finally:
                 folders = [f.serialize(
                     skip=['repository_id', 'parent_id', 'owner_id'],
-                    rel=[('owner.username', 'owner'),
+                    rel=[('owner.username', 'owner', lambda *args: repo.type),
                          ('created_at', 'created_at', created_at_eval)],
                     editable=lambda s: False)
                     for f in subfolders]
 
+                rels[0] = ('owner.username', 'owner', lambda *args: repo.type)
                 scripts = sorted([s.serialize(skip=['folder_id', 'owner_id'],
                                               rel=rels,
                                               editable=lambda s: False)
@@ -374,91 +413,107 @@ class Library(HookController):
     @expose('json', generic=True)
     @wrap_command(Script)
     def script(self, repository, *args, **kwargs):
-        full_path = "/".join(args)
-        full_path.rstrip("/")
-        if not full_path.startswith("/"):
-            full_path = "/" + full_path
+        path = "/".join(args)
+        full_path = "/".join([repository] + list(args))
 
-        path, _, script = full_path.rpartition('/')
-        path = path + '/'
+        repo_path, name, script, rev = Script.parse(full_path)
+        parent, _, __ = name.rstrip("/").rpartition("/")
+        if parent:
+            parent = parent + "/"
+        else:
+            parent = None
 
-        scr = Script.visible(request,
-                             repository,
-                             path).filter(Script.name == script).first()
-        if scr:
-            repo = scr.folder.repository
-            if repo.type == "cloudrunner":
-                rev = scr.contents(request, **kwargs)
-                if rev:
-                    if request.if_modified_since:
-                        req_modified = request.if_modified_since
-                        script_modified = pytz.utc.localize(rev.created_at)
-                        if req_modified == script_modified:
-                            return redirect(code=304)
-                    else:
-                        response.last_modified = rev.created_at.strftime('%c')
-                        response.cache_control.private = True
-                        response.cache_control.max_age = 1
-                revisions = sorted([r.serialize(
-                    skip=['id', 'script_id', 'draft', 'content'],
-                    rel=[("created_at", "created_at", lambda d: d)])
-                    for r in scr.history
-                    if not r.draft], key=lambda r: r["created_at"],
-                    reverse=True)
+        repo = Repository.visible(request).filter(
+            Repository.name == repo_path).first()
+        if not repo:
+            return O.error(msg="Repo not found")
 
-            else:
-                plugin = PluginRepoBase.find(repo.type)
-                if not plugin:
-                    return O.error("Plugin for repo type %s not found!" %
-                                   repo.type)
-                plugin = plugin(repo.credentials.auth_user,
-                                repo.credentials.auth_pass,
-                                repo.credentials.auth_args)
-                last_rev = scr.contents(request)
-                try:
-                    contents, last_modified, rev, etag = plugin.contents(
-                        repo.name, full_path, last_modified=last_rev.created_at
-                        if last_rev else None)
-                    exists = scr.contents(request, rev=rev)
-                    if not exists:
-                        exists = Revision(created_at=last_modified,
-                                          version=rev, script=scr,
-                                          content=contents)
-                    else:
-                        exists.content = contents
-                        exists.created_at = last_modified
-                    request.db.add(exists)
-                    rev = exists
+        if repo.linked:
+            repo = repo.linked
+            repository = repo.name
+            root_folder = request.db.query(Folder).filter(
+                Folder.full_name == name, Folder.repository == repo).one()
+        else:
+            root_folder = Folder.visible(
+                request, repository, parent=parent).filter(
+                    Folder.full_name == name).one()
 
-                    revisions = [dict(version="HEAD", created_at=None)]
-                except NotModified:
-                    revisions = [dict(version="HEAD", created_at=None)]
-                    rev = last_rev
-                except NotAccessible:
-                    return O.error(msg="Cannot connect to %s API" %
-                                   plugin.type)
+        scr = [s for s in root_folder.scripts if s.name == script]
+        if not scr:
+            return O.error(msg="Not found")
+        scr = scr[0]
 
-            if request.if_modified_since:
-                req_modified = request.if_modified_since
-                script_modified = pytz.utc.localize(rev.created_at)
-                if req_modified == script_modified:
-                    return redirect(code=304)
-
-            response.last_modified = rev.created_at.strftime('%c')
-            response.cache_control.private = True
-            response.cache_control.max_age = 1
-
-            return O.script(name=scr.name,
-                            created_at=scr.created_at,
-                            owner=scr.owner.username,
-                            content=rev.content,
-                            version=rev.version,
-                            allow_sudo=scr.allow_sudo,
-                            mime=scr.mime_type,
-                            revisions=revisions)
+        repo = scr.folder.repository
+        if repo.type == "cloudrunner":
+            rev = scr.contents(request, **kwargs)
+            if rev:
+                if request.if_modified_since:
+                    req_modified = request.if_modified_since
+                    script_modified = pytz.utc.localize(rev.created_at)
+                    if req_modified == script_modified:
+                        return redirect(code=304)
+                else:
+                    response.last_modified = rev.created_at.strftime('%c')
+                    response.cache_control.private = True
+                    response.cache_control.max_age = 1
+            revisions = sorted([r.serialize(
+                skip=['id', 'script_id', 'draft', 'content'],
+                rel=[("created_at", "created_at", lambda d: d)])
+                for r in scr.history
+                if not r.draft], key=lambda r: r["created_at"],
+                reverse=True)
 
         else:
-            return O.error(msg="Not found")
+            plugin = PluginRepoBase.find(repo.type)
+            if not plugin:
+                return O.error("Plugin for repo type %s not found!" %
+                               repo.type)
+            plugin = plugin(repo.parent.credentials.auth_user,
+                            repo.parent.credentials.auth_pass,
+                            repo.parent.credentials.auth_args)
+            last_rev = scr.contents(request)
+            try:
+                contents, last_modified, rev, etag = plugin.contents(
+                    repo.name, path, last_modified=last_rev.created_at
+                    if last_rev else None)
+                exists = scr.contents(request, rev=rev)
+                if not exists:
+                    exists = Revision(created_at=last_modified,
+                                      version=rev, script=scr,
+                                      content=contents)
+                else:
+                    exists.content = contents
+                    exists.created_at = last_modified
+                request.db.add(exists)
+                rev = exists
+
+                revisions = [dict(version="HEAD", created_at=None)]
+            except NotModified:
+                revisions = [dict(version="HEAD", created_at=None)]
+                rev = last_rev
+            except NotAccessible:
+                return O.error(msg="Cannot connect to %s API" %
+                               plugin.type)
+
+        if request.if_modified_since:
+            req_modified = request.if_modified_since
+            script_modified = pytz.utc.localize(rev.created_at)
+            if req_modified == script_modified:
+                return redirect(code=304)
+
+        response.last_modified = rev.created_at.strftime('%c')
+        response.cache_control.private = True
+        response.cache_control.max_age = 1
+
+        return O.script(name=scr.name,
+                        created_at=scr.created_at,
+                        owner=scr.owner.username if scr.owner else repo.type,
+                        content=rev.content,
+                        version=rev.version,
+                        allow_sudo=scr.allow_sudo,
+                        mime=scr.mime_type,
+                        revisions=revisions)
+
         return O.script({})
 
     @script.when(method='POST', template='json')

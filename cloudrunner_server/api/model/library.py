@@ -31,12 +31,16 @@ class Repository(TableBase):
     )
 
     id = Column(Integer, primary_key=True)
-    name = Column(String(255), unique=True)
+    name = Column(String(255))
     type = Column(String(100))
     owner_id = Column(Integer, ForeignKey(User.id))
     private = Column(Boolean, default=False)
     org_id = Column(Integer, ForeignKey(Org.id))
+    linked_id = Column(Integer, ForeignKey('repositories.id'))
     enabled = Column(Boolean, default=True)
+
+    linked = relationship('Repository', remote_side=[id],
+                          backref=backref('parent', uselist=False))
 
     org = relationship(Org, backref=backref('library_scripts',
                                             cascade="delete"))
@@ -58,8 +62,7 @@ class Repository(TableBase):
         )
 
     def editable(self, ctx):
-        return self.owner_id == int(ctx.user.id) and self.enabled and \
-            self.type == "cloudrunner"
+        return self.owner_id == int(ctx.user.id) and self.enabled
 
     def removable(self, ctx):
         return self.owner_id == int(ctx.user.id)
@@ -71,11 +74,15 @@ class Repository(TableBase):
 
 
 def quotas(connection, target):
-    total_allowed = target.org.tier.total_repos
+    if target.parent:
+        org = target.parent.org
+    else:
+        org = target.org
+    total_allowed = org.tier.total_repos
 
     current_total = connection.scalar(
         select([func.count(distinct(Repository.id))]).where(
-            Repository.org_id == target.org.id).where(
+            Repository.org_id == org.id).where(
                 Repository.enabled == True))  # noqa
 
     return total_allowed, current_total

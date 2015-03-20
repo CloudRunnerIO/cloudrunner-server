@@ -49,6 +49,8 @@ def retry(count=3, default=None):
                     return ret
                 except NotModified:
                     raise
+                except NotAccessible:
+                    raise
                 except Exception:
                     cnt_retry -= 1
                     if not cnt_retry:
