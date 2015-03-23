@@ -32,7 +32,8 @@ from cloudrunner_server.api.model import (Repository, Script, Folder, Revision,
                                           RepositoryCreds, Org, NULL)
 from cloudrunner_server.plugins.repository.base import (PluginRepoBase,
                                                         NotModified,
-                                                        NotAccessible)
+                                                        NotAccessible,
+                                                        NotFound)
 
 LOG = logging.getLogger()
 AVAILABLE_REPO_TYPES = set(['cloudrunner'] +
@@ -67,8 +68,7 @@ class Library(HookController):
 
             def get_creds(repo):
                 parent = repo.parent
-                return dict(auth_user=parent.credentials.auth_user,
-                            auth_args=parent.credentials.auth_args or "")
+                return dict(auth_user=parent.credentials.auth_user)
 
             if repo.type == 'cloudrunner':
                 return O.repository(repo.serialize(
@@ -107,29 +107,26 @@ class Library(HookController):
 
         org = request.db.query(Org).filter(
             Org.name == request.user.org).one()
-        repository_link = Repository(name=name, private=private,
-                                     type=_type,
-                                     owner_id=request.user.id,
-                                     org=org)
-
-        check_existing = request.db.query(Repository).filter(
-            Repository.type == _type,
-            Repository.org_id == None,
-            Repository.name == name).first()  # noqa
-        if check_existing:
-            repository = check_existing
-        else:
-            repository = Repository(name=name, private=private,
-                                    type=_type)
-            request.db.add(repository)
-            # Create root folder for repo
-            root = Folder(name="/", full_name="/", repository=repository)
-            request.db.add(root)
-
-        repository_link.linked = repository
-        request.db.add(repository_link)
-
-        if _type != 'cloudrunner':
+        if _type != "cloudrunner":
+            repository_link = Repository(name=name, private=private,
+                                         type=_type,
+                                         owner_id=request.user.id,
+                                         org=org)
+            check_existing = request.db.query(Repository).filter(
+                Repository.type == _type,
+                Repository.org_id == None,
+                Repository.name == name).first()  # noqa
+            if check_existing:
+                repository = check_existing
+            else:
+                repository = Repository(name=name, private=private,
+                                        type=_type)
+                request.db.add(repository)
+                # Create root folder for repo
+                root = Folder(name="/", full_name="/", repository=repository)
+                request.db.add(root)
+            repository_link.linked = repository
+            request.db.add(repository_link)
             auth_user = kwargs.get('user')
             auth_pass = kwargs.get('pass')
             auth_args = kwargs.get('args')
@@ -137,6 +134,15 @@ class Library(HookController):
                                     auth_pass=auth_pass, auth_args=auth_args,
                                     repository=repository_link)
             request.db.add(creds)
+        else:
+            repository = Repository(name=name, private=private,
+                                    type=_type,
+                                    owner_id=request.user.id,
+                                    org=org)
+
+            root = Folder(name="/", full_name="/", repository=repository,
+                          owner_id=request.user.id)
+            request.db.add(root)
 
     @repo.when(method='PATCH', template='json')
     @repo.wrap_update()
@@ -180,7 +186,6 @@ class Library(HookController):
     @repo.wrap_update()
     def repository_replace(self, name=None, **kwargs):
         kwargs['private']  # assert value
-        kwargs['enabled']  # assert value
         return self.repository_update(name, **kwargs)
 
     @repo.when(method='DELETE', template='json')
@@ -304,7 +309,8 @@ class Library(HookController):
                 for _folder in subfolders:
                     if not filter(lambda f: f['name'] == _folder.name,
                                   contents['folders']):
-                        request.db.delete(_folder)
+                        if not _folder.name == "/":
+                            request.db.delete(_folder)
                     else:
                         to_add = [f for f in to_add
                                   if _folder.name != f['name']]
@@ -354,7 +360,9 @@ class Library(HookController):
 
             except NotAccessible:
                 return O.error(msg="Cannot connect to %s API" % plugin.type)
-
+            except NotFound:
+                return O.error(msg="The specified repository address is not "
+                               "present in remote repository")
             except NotModified:
                 subfolders = root_folder.subfolders
                 scripts = request.db.query(Script).join(Folder).filter(
@@ -489,6 +497,9 @@ class Library(HookController):
             except NotModified:
                 revisions = [dict(version="HEAD", created_at=None)]
                 rev = last_rev
+            except NotFound:
+                return O.error(msg="The specified file was not found "
+                               "in the remote repository")
             except NotAccessible:
                 return O.error(msg="Cannot connect to %s API" %
                                plugin.type)

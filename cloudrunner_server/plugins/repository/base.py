@@ -36,6 +36,10 @@ class NotAccessible(Exception):
     pass
 
 
+class NotFound(Exception):
+    pass
+
+
 def retry(count=3, default=None):
 
     def decorator(f):
@@ -47,9 +51,7 @@ def retry(count=3, default=None):
                 try:
                     ret = f(*args, **kwargs)
                     return ret
-                except NotModified:
-                    raise
-                except NotAccessible:
+                except (NotModified, NotAccessible, NotFound):
                     raise
                 except Exception:
                     cnt_retry -= 1

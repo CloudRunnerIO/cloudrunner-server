@@ -3,7 +3,7 @@ import logging
 import oauth2 as o
 from datetime import datetime
 
-from .base import PluginRepoBase, NotModified, retry
+from .base import PluginRepoBase, NotModified, NotFound, retry
 REPO_PATH = ("https://bitbucket.org/api/1.0/repositories/"
              "%(user)s/%(repo)s/src/%(rev)s/%(path)s")
 COMMIT = ("https://bitbucket.org/api/1.0/repositories/"
@@ -27,7 +27,10 @@ class BitbucketPluginRepo(PluginRepoBase):
     def browse(self, repo, path, last_modified=None):
         args = dict(user=self.owner, repo=repo, path=path, rev='HEAD')
         bb_path = REPO_PATH % args
+        bb_path = bb_path.rstrip("/") + "/"
         meta, data = self.client.request(bb_path)
+        if meta['status'] not in ['200']:
+            raise NotFound()
 
         modified = datetime.strptime(meta['last-modified'], REPO_TIME_FORMAT)
 
@@ -52,6 +55,8 @@ class BitbucketPluginRepo(PluginRepoBase):
                     rev=rev or 'HEAD')
         bb_path = REPO_PATH % args
         meta, data = self.client.request(bb_path)
+        if meta['status'] not in ['200']:
+            raise NotFound()
         data = json.loads(data)
         if not meta['status'] == '200':
             return None, None, None, None
