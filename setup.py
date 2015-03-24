@@ -50,7 +50,7 @@ setup(
     license='Proprietary',
     packages=find_packages(),
     package_data={'': ['*.txt', '*.rst'], 'conf': ['.*.conf'], 'db': ['*.*'],
-                  'api': ["*.html"]},
+                  'api': ["*.html"], 'doc': ["*.*"]},
     include_package_data = True,
     install_requires=requirements,
     tests_require = test_requirements,
