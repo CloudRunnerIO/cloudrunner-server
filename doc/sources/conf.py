@@ -47,8 +47,8 @@ source_suffix = '.rst'
 master_doc = 'index'
 
 # General information about the project.
-project = u'api'
-copyright = u'2015, CloudRunner.io'
+project = u'CloudRunner.IO REST API'
+copyright = u'2015, CloudRunner.IO'
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the
