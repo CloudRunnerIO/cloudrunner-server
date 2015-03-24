@@ -57,9 +57,8 @@ class Execute(HookController):
         if not repo:
             return O.error(msg="Repository '%s' not found" % repo)
 
-        scr = request.db.query(Script).join(Folder).filter(
-            Script.name == scr_name, Folder.repository_id == repo.id,
-            Folder.full_name == _dir).first()
+        scr = Script.find(request, full_path).one()
+
         if not scr:
             return O.error(msg="Script '%s' not found" % full_path)
         rev = scr.contents(request, rev=version)

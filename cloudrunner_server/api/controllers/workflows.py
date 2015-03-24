@@ -44,6 +44,7 @@ class Workflows(HookController):
             return O.error(msg="Path not provided")
         path = '/'.join(args)
         rev = kwargs.get("rev")
+
         script = Script.find(request, path).one()
         repo_path, lib_path, scr_path, _ = Script.parse(path)
         repo = script.folder.repository
@@ -57,9 +58,9 @@ class Workflows(HookController):
             if not plugin:
                 return O.error(msg="Plugin for repo type %s not found!" %
                                repo.type)
-            plugin = plugin(repo.credentials.auth_user,
-                            repo.credentials.auth_pass,
-                            repo.credentials.auth_args)
+            plugin = plugin(repo.parent.credentials.auth_user,
+                            repo.parent.credentials.auth_pass,
+                            repo.parent.credentials.auth_args)
 
             try:
                 contents, last_modified, version, etag = plugin.contents(

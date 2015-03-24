@@ -268,32 +268,38 @@ class Script(TableBase):
 
     @staticmethod
     def visible(ctx, repository, folder):
-        q = ctx.db.query(Script).join(
-            Folder, Repository, User, Org).filter(
-                Org.name == ctx.user.org,
-                Repository.name == repository,
+        repo = ctx.db.query(Repository).join(Org).filter(
+            Org.name == ctx.user.org,
+            Repository.name == repository,
                 or_(Repository.owner_id == ctx.user.id,
-                    Repository.private != True),  # noqa
-                Folder.full_name == folder
-            )
+                    Repository.private != True)).one()  # noqa
+        if repo.linked:
+            repo = repo.linked
+        q = ctx.db.query(Script).join(
+            Folder).filter(
+                Folder.repository == repo,
+                Folder.full_name == folder)
         return q
 
     @staticmethod
     def editable(ctx, repository, folder):
-        q = ctx.db.query(Script).join(
-            Folder, Repository, User, Org).filter(
-                Org.name == ctx.user.org,
-                Repository.name == repository,
+        repo = ctx.db.query(Repository).join(Org).filter(
+            Org.name == ctx.user.org,
+            Repository.name == repository,
                 Repository.owner_id == ctx.user.id,
-                Repository.enabled == True,
+                Repository.enabled == True).one()  # noqa
+        if repo.linked:
+            repo = repo.linked
+        q = ctx.db.query(Script).join(
+            Folder).filter(
+                Folder.repository == repo,
                 Folder.full_name == folder
             )  # noqa
         return q
 
     @staticmethod
     def find(ctx, full_path):
-        repository, _, path = full_path.lstrip('/').partition("/")
-        folder, _, script = path.rpartition("/")
+        repository, folder, script, rev = Script.parse(full_path)
 
         if folder:
             folder = "/" + folder.strip('/') + "/"
