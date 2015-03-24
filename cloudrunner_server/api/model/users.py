@@ -13,6 +13,7 @@
 #  *******************************************************/
 
 from datetime import datetime, timedelta
+import re
 from sqlalchemy.sql.expression import func
 from sqlalchemy import (
     Table, Column, Boolean, Integer, String, Text, DateTime,
@@ -27,6 +28,7 @@ from cloudrunner_server.api.util import random_token
 from cloudrunner_server.api.model.exceptions import QuotaExceeded
 
 TOKEN_LENGTH = 64
+ALLOWED_USER = re.compile("([a-z_][a-z0-9_]{0,31})", re.I)
 
 
 class Org(TableBase):
@@ -168,6 +170,10 @@ class Role(TableBase):
     group_id = Column(Integer, ForeignKey('groups.id'))
     group = relationship('Group', backref='roles')
     user = relationship('User')
+
+    @classmethod
+    def is_valid(cls, role):
+        return (role == "*") or ALLOWED_USER.match(role)
 
 
 user2group_rel = Table('user2group', TableBase.metadata,

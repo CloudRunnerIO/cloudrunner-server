@@ -181,7 +181,7 @@ class Auth(HookController):
         user.set_password(password)
 
         key = ApiKey(user=user)
-        adm_role = Role(servers="*", as_user="root")
+        adm_role = Role(servers="*", as_user="@")
         perm = Permission(name="is_admin", user=user)
         group = Group(org=org, name="Default")
         group.users.append(user)

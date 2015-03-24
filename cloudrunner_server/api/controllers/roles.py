@@ -50,8 +50,12 @@ class Roles(object):
     @roles.wrap_create()
     def add_role(self, username=None, **kwargs):
         user = User.visible(request).filter(User.username == username).one()
-        as_user = kwargs['as_user']
+        as_user = str(kwargs['as_user'])
         servers = kwargs['servers']
+        if as_user == '*':
+            as_user = "@"
+        elif not Role.is_valid(as_user):
+            return O.error(msg="Invalid user name: %s" % as_user)
         role = Role(as_user=as_user, servers=servers)
         user.roles.append(role)
         request.db.commit()
