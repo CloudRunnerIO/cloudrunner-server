@@ -361,8 +361,7 @@ class Library(HookController):
             except NotAccessible:
                 return O.error(msg="Cannot connect to %s API" % plugin.type)
             except NotFound:
-                return O.error(msg="The specified repository address is not "
-                               "present in remote repository")
+                return O.error(msg="The specified repository was not found")
             except NotModified:
                 subfolders = root_folder.subfolders
                 scripts = request.db.query(Script).join(Folder).filter(
@@ -498,8 +497,7 @@ class Library(HookController):
                 revisions = [dict(version="HEAD", created_at=None)]
                 rev = last_rev
             except NotFound:
-                return O.error(msg="The specified file was not found "
-                               "in the remote repository")
+                return O.error(msg="The specified repository was not found")
             except NotAccessible:
                 return O.error(msg="Cannot connect to %s API" %
                                plugin.type)
