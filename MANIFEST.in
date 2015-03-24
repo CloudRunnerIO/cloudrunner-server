@@ -10,6 +10,7 @@ recursive-include scripts/common *
 
 graft conf
 graft cloudrunner_server/db
+graft cloudrunner_server/doc
 graft cloudrunner_server/api
 graft cloudrunner_server/cache/functions
 graft cloudrunner_server/plugins

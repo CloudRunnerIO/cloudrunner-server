@@ -162,6 +162,7 @@ fi
 %exclude %{_sysconfdir}/cloudrunner/api.config.pyo
 
 %{python_sitelib}/cloudrunner_server/db
+%{python_sitelib}/cloudrunner_server/doc
 
 
 %changelog
