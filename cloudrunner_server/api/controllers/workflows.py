@@ -55,12 +55,14 @@ class Workflows(HookController):
             revision = script.contents(request, rev=rev)
         else:
             plugin = PluginRepoBase.find(repo.type)
+            parent_repo = [r for r in repo.parents
+                           if r.org.name == request.user.org][0]
             if not plugin:
                 return O.error(msg="Plugin for repo type %s not found!" %
                                repo.type)
-            plugin = plugin(repo.parent.credentials.auth_user,
-                            repo.parent.credentials.auth_pass,
-                            repo.parent.credentials.auth_args)
+            plugin = plugin(parent_repo.credentials.auth_user,
+                            parent_repo.credentials.auth_pass,
+                            parent_repo.credentials.auth_args)
 
             try:
                 contents, last_modified, version, etag = plugin.contents(

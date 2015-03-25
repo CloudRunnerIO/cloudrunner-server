@@ -67,8 +67,12 @@ class Library(HookController):
                 Repository.name == repo_name).first()
 
             def get_creds(repo):
-                parent = repo.parent
-                return dict(auth_user=parent.credentials.auth_user)
+                parents = [p for p in repo.parents
+                           if p.org.name == request.user.org]
+                if parents:
+                    return dict(auth_user=parents[0].credentials.auth_user)
+                else:
+                    return {}
 
             if repo.type == 'cloudrunner':
                 return O.repository(repo.serialize(
@@ -227,6 +231,7 @@ class Library(HookController):
             return O.error(msg="Repo not found")
 
         if repo.linked:
+            parent_repo = repo
             repo = repo.linked
             repository = repo.name
             root_folder = request.db.query(Folder).filter(
@@ -288,9 +293,9 @@ class Library(HookController):
             if not plugin:
                 return O.error(msg="Plugin for repo type %s not found!" %
                                repo.type)
-            plugin = plugin(repo.parent.credentials.auth_user,
-                            repo.parent.credentials.auth_pass,
-                            repo.parent.credentials.auth_args)
+            plugin = plugin(parent_repo.credentials.auth_user,
+                            parent_repo.credentials.auth_pass,
+                            parent_repo.credentials.auth_args)
             subfolders, scripts = [], []
             try:
                 contents, last_modified, etag = plugin.browse(
@@ -434,6 +439,7 @@ class Library(HookController):
             return O.error(msg="Repo not found")
 
         if repo.linked:
+            parent_repo = repo
             repo = repo.linked
             repository = repo.name
             root_folder = request.db.query(Folder).filter(
@@ -473,9 +479,9 @@ class Library(HookController):
             if not plugin:
                 return O.error("Plugin for repo type %s not found!" %
                                repo.type)
-            plugin = plugin(repo.parent.credentials.auth_user,
-                            repo.parent.credentials.auth_pass,
-                            repo.parent.credentials.auth_args)
+            plugin = plugin(parent_repo.credentials.auth_user,
+                            parent_repo.credentials.auth_pass,
+                            parent_repo.credentials.auth_args)
             last_rev = scr.contents(request)
             try:
                 contents, last_modified, rev, etag = plugin.contents(

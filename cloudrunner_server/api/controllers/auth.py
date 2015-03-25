@@ -33,6 +33,7 @@ from cloudrunner_server.util.cache import CacheRegistry
 DEFAULT_EXP = 1440
 LOG = logging.getLogger()
 MAX_EXP = 3 * 30 * 24 * 60  # 3 months/90 days
+CR_LIBRARY = "cloudrunner-library"
 
 
 @event.listens_for(Org, 'before_insert')
@@ -193,6 +194,36 @@ class Auth(HookController):
         request.db.add(adm_role)
         request.db.add(perm)
         request.db.add(key)
+
+        # Attach cloudrunner-library repo
+        check_existing = request.db.query(Repository).filter(
+            Repository.type == 'github',
+            Repository.org_id == None,
+            Repository.name == CR_LIBRARY).first()  # noqa
+        if check_existing:
+            repository = check_existing
+        else:
+            repository = Repository(name=CR_LIBRARY, private=False,
+                                    type='github')
+            request.db.add(repository)
+            root = Folder(name="/", full_name="/", repository=repository)
+            request.db.add(root)
+
+        repository_link = Repository(name=CR_LIBRARY, private=False,
+                                     type='github',
+                                     owner=user,
+                                     org=org)
+        repository_link.linked = repository
+        request.db.add(repository_link)
+
+        auth_user = 'CloudRunnerIO'
+        auth_pass = ''
+        auth_args = ''
+        creds = RepositoryCreds(provider='github', auth_user=auth_user,
+                                auth_pass=auth_pass, auth_args=auth_args,
+                                repository=repository_link)
+        request.db.add(creds)
+
         try:
             request.db.commit()
         except IntegrityError, ierr:

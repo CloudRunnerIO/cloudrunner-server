@@ -40,7 +40,7 @@ class Repository(TableBase):
     enabled = Column(Boolean, default=True)
 
     linked = relationship('Repository', remote_side=[id],
-                          backref=backref('parent', uselist=False))
+                          backref=backref('parents'))
 
     org = relationship(Org, backref=backref('library_scripts',
                                             cascade="delete"))
@@ -74,10 +74,7 @@ class Repository(TableBase):
 
 
 def quotas(connection, target):
-    if target.parent:
-        org = target.parent.org
-    else:
-        org = target.org
+    org = target.org
     total_allowed = org.tier.total_repos
 
     current_total = connection.scalar(
@@ -90,6 +87,8 @@ def quotas(connection, target):
 
 @event.listens_for(Repository, 'before_insert')
 def repo_before_insert(mapper, connection, target):
+    if not target.org:
+        return
 
     total_allowed, current_total = quotas(connection, target)
     if total_allowed <= current_total:
@@ -99,7 +98,7 @@ def repo_before_insert(mapper, connection, target):
 
 @event.listens_for(Repository, 'before_update')
 def repo_before_update(mapper, connection, target):
-    if not target.enabled:
+    if not target.enabled or not target.org:
         return
     total_allowed, current_total = quotas(connection, target)
     if total_allowed < current_total:
