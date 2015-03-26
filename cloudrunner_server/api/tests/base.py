@@ -192,8 +192,8 @@ class BaseRESTTestCase(BaseTestCase):
                                    enabled=True, org=org, type='github')
         Session.add(ext_repo_link)
         ext_repo = Repository(name='ext_repo', private=True,
-                              enabled=True, type='github',
-                              parent=ext_repo_link)
+                              enabled=True, type='github')
+        ext_repo_link.linked = ext_repo
         Session.add(ext_repo)
 
         creds = RepositoryCreds(auth_user='gituser', auth_pass='gitsecret',
@@ -337,4 +337,10 @@ class BaseRESTTestCase(BaseTestCase):
                    exec_user=user, step_index=1, exec_start=100000000,
                    exec_end=1000000010, full_script="Version 7")
         Session.add(run1)
+        run_node1 = RunNode(name='node1', exit_code=0, as_user='root',
+                            run=run1)
+        run_node2 = RunNode(name='node3', exit_code=1, as_user='admin',
+                            run=run1)
+        Session.add(run_node1)
+        Session.add(run_node2)
         Session.commit()

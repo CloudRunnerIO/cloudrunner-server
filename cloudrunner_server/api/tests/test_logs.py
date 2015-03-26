@@ -13,11 +13,6 @@
 #  *******************************************************/
 
 from cloudrunner_server.api.tests import base
-try:
-    from unittest import SkipTest
-except ImportError:
-    from unittest2 import SkipTest
-raise SkipTest()
 
 
 class TestLogs(base.BaseRESTTestCase):
@@ -27,45 +22,60 @@ class TestLogs(base.BaseRESTTestCase):
 
     def test_list_logs(self):
         tasks = {
-            'etag': 1000,
-            'groups': [
-                {
-                    'status': 2,
-                    'lang': 'python',
-                    'uuid': '1111111111', 'group': None,
-                    'target': 'nodes', 'step': None,
-                    'source': '',
-                    'created_at': '2014-01-01 00:00:00',
-                    'exit_code': 1,
-                    'parent_id': None,
-                    'job': None,
-                    'taskgroup_id': None,
-                    'owner': 'testuser',
-                    'total_steps': None,
-                    'revision': '4',
-                    'name': 'cloudrunner/folder1/folder11/test2'
-                }]}
+            'marker': None,
+            'etag': 0,
+            'pages': 1,
+            'groups':
+            [{
+                'status': 2,
+                'group': 1,
+                'uuid': '1111111111',
+                'name': 'cloudrunner/folder1/test1',
+                'exec_end': None,
+                'created_at': '2014-01-01 00:00:00',
+                'exit_code': 1,
+                'batch': {},
+                'parent_id': None,
+                'exec_start': None,
+                'owner': 'testuser',
+                'nodes': [{'exit': 0, 'name': 'node1'},
+                          {'exit': 1, 'name': 'node3'}],
+                'id': 1,
+                'revision': '2'
+            }]
+        }
         resp = self.app.get('/rest/logs/all', headers={
             'Cr-Token': 'PREDEFINED_TOKEN', 'Cr-User': 'testuser'})
         self.assertEqual(resp.status_int, 200, resp.status_int)
         resp_json = resp.json
+        self.maxDiff = None
         self.assertEqual(resp_json['tasks'], tasks)
 
     def test_get_log(self):
         log = {
-            'task':
-              {
-                  'status': 'Finished',
-                  'lang': 'python',
-                  'uuid': '1111111111',
-                  'script': "script",
-                  'created_at': '2014-01-01 00:00:00',
-                  'exit_code': 1,
-                  'timeout': 60,
-                  'env': {"key": "value"},
-                  'target': 'nodes'
-              }
+            'group': {'workflows':
+                      [
+                          {'status': 'Finished',
+                           'runs': [
+                               {'lang': 'python',
+                                'full_script': 'Version 7',
+                                'uuid': '222222222',
+                                'exit_code': 2,
+                                'env_in': {'key': 'value'},
+                                'exec_start': 100000000,
+                                'step_index': 1,
+                                'timeout': 90,
+                                'nodes': [{'exit': 0, 'name': 'node1'},
+                                          {'exit': 1, 'name': 'node3'}],
+                                   'env_out': {},
+                                'exec_end': 1000000010,
+                                'target': 'node1 node3'}],
+                              'uuid': '1111111111',
+                              'created_at': '2014-01-01 00:00:00',
+                              'exit_code': 1, 'timeout': 90}
+                      ]}
         }
+
         resp = self.app.get('/rest/logs/get?log_uuid=1111111111', headers={
             'Cr-Token': 'PREDEFINED_TOKEN', 'Cr-User': 'testuser'})
         self.assertEqual(resp.status_int, 200, resp.status_int)
@@ -78,4 +88,4 @@ class TestLogs(base.BaseRESTTestCase):
             'Cr-Token': 'PREDEFINED_TOKEN', 'Cr-User': 'testuser'})
         self.assertEqual(resp.status_int, 200, resp.status_int)
         resp_json = resp.json
-        self.assertEqual(resp_json['error'], {'msg': 'Log not found'})
+        self.assertEqual(resp_json, {'task': {}})

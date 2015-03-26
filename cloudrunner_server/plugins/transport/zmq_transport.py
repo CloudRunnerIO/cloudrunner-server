@@ -480,14 +480,17 @@ class ZmqTransport(ServerTransportBackend):
                 LOGPUB.error(ex)
 
             tens = self.tenants.purge_expired()
-            for (org, ts) in tens:
-                for t in ts:
-                    node = self.db.query(Node).join(Org).filter(
-                        Node.name == t.name,
-                        Org.name == org).first()
-                    if node and node.auto_cleanup:
-                        LOGPUB.info("Auto-cleanup for node %s" % node.name)
-                        self.ccont.revoke(node.name, ca=org)
+            try:
+                for (org, ts) in tens:
+                    for t in ts:
+                        node = self.db.query(Node).join(Org).filter(
+                            Node.name == t.name,
+                            Org.name == org).first()
+                        if node and node.auto_cleanup:
+                            LOGPUB.info("Auto-cleanup for node %s" % node.name)
+                            self.ccont.revoke(node.name, ca=org)
+            except Exception, ex:
+                LOGPUB.error(ex)
 
         def translate(org_name):
             # Translate org_name to org_uid

@@ -270,8 +270,9 @@ class Script(TableBase):
         repo = ctx.db.query(Repository).join(Org).filter(
             Org.name == ctx.user.org,
             Repository.name == repository,
-                or_(Repository.owner_id == ctx.user.id,
-                    Repository.private != True)).one()  # noqa
+            or_(Repository.owner_id == ctx.user.id,
+                Repository.private != True)).one()  # noqa
+
         if repo.linked:
             repo = repo.linked
         q = ctx.db.query(Script).join(
@@ -300,10 +301,8 @@ class Script(TableBase):
     def find(ctx, full_path):
         repository, folder, script, rev = Script.parse(full_path)
 
-        if folder:
+        if folder and folder != '/':
             folder = "/" + folder.strip('/') + "/"
-        else:
-            folder = '/'
         q = Script.visible(ctx, repository, folder).filter(
             Script.name == script)
 

@@ -20,7 +20,7 @@ import pytz
 
 from pecan import expose, request, response, redirect
 from pecan.hooks import HookController
-from sqlalchemy.orm import make_transient
+from sqlalchemy.orm import make_transient, exc
 
 from cloudrunner.core.parser import parse_sections
 from cloudrunner_server.api.decorators import wrap_command
@@ -608,9 +608,14 @@ class Library(HookController):
         if not folder_path.endswith('/'):
             folder_path += "/"
 
-        scr = Script.editable(request,
-                              repository,
-                              folder_path).filter(Script.name == name).first()
+        try:
+            scr = Script.editable(
+                request,
+                repository,
+                folder_path).filter(Script.name == name).first()
+        except exc.NoResultFound:
+            return O.error(msg="Script '%s' not found" % name)
+
         if not scr:
             return O.error(msg="Script '%s' not found" % name)
         request.db.delete(scr)

@@ -13,12 +13,6 @@
 #  *******************************************************/
 import json
 from mock import Mock, patch
-try:
-    from unittest import SkipTest
-except ImportError:
-    from unittest2 import SkipTest
-raise SkipTest()
-
 from cloudrunner.core import message as M
 from cloudrunner_server.api.tests import base
 
