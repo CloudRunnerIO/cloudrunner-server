@@ -92,7 +92,10 @@ class Execute(HookController):
         LOG.info("Received execute request [%s] from: %s" % (
             full_path, request.client_addr))
 
-        targets = kwargs.pop('targets')
+        targets = kwargs.pop('targets', None)
+        if not targets:
+            return O.error(msg="The 'targets' parameter is mandatory "
+                           "for executing scripts.")
         if not getattr(request, "user", None):
             key = kwargs.pop('key', None)
             if not key:

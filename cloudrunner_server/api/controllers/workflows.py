@@ -122,7 +122,7 @@ class Workflows(HookController):
                     else:
                         options[arg] = vals
 
-            section = dict(content=s.body.strip(),
+            section = dict(content=parser.remove_shebangs(s.body.strip()),
                            targets=[t.strip() for t in s.target.split(' ')
                                     if t.strip()],
                            lang=s.lang,
