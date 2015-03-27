@@ -66,11 +66,11 @@ class BaseRESTTestCase(BaseTestCase):
         self.assertEquals(p_conf.sqlalchemy.engine.url.drivername, "sqlite")
 
         self._user_id = 1
-        get_token = lambda *args: self._get_token()
+        get_token = self._get_token
         self.aero_reader.get_user_token = get_token
         self.populate()
 
-    def _get_token(self):
+    def _get_token(self, *args):
         token = dict(uid=self._user_id, org=ORGS[self._user_id],
                      email="email@domain.com",
                      email_hash="123hash", token="1234567890",
