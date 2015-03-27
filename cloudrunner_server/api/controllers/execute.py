@@ -46,6 +46,7 @@ class Execute(HookController):
             if not api_key:
                 return abort(401)
             user_id = api_key.user_id
+            request.user = api_key.user
         else:
             user_id = request.user.id
 
@@ -105,6 +106,7 @@ class Execute(HookController):
             if not api_key:
                 return abort(401)
             user_id = api_key.user_id
+            request.user = api_key.user
         else:
             user_id = request.user.id
 
