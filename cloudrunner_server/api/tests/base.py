@@ -44,11 +44,10 @@ class BaseRESTTestCase(BaseTestCase):
         BaseRESTTestCase.modules.update(modules)
         super(BaseRESTTestCase, self).setUpClass()
 
-    permissions = ['is_admin']
-
     def setUp(self):
         super(BaseRESTTestCase, self).setUp()
 
+        self.permissions = ['is_admin']
         os.environ['CR_CONFIG'] = os.path.join(
             os.path.dirname(__file__), '../../api',
             'cr_test.conf'
