@@ -14,6 +14,7 @@
 
 import argparse
 from datetime import datetime
+from functools import partial
 import json
 import logging
 import os
@@ -230,7 +231,10 @@ class TriggerManager(Daemon):
                 section.target = targets
                 sections = [section]
             else:
-                sections = parser.parse_sections(script_rev.content)
+                subst = partial(include_substitute, ctx)
+                sections = parser.parse_sections(
+                    script_rev.content,
+                    include_substitute=subst)
             if not sections:
                 return O.error(msg="Empty script")
 
@@ -248,7 +252,6 @@ class TriggerManager(Daemon):
                 task.tags.append(Tag(name=tag))
 
             for i, section in enumerate(sections):
-                parts = [section.body]
                 atts = []
                 if i == 0:
                     if section.env and section.env._items:
@@ -258,21 +261,9 @@ class TriggerManager(Daemon):
                 if section.args.timeout:
                     timeout = section.args.timeout[0]
 
-                ins = 0
-                for arg, scr_names in section.args.items():
-                    if arg == 'include-before':
-                        for scr in scr_names:
-                            s = _parse_script_name(ctx, scr)
-                            parts.insert(ins, s.content)
-                            ins += 1
-                    if arg == 'include-after':
-                        for scr in scr_names:
-                            s = _parse_script_name(ctx, scr)
-                            parts.append(s.content)
-
                 if section.args.attach:
                     atts = section.args.attach
-                remote_task = dict(attachments=atts, body="\n".join(parts))
+                remote_task = dict(attachments=atts, body=section.body)
                 if timeout:
                     remote_task['timeout'] = timeout
                 remote_task['target'] = self._expand_target(section.target)
@@ -500,24 +491,48 @@ class TriggerManager(Daemon):
         LOG.info('Exited main thread')
 
 
-def _parse_script_name(ctx, path):
-    path = path.lstrip("/")
-    rev = None
-    scr_, _, rev = path.rpartition("@")
-    if not scr_:
-        scr_ = rev
-        rev = None
-    if rev and (rev.isdigit() or len(rev) == 8):
-        pass
+def include_substitute(ctx, path):
+    try:
+        scr = _parse_script_name(ctx, path)
+    except Exception, ex:
+        LOG.exception(ex)
+        return "# include '%s' not found" % path
     else:
-        scr_ = path
-    repo_name, _, full_path = scr_.partition("/")
+        if scr:
+            return scr.content
+    return "# include: %s not found" % path
+
+
+def _parse_script_name(ctx, path):
+
+    repo_name, name, scr_, rev = Script.parse(path)
+    full_path = "/".join([name, scr_])
+    parent, _, __ = name.rstrip("/").rpartition("/")
+    if parent:
+        parent = parent + "/"
+    else:
+        parent = None
+
     repo = Repository.visible(ctx).filter(
         Repository.name == repo_name).one()
-    try:
-        q = Script.load(ctx, scr_)
-        s = q.one()
 
+    if repo.linked:
+        parent_repo = repo
+        repo = repo.linked
+        root_folder = ctx.db.query(Folder).filter(
+            Folder.full_name == name, Folder.repository == repo).one()
+    else:
+        root_folder = Folder.visible(
+            request, repo_name, parent=parent).filter(
+                Folder.full_name == name).one()
+
+    try:
+        s = [sc for sc in root_folder.scripts if sc.name == scr_]
+        if not s:
+            LOG.error("Cannot find %s" % scr_)
+            return None
+        else:
+            s = s[0]
         if rev:
             return s.contents(ctx, rev=rev)
     except:
@@ -528,9 +543,9 @@ def _parse_script_name(ctx, path):
         if not plugin:
             LOG.warn("No plugin found for repo %s" % (repo.type,))
             return None
-        plugin = plugin(repo.credentials.auth_user,
-                        repo.credentials.auth_pass,
-                        repo.credentials.auth_args)
+        plugin = plugin(parent_repo.credentials.auth_user,
+                        parent_repo.credentials.auth_pass,
+                        parent_repo.credentials.auth_args)
         try:
             contents, last_modified, rev = plugin.contents(
                 repo_name, full_path, rev=rev,

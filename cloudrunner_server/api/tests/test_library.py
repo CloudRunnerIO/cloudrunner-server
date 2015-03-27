@@ -500,11 +500,9 @@ class TestLibrary(base.BaseRESTTestCase):
             "sections": [
                 {
                     "lang": "bash",
-                    "include_before": [],
                     "env": {},
                     "content": "echo 'Done'",
                     "timeout": None,
-                    "include_after": [],
                     "targets": ["*"],
                     "attachments": []
                 }

@@ -12,6 +12,7 @@
 #  * without the express permission of CloudRunner.io
 #  *******************************************************/
 
+from functools import partial
 import logging
 from pecan import expose, request, redirect, response
 from pecan.hooks import HookController
@@ -24,7 +25,7 @@ from cloudrunner_server.api.hooks.perm_hook import PermHook
 from cloudrunner_server.api.decorators import wrap_command
 from cloudrunner_server.api.model import Script, Revision, Folder
 from cloudrunner_server.api.util import JsonOutput as O
-from cloudrunner_server.triggers.manager import _parse_script_name
+from cloudrunner_server.triggers.manager import include_substitute
 from cloudrunner_server.plugins.repository.base import (PluginRepoBase,
                                                         NotModified,
                                                         NotAccessible)
@@ -102,18 +103,10 @@ class Workflows(HookController):
 
         for s in sections:
             atts = []
-            include_before = []
-            include_after = []
             options = {}
             if s.args:
                 for arg, vals in s.args.items():
-                    if arg == 'include-before':
-                        include_before.extend([dict(path=scr_name)
-                                               for scr_name in vals])
-                    elif arg == 'include-after':
-                        include_after.extend([dict(path=scr_name)
-                                              for scr_name in vals])
-                    elif arg == 'attach':
+                    if arg == 'attach':
                         atts.extend([dict(path=scr_name) for scr_name in vals])
                     elif arg == 'timeout':
                         try:
@@ -127,8 +120,6 @@ class Workflows(HookController):
                            targets=[t.strip() for t in s.target.split(' ')
                                     if t.strip()],
                            lang=s.lang,
-                           include_before=include_before,
-                           include_after=include_after,
                            attachments=atts,
                            env=s.env._items,
                            timeout=s.timeout)
@@ -212,7 +203,7 @@ class Workflows(HookController):
 
 def flatten_workflow(workflow, expand=False):
     new_content = []
-    header = ("#! switch [%(targets)s] %(include_before)s %(include_after)s "
+    header = ("#! switch [%(targets)s] "
               "%(attachments)s %(env)s %(timeout)s")
     for section in workflow['sections']:
         targets = " ".join([s.strip() for s in section['targets']
@@ -224,10 +215,6 @@ def flatten_workflow(workflow, expand=False):
             shebang_lang = "#! /usr/bin/%s" % lang
         if timeout:
             timeout = '--timeout=%s' % timeout
-        include_before = ['--include-before=%s' % i['path']
-                          for i in section.get('include_before', [])]
-        include_after = ['--include-after=%s' % i['path']
-                         for i in section.get('include_after', [])]
         attachments = ['--attach=%s' % i['path']
                        for i in section['attachments']]
         if section.get("env"):
@@ -236,29 +223,14 @@ def flatten_workflow(workflow, expand=False):
         else:
             env = ""
 
+        subst = None
         if expand:
-            parts = []
-            for ins, scr in enumerate(section.get('include_before', [])):
-                try:
-                    s = _parse_script_name(request, scr['path']).content
-                except:
-                    s = '# Script %s cannot be loaded' % scr['path']
-                parts.insert(ins, s)
-
-            for scr in section.get('include_after', []):
-                try:
-                    s = _parse_script_name(request, scr['path']).content
-                except:
-                    s = '# Script %s cannot be loaded' % scr['path']
-                parts.append(s.strip())
-
-            include_before = []
-            include_after = []
+            subst = partial(include_substitute, request)
+            content = section['content'].strip()
+            parts = [parser.substitute_includes(content, callback=subst)]
         else:
             parts = [section['content'].strip()]
         _header = header % dict(targets=targets,
-                                include_before=" ".join(include_before),
-                                include_after=" ".join(include_after),
                                 attachments=" ".join(attachments),
                                 timeout=timeout,
                                 env=env)
