@@ -449,6 +449,7 @@ class Library(HookController):
                 request, repository, parent=parent).filter(
                     Folder.full_name == name).one()
 
+        editable = repo.editable(request)
         scr = [s for s in root_folder.scripts if s.name == script]
         if not scr:
             return O.error(msg="Not found")
@@ -525,9 +526,8 @@ class Library(HookController):
                         version=rev.version,
                         allow_sudo=scr.allow_sudo,
                         mime=scr.mime_type,
-                        revisions=revisions)
-
-        return O.script({})
+                        revisions=revisions,
+                        editable=editable)
 
     @script.when(method='POST', template='json')
     @script.wrap_create()

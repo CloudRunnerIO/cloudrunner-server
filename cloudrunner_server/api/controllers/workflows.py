@@ -51,6 +51,7 @@ class Workflows(HookController):
 
         data = []
 
+        editable = repo.editable(request)
         if repo.type == "cloudrunner":
             revision = script.contents(request, rev=rev)
         else:
@@ -139,7 +140,7 @@ class Workflows(HookController):
             if not r.draft], key=lambda r: r["created_at"], reverse=True)
 
         return O.workflow(rev=revision.version, sections=data,
-                          revisions=revisions)
+                          revisions=revisions, editable=editable)
 
     @workflow.when(method='POST', template='json')
     @workflow.wrap_create(model_name='Workflow')
