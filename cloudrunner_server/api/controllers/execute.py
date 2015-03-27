@@ -21,10 +21,19 @@ from cloudrunner_server.api.hooks.db_hook import DbHook
 from cloudrunner_server.api.util import (JsonOutput as O, flatten_params)
 from cloudrunner_server.api.model import (Script, Repository, Folder, ApiKey)
 from cloudrunner_server.triggers.manager import TriggerManager
+from cloudrunner_server.api.util import Wrap
 
 LOG = logging.getLogger()
 
 MAN = TriggerManager()
+
+
+def cached_user(user):
+    return Wrap(id=user.id,
+                username=user.username,
+                org=user.org.name,
+                email=user.email,
+                permissions=user.permissions)
 
 
 class Execute(HookController):
@@ -46,7 +55,7 @@ class Execute(HookController):
             if not api_key:
                 return abort(401)
             user_id = api_key.user_id
-            request.user = api_key.user
+            request.user = cached_user(api_key.user)
         else:
             user_id = request.user.id
 
@@ -106,7 +115,7 @@ class Execute(HookController):
             if not api_key:
                 return abort(401)
             user_id = api_key.user_id
-            request.user = api_key.user
+            request.user = cached_user(api_key.user)
         else:
             user_id = request.user.id
 

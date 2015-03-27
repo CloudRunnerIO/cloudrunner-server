@@ -308,23 +308,6 @@ class Script(TableBase):
 
         return q
 
-    @staticmethod
-    def load(ctx, path):
-        repository, _, path = path.partition("/")
-        folder, _, script = path.rpartition("/")
-
-        if folder == '':
-            folder = '/'
-        else:
-            folder = "/" + folder + "/"
-        q = ctx.db.query(Script).join(
-            Folder, Repository, Org).filter(
-                Org.name == ctx.user.org,
-                Repository.name == repository,
-                Folder.full_name == folder,
-                Script.name == script)
-        return q
-
     def full_path(self):
         return "%s%s%s" % (self.folder.repository.name,
                            self.folder.full_name,
