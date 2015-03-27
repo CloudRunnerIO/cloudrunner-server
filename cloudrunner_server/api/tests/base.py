@@ -34,6 +34,8 @@ modules = {
     'cloudrunner_server.master.functions': ccont
 }
 
+ORGS = {1: 'MyOrg', 2: 'MyOrg2'}
+
 
 class BaseRESTTestCase(BaseTestCase):
 
@@ -42,11 +44,10 @@ class BaseRESTTestCase(BaseTestCase):
         BaseRESTTestCase.modules.update(modules)
         super(BaseRESTTestCase, self).setUpClass()
 
-    permissions = ['is_admin']
-
     def setUp(self):
         super(BaseRESTTestCase, self).setUp()
 
+        self.permissions = ['is_admin']
         os.environ['CR_CONFIG'] = os.path.join(
             os.path.dirname(__file__), '../../api',
             'cr_test.conf'
@@ -64,16 +65,24 @@ class BaseRESTTestCase(BaseTestCase):
         self.assertIsNone(p_conf.sqlalchemy.engine.url.database)
         self.assertEquals(p_conf.sqlalchemy.engine.url.drivername, "sqlite")
 
-        token = dict(uid=1, org="MyOrg", email="email@domain.com",
+        self._user_id = 1
+        get_token = lambda *args: self._get_token()
+        self.aero_reader.get_user_token = get_token
+        self.populate()
+
+    def _get_token(self):
+        token = dict(uid=self._user_id, org=ORGS[self._user_id],
+                     email="email@domain.com",
                      email_hash="123hash", token="1234567890",
                      permissions=self.permissions,
                      tier=dict(name='tier1', nodes=6,
                                total_repos=5,
                                external_repos=True,
                                users=10, groups=10, roles=5))
-        get_token = MagicMock(return_value=token)
-        self.aero_reader.get_user_token = get_token
-        self.populate()
+        return token
+
+    def set_user(self, user_id):
+        self._user_id = user_id
 
     def tearDown(self):
         super(BaseRESTTestCase, self).tearDown()
@@ -100,10 +109,10 @@ class BaseRESTTestCase(BaseTestCase):
                           max_concurrent_tasks=5, log_retention_days=30,
                           cron_jobs=10, api_keys=20)
         Session.add(tier2)
-        org = Org(name='MyOrg', enabled=True, tier=tier1)
+        org = Org(name=ORGS[1], enabled=True, tier=tier1)
         Session.add(org)
 
-        org2 = Org(name='MyOrg2', enabled=False, tier=tier2)
+        org2 = Org(name=ORGS[2], enabled=False, tier=tier2)
         Session.add(org2)
 
         self.assertEquals(ccont.create_ca.call_args_list, [])
@@ -147,6 +156,12 @@ class BaseRESTTestCase(BaseTestCase):
                       user_id=user.id,
                       scope='LOGIN')
         Session.add(token)
+
+        token2 = Token(value="PREDEFINED_TOKEN2",
+                       expires_at=datetime.now() + timedelta(minutes=60),
+                       user_id=user2.id,
+                       scope='LOGIN')
+        Session.add(token2)
         Session.commit()
 
         role_admin = Role(group=grp_admin, servers='production',
@@ -204,7 +219,7 @@ class BaseRESTTestCase(BaseTestCase):
         Session.add(root1)
         root11 = Folder(name="/", full_name="/", repository=repo11, owner=user)
         Session.add(root11)
-        root2 = Folder(name="/", full_name="/", repository=repo2, owner=user)
+        root2 = Folder(name="/", full_name="/", repository=repo2, owner=user2)
         Session.add(root2)
         root_ext = Folder(name="/", full_name="/", repository=ext_repo)
         Session.add(root_ext)
@@ -218,12 +233,12 @@ class BaseRESTTestCase(BaseTestCase):
         Session.add(folder11)
         folder2 = Folder(name="/folder2", full_name="/folder2/",
                          created_at=datetime(2014, 2, 10, 0, 0, 0),
-                         repository=repo2, owner=user, parent=root2)
+                         repository=repo2, owner=user2, parent=root2)
         Session.add(folder2)
-        folder21 = Folder(name="/folder11", full_name="/folder1/folder11/",
+        folder21 = Folder(name="/folder11", full_name="/folder2/folder11/",
                           created_at=datetime(2014, 1, 12, 0, 0, 0),
 
-                          repository=repo2, owner=user, parent=folder2)
+                          repository=repo2, owner=user2, parent=folder2)
         Session.add(folder21)
 
         Session.commit()
@@ -245,7 +260,7 @@ class BaseRESTTestCase(BaseTestCase):
 
         wf4 = Script(name='test2', folder=folder21, owner=user2,
                      created_at=datetime(2014, 1, 30, 0, 0, 0),
-                     mime_type="text/template",
+                     mime_type="text/workflow",
                      )
         Session.add(wf4)
 
@@ -288,6 +303,11 @@ class BaseRESTTestCase(BaseTestCase):
         r2_4 = Revision(draft=False, content="Version 4 Final",
                         script=wf2, created_at=datetime(2014, 1, 1, 10, 0, 0))
         Session.add(r2_4)
+        Session.commit()
+
+        r22 = Revision(draft=False, content="#! switch [*]\necho 'Done'",
+                       script=wf4, created_at=datetime(2014, 1, 1, 10, 0, 0))
+        Session.add(r22)
         Session.commit()
 
         job1 = Job(name="trigger1", enabled=True, exec_period="* * * * *",

@@ -4,10 +4,8 @@ from cloudrunner_server.api.tests import base
 class SuperAdminTest(base.BaseRESTTestCase):
 
     def setUp(self):
-        perm = self.permissions
-        self.permissions = ['is_super_admin']
         super(SuperAdminTest, self).setUp()
-        self.permissions = perm
+        self.permissions = ['is_super_admin']
 
     def test_list_orgs(self):
         resp = self.app.get('/rest/manage/orgs/',
