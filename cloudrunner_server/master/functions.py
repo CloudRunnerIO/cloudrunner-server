@@ -28,6 +28,7 @@ import time
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import scoped_session, sessionmaker
 
+from cloudrunner import VAR_DIR, LOG_DIR, TMP_DIR
 from cloudrunner.core.message import TOKEN_SEPARATOR
 from cloudrunner_server.plugins.auth.base import NodeVerifier
 from cloudrunner_server.api.model import *  # noqa
@@ -918,6 +919,10 @@ class ConfigController(object):
         else:
             # Create it
             os.makedirs(ca_path)
+        if not os.path.exists(VAR_DIR):
+            os.makedirs(VAR_DIR)
+            os.makedirs(TMP_DIR)
+            os.makedirs(LOG_DIR)
 
         serial = 1
         serial_fn = os.path.join(ca_path, 'serial')
