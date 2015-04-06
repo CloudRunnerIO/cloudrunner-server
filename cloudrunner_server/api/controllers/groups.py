@@ -62,7 +62,6 @@ class Groups(object):
     @groups.wrap_modify()
     def modify_group_roles(self, name, *args, **kwargs):
         name = name or kwargs['name']
-        print request.POST
         add_roles = request.POST.getall('add')
         rm_roles = request.POST.getall('remove')
         group = Group.visible(request).filter(Group.name == name).first()
