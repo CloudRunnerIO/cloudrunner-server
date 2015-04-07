@@ -55,6 +55,12 @@ rpm-el7_x64: sdist prepare
 	./scripts/rpm/rpm-mock.sh epel-7-x86_64
 	rm cloudrunner_server.spec
 
+.PHONY: rpm-el6_el7_x64
+rpm-el6_el7_x64: sdist prepare
+	./scripts/rpm/rpm-mock.sh epel-6-x86_64
+	./scripts/rpm/rpm-mock.sh epel-7-x86_64
+	rm cloudrunner_server.spec
+
 .PHONY: rpm-f19_x64
 rpm-f19_x64: sdist prepare
 	./scripts/rpm/rpm-mock.sh fedora-19-x86_64
