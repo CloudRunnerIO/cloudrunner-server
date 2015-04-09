@@ -229,7 +229,8 @@ class Token(TableBase):
     user_id = Column(Integer, ForeignKey('users.id'))
     expires_at = Column(DateTime)
     value = Column(String(TOKEN_LENGTH), default=random_token)
-    scope = Column(Enum('LOGIN', 'TRIGGER', 'EXECUTE', 'RECOVER'))
+    scope = Column(Enum('LOGIN', 'TRIGGER', 'EXECUTE', 'RECOVER',
+                        name="scope"))
 
 
 class ApiKey(TableBase):

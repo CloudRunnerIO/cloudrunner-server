@@ -35,6 +35,7 @@ Requires:      python-redis
 Requires:      python-requests
 Requires:      python-sqlalchemy >= 0.7
 Requires:      pytz
+Requires:      python-alembic
 Requires:      python-pecan
 Requires:      python-msgpack >= 0.4
 Requires:      python-aerospike >= 1.0.35
