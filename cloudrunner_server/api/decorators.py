@@ -23,6 +23,7 @@ from cloudrunner_server.api.model.exceptions import QuotaExceeded
 
 LOG = logging.getLogger()
 DUPL_SEARCH = re.compile(r'\'(.*)-\d+')
+DUPL_SEARCH2 = re.compile("DETAIL:\s+Key\s*\((\w+)\)=\((.*)\)")
 
 
 def wrap_command(model=None, model_name=None, method=None, key_error=None,
@@ -94,8 +95,11 @@ def wrap_command(model=None, model_name=None, method=None, key_error=None,
                     return integrity_error(ierr)
 
                 try:
-                    if isinstance(ierr.orig.args,
-                                  tuple) and len(ierr.orig.args) > 1:
+                    try_find = DUPL_SEARCH2.findall(str(ierr.orig))
+                    if try_find and len(try_find[0]) == 2:
+                        msg = "Duplicate value for '%s': %s" % try_find[0]
+                    elif isinstance(ierr.orig.args,
+                                    tuple) and len(ierr.orig.args) > 1:
                         if ierr.orig.args[0] == 1062:
                             msg = "Duplicate entry: %s" % (
                                 DUPL_SEARCH.findall(

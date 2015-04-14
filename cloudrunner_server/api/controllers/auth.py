@@ -20,7 +20,7 @@ from pecan.hooks import HookController
 from sqlalchemy.exc import IntegrityError
 from os import path, unlink
 
-from cloudrunner_server.api.decorators import wrap_command
+from cloudrunner_server.api.decorators import wrap_command, DUPL_SEARCH2
 from cloudrunner_server.api.hooks.braintree_hook import BrainTreeHook
 from cloudrunner_server.api.hooks.db_hook import DbHook
 from cloudrunner_server.api.hooks.error_hook import ErrorHook
@@ -34,6 +34,12 @@ DEFAULT_EXP = 1440
 LOG = logging.getLogger()
 MAX_EXP = 3 * 30 * 24 * 60  # 3 months/90 days
 CR_LIBRARY = "cloudrunner-library"
+ERR_REGISTER_USERNAME = ("Ouch, someone already registered that username. "
+                         "Please choose another.")
+ERR_REGISTER_EMAIL = ("The email is already registered. "
+                      "Please, sign-in.")
+ERR_REGISTER_UNKNOWN = ("Ouch, cannot register user. Try again "
+                        "later or contact us for help.")
 
 
 @event.listens_for(Org, 'before_insert')
@@ -170,6 +176,20 @@ class Auth(HookController):
         password = kwargs["password"]
         email = kwargs["email"]
 
+        # Attach cloudrunner-library repo
+        check_existing = request.db.query(Repository).filter(
+            Repository.type == 'github',
+            Repository.org_id == None,
+            Repository.name == CR_LIBRARY).first()  # noqa
+        if check_existing:
+            repository = check_existing
+        else:
+            repository = Repository(name=CR_LIBRARY, private=False,
+                                    type='github')
+            request.db.add(repository)
+            root = Folder(name="/", full_name="/", repository=repository)
+            request.db.add(root)
+
         plan = request.db.query(UsageTier).filter(
             UsageTier.name == plan_id).one()
         org = Org(name="ORG-%s" % username, tier=plan, enabled=True)
@@ -195,20 +215,6 @@ class Auth(HookController):
         request.db.add(perm)
         request.db.add(key)
 
-        # Attach cloudrunner-library repo
-        check_existing = request.db.query(Repository).filter(
-            Repository.type == 'github',
-            Repository.org_id == None,
-            Repository.name == CR_LIBRARY).first()  # noqa
-        if check_existing:
-            repository = check_existing
-        else:
-            repository = Repository(name=CR_LIBRARY, private=False,
-                                    type='github')
-            request.db.add(repository)
-            root = Folder(name="/", full_name="/", repository=repository)
-            request.db.add(root)
-
         repository_link = Repository(name=CR_LIBRARY, private=False,
                                      type='github',
                                      owner=user,
@@ -232,18 +238,25 @@ class Auth(HookController):
             else:
                 LOG.error(vars(ierr))
             request.db.rollback()
-            if "uq_organizations_name" in str(ierr):
+            try_find = DUPL_SEARCH2.findall(str(ierr))
+            if try_find and len(try_find[0]) == 2:
+                if try_find[0][0] == "name":
+                    return O.error(
+                        msg=ERR_REGISTER_USERNAME, reason="duplicate")
+                elif try_find[0][0] == "email":
+                    return O.error(
+                        msg=ERR_REGISTER_EMAIL, reason="duplicate")
+                else:
+                    return O.error(msg=ERR_REGISTER_UNKNOWN,
+                                   reason="duplicate")
+            elif "uq_organizations_name" in str(ierr):
                 return O.error(
-                    msg="Ouch, someone already registered that username. "
-                    "Please choose another.", reason="duplicate")
+                    msg=ERR_REGISTER_USERNAME, reason="duplicate")
             elif "uq_users_email" in str(ierr):
                 return O.error(
-                    msg="The email is already registered. "
-                    "Please, sign-in.", reason="duplicate")
+                    msg=ERR_REGISTER_EMAIL, reason="duplicate")
             else:
-                return O.error(msg="Ouch, cannot register user. Try again "
-                               "later or contact us for help.",
-                               reason="duplicate")
+                return O.error(msg=ERR_REGISTER_UNKNOWN, reason="duplicate")
         except:
             raise
         # send validation email
