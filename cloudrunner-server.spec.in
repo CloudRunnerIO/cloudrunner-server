@@ -26,6 +26,7 @@ BuildRequires: python-devel
 Requires:      python-argparse
 Requires:      python-crontab
 Requires:      m2crypto
+Requires:      openssl
 Requires:      python-zmq >= 13.0
 Requires:      python-httplib2
 Requires:      python-setuptools

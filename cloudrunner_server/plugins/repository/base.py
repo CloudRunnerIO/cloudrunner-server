@@ -73,10 +73,3 @@ try:
     assert BitbucketPluginRepo
 except ImportError:
     pass
-
-try:
-    from .dropbox_ import DropboxPluginRepo  # noqa
-    assert DropboxPluginRepo
-except ImportError, ex:
-    print ex
-    pass
