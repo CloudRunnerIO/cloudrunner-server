@@ -19,6 +19,7 @@ from pecan import expose, request
 from pecan.core import override_template
 from pecan.hooks import HookController
 import re
+from sqlalchemy import distinct
 from sqlalchemy.orm import exc, joinedload
 
 from cloudrunner_server.api.hooks.error_hook import ErrorHook
@@ -41,7 +42,7 @@ class Logs(HookController):
 
     @expose('json')
     def all(self, nodes=None, run_uuids=None, etag=None, marker=None,
-            page=None, **kwargs):
+            page=None, script=None, **kwargs):
         if etag:
             etag = int(etag)
         else:
@@ -54,6 +55,9 @@ class Logs(HookController):
         except:
             pass
         cache = CacheRegistry()
+        by_script = None
+        run_uuids = run_uuids or []
+
         max_score = 0
         uuids = []
         total_logs = 0
@@ -69,6 +73,18 @@ class Logs(HookController):
                 uuids = set(run_uuids).intersection(set(uuids))
             else:
                 uuids = run_uuids
+
+        if script:
+            by_script = Script.find(request, script).first()
+            if by_script:
+                script_uuids = request.db.query(distinct(Run.uuid)).join(
+                    Task, Revision).filter(
+                        Revision.script == by_script).all()
+                if uuids:
+                    uuids = set(script_uuids).intersection(set(uuids))
+                else:
+                    uuids = script_uuids
+
         groups = TaskGroup.unique(request).order_by(Task.created_at.desc())
         ts = None
         if etag:
