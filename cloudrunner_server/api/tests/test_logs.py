@@ -30,7 +30,7 @@ class TestLogs(base.BaseRESTTestCase):
                 'status': 2,
                 'group': 1,
                 'uuid': '1111111111',
-                'name': 'cloudrunner/folder1/test1',
+                'script_name': 'cloudrunner/folder1/test1',
                 'exec_end': None,
                 'created_at': '2014-01-01 00:00:00',
                 'exit_code': 1,
@@ -56,10 +56,11 @@ class TestLogs(base.BaseRESTTestCase):
             'group': {'workflows':
                       [
                           {'status': 'Finished',
+                           'script_name': 'cloudrunner/folder1/test1',
                            'runs': [
                                {'lang': 'python',
-                                'full_script': 'Version 7',
                                 'uuid': '222222222',
+                                'full_script': 'Version 7',
                                 'exit_code': 2,
                                 'env_in': {'key': 'value'},
                                 'exec_start': 100000000,
@@ -80,7 +81,7 @@ class TestLogs(base.BaseRESTTestCase):
             'Cr-Token': 'PREDEFINED_TOKEN', 'Cr-User': 'testuser'})
         self.assertEqual(resp.status_int, 200, resp.status_int)
         resp_json = resp.json
-        self.assertEqual(resp_json, log, resp_json)
+        self.assertEqual(resp_json, log)
 
     def test_get_wrong_log(self):
 

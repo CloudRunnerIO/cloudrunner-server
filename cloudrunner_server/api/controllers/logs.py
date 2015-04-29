@@ -117,7 +117,6 @@ class Logs(HookController):
                 skip=['owner_id', 'revision_id',
                       'full_script', 'timeout', 'taskgroup_id'],
                 rel=[('taskgroup_id', 'group'),
-                     ('script_name', 'name'),
                      ('script_content.version', 'revision'),
                      ('owner.username', 'owner'),
                      ('runs', 'nodes', map_nodes)])
@@ -227,7 +226,7 @@ class Logs(HookController):
                             exit_code=task.exit_code,
                             uuid=task.uuid,
                             status=LOG_STATUS.from_value(task.status),
-                            name=task.script_name,
+                            script_name=task.script_name,
                             timeout=task.timeout)
 
                 data['runs'] = []
