@@ -13,7 +13,7 @@
 #  *******************************************************/
 
 from sqlalchemy import (Column, String, Integer, DateTime, ForeignKey, Text,
-                        distinct)
+                        event, distinct)
 from sqlalchemy.orm import relationship, backref, joinedload
 from sqlalchemy.sql.expression import func
 import uuid
@@ -65,10 +65,11 @@ class Task(TableBase):
     taskgroup_id = Column(Integer, ForeignKey(TaskGroup.id))
     parent_id = Column(Integer, ForeignKey('tasks.id'))
     revision_id = Column(Integer, ForeignKey('revisions.id'))
+    script_name = Column(String(255))
 
     owner = relationship('User', backref=backref('tasks', cascade="delete"))
     script_content = relationship(Revision,
-                                  backref=backref('tasks', cascade="delete"))
+                                  backref=backref('tasks'))
     group = relationship(TaskGroup, backref=backref('tasks'))
     parent = relationship('Task',
                           remote_side=[id],
@@ -98,6 +99,12 @@ class Task(TableBase):
             return False
 
         return not self.script_content.script.folder.repository.private
+
+
+@event.listens_for(Task, 'before_insert')
+def task_before_insert(mapper, connection, target):
+    if target.script_content:
+        target.script_name = target.script_content.script.full_path()
 
 
 class Run(TableBase):
