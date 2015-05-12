@@ -19,9 +19,11 @@ from sqlalchemy.sql.expression import null
 
 from .base import metadata
 from .batches import *  # noqa
+from .deployments import *  # noqa
 from .nodes import *  # noqa
 from .users import *  # noqa
 from .library import *  # noqa
+from .cloud_profiles import *  # noqa
 from .tasks import *  # noqa
 from .jobs import *  # noqa
 

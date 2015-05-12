@@ -65,7 +65,7 @@ class Task(TableBase):
     taskgroup_id = Column(Integer, ForeignKey(TaskGroup.id))
     parent_id = Column(Integer, ForeignKey('tasks.id'))
     revision_id = Column(Integer, ForeignKey('revisions.id'))
-    script_name = Column(String(255))
+    script_name = Column(String(255), index=True)
 
     owner = relationship('User', backref=backref('tasks', cascade="delete"))
     script_content = relationship(Revision,

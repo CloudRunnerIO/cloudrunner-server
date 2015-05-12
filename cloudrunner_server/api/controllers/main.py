@@ -18,7 +18,9 @@ from pecan.secure import secure
 
 from .auth import Auth
 # from .batches import Batches
+from .clouds import Clouds
 from .billing import Billing
+from .deployments import Deployments
 from .dispatch import Dispatch
 from .execute import Execute
 from .help import HtmlDocs
@@ -79,12 +81,14 @@ class RestApi(object):
     auth = Auth()
     billing = secure(Billing(), 'authorize')
     my = secure(Profile(), 'authorize')
+    deployments = secure(Deployments(), 'authorize')
     dispatch = secure(Dispatch(), 'authorize')
     workflows = secure(Workflows(), 'authorize')
     # batches = secure(Batches(), 'authorize')
     library = secure(Library(), 'authorize')
     scheduler = secure(Jobs(), 'authorize')
     logs = secure(Logs(), 'authorize')
+    clouds = secure(Clouds(), 'authorize')
     manage = secure(Manage(), 'authorize')
 
     # Exec

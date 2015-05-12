@@ -55,7 +55,6 @@ class Logs(HookController):
         except:
             pass
         cache = CacheRegistry()
-        by_script = None
         run_uuids = run_uuids or []
 
         max_score = 0
@@ -75,15 +74,13 @@ class Logs(HookController):
                 uuids = run_uuids
 
         if script:
-            by_script = Script.find(request, script).first()
-            if by_script:
-                script_uuids = request.db.query(distinct(Run.uuid)).join(
-                    Task, Revision).filter(
-                        Revision.script == by_script).all()
-                if uuids:
-                    uuids = set(script_uuids).intersection(set(uuids))
-                else:
-                    uuids = script_uuids
+            script_uuids = request.db.query(distinct(Run.uuid)).join(
+                Task).filter(Task.script_name == script).all() or ['']
+
+            if uuids:
+                uuids = set(script_uuids).intersection(set(uuids))
+            else:
+                uuids = script_uuids
 
         groups = TaskGroup.unique(request).order_by(Task.created_at.desc())
         ts = None

@@ -23,7 +23,7 @@ from cloudrunner_server.api.model.exceptions import QuotaExceeded
 
 LOG = logging.getLogger()
 DUPL_SEARCH = re.compile(r'\'(.*)-\d+')
-DUPL_SEARCH2 = re.compile("DETAIL:\s+Key\s*\((\w+)\)=\((.*)\)")
+DUPL_SEARCH2 = re.compile("DETAIL:\s+Key\s*\((.*)\)=\((.*)\)")
 
 
 def wrap_command(model=None, model_name=None, method=None, key_error=None,
