@@ -41,6 +41,7 @@ Requires:      python-pecan
 Requires:      python-msgpack >= 0.4
 Requires:      python-aerospike >= 1.0.35
 Requires:      python-braintree
+Requires:      python-boto
 
 Obsoletes:     cloudrunner-dispatcher
 Obsoletes:     cloudrunner_server

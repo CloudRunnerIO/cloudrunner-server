@@ -26,21 +26,13 @@ class Rax(BaseCloudProvider):
     def __init__(self, config, credentials):
         self.credentials = credentials
 
-    def create_machine(self, name, server_address, region='ord',
-                       image, server='master.cloudrunner.io',
+    def create_machine(self, name, server_address, image, region='ord',
+                       server='master.cloudrunner.io',
                        flavor='2',
                        key_name=None,
                        metadata=None,
                        networks=None,
                        **kwargs):
-        ports = {}
-        volumes = {}
-        if port_bindings:
-            for binding in port_bindings:
-                ports[binding] = {}
-        if volume_bindings:
-            for binding in volume_bindings:
-                volumes[binding] = {}
         cmd = PROVISION % dict(server=server,
                                name=name,
                                api_key=self.credentials.api_key)
@@ -88,13 +80,18 @@ class Rax(BaseCloudProvider):
 
         except Exception, ex:
             LOG.exception(ex)
-            raise
+            raise Exception("Rackspace: authentication problem")
 
-            res = requests.post(url, data=json.dumps(json_data),
+        try:
+            headers['X-Auth-Token'] = auth_token
+            res = requests.post(endpoint_url, data=json.dumps(json_data),
                                 headers=headers)
             if res.status_code >= 300:
                 LOG.error("FAILURE %s(%s)" % (res.status_code, res.content))
                 return self.FAIL
+        except Exception, ex:
+            LOG.exception(ex)
+            return self.FAIL
 
         return self.OK
 
