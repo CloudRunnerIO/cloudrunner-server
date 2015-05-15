@@ -56,14 +56,14 @@ class Clouds(HookController):
         else:
             profs = [p.serialize(
                 skip=['id', 'owner_id', 'password', 'arguments'],
-                rel=[('shares', 'shares', shares),
-                     ('id', 'type', lambda p: 'own')])
-                     for p in CloudProfile.my(request).all()]
+                rel=[('shares', 'shares', shares)])
+                for p in CloudProfile.my(request).all()]
             attached_profs = [p.share.serialize(
                 skip=['id', 'owner_id', 'name', 'password', 'profile_id'],
-                rel=[('id', 'type', lambda p: 'shared'),
-                     ('profile', 'owner', lambda p: p.owner.username),
-                     ('profile', 'name', lambda p: p.name),
+                rel=[('id', 'shared', lambda x: True),
+                     ('id', 'type', lambda x: p.share.profile.type),
+                     ('profile', 'owner', lambda x: x.owner.username),
+                     ('profile', 'name', lambda x: x.name),
                      ('name', 'username')])
                 for p in AttachedProfile.my(request).all()]
             return O._anon(profiles=profs + attached_profs)
@@ -73,7 +73,8 @@ class Clouds(HookController):
     @profiles.wrap_create()
     def add_profile(self, name, *args, **kwargs):
         p_type = kwargs['type']
-        if p_type == 'shared':
+        p_shared = kwargs.get('shared')
+        if p_shared in ['true', 'True', '1']:
             username = kwargs.pop('username')
             password = kwargs.pop('password')
             share = request.db.query(CloudShare).filter(
@@ -95,7 +96,8 @@ class Clouds(HookController):
             prof = CloudProfile(name=name, username=username,
                                 password=password, arguments=arguments,
                                 owner_id=request.user.id,
-                                clear_nodes=clear_nodes)
+                                clear_nodes=clear_nodes,
+                                type=p_type)
             request.db.add(prof)
 
     @profiles.when(method='PUT', template='json')
@@ -122,6 +124,8 @@ class Clouds(HookController):
     def rm_profile(self, name, *args):
         prof = CloudProfile.my(request).filter(
             CloudProfile.name == name).first()
+        if not prof:
+            return O.error(msg="Cannot find profile %s" % name)
         request.db.delete(prof)
 
     @expose('json', generic=True)
@@ -140,7 +144,7 @@ class Clouds(HookController):
                 rel=[('shared_nodes', 'nodes', nodes)]))
         else:
             profs = [p.serialize(
-                skip=['id', 'profile_id', 'password'],
+                skip=['id', 'profile_id'],
                 rel=[('shared_nodes', 'nodes', nodes)])
                 for p in CloudShare.my(request, profile).all()]
             return O._anon(shares=profs)

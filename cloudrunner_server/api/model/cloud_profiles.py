@@ -30,6 +30,7 @@ class CloudProfile(TableBase):
 
     id = Column(Integer, primary_key=True)
     name = Column(String(255))
+    type = Column(String(25))
     username = Column(Text)
     password = Column(Text)
     arguments = Column(Text)
