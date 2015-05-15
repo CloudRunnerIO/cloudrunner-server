@@ -304,3 +304,5 @@ class UsageTier(TableBase):
     log_retention_days = Column(Integer)
     cron_jobs = Column(Integer)
     api_keys = Column(Integer)
+    deployments = Column(Integer)
+    cloud_profiles = Column(Integer)

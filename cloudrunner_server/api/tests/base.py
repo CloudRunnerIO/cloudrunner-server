@@ -78,7 +78,8 @@ class BaseRESTTestCase(BaseTestCase):
                      tier=dict(name='tier1', nodes=6,
                                total_repos=5,
                                external_repos=True,
-                               users=10, groups=10, roles=5))
+                               users=10, groups=10, roles=5,
+                               deployments=10, cloud_profiles=12))
         return token
 
     def set_user(self, user_id):
@@ -101,13 +102,15 @@ class BaseRESTTestCase(BaseTestCase):
                           total_repos=5, external_repos=True, nodes=6, users=5,
                           groups=5, roles=4, max_timeout=60,
                           max_concurrent_tasks=2, log_retention_days=7,
-                          cron_jobs=4, api_keys=5)
+                          cron_jobs=4, api_keys=5, deployments=10,
+                          cloud_profiles=12)
 
         tier2 = UsageTier(name="Pro", title="Pro", description="Pro Tier",
                           total_repos=10, external_repos=True, nodes=20,
                           users=10, groups=10, roles=10, max_timeout=180,
                           max_concurrent_tasks=5, log_retention_days=30,
-                          cron_jobs=10, api_keys=20)
+                          cron_jobs=10, api_keys=20, deployments=10,
+                          cloud_profiles=12)
         Session.add(tier2)
         org = Org(name=ORGS[1], enabled=True, tier=tier1)
         Session.add(org)

@@ -20,7 +20,7 @@ from cloudrunner_server.api.decorators import wrap_command
 from cloudrunner_server.api.hooks.db_hook import DbHook
 from cloudrunner_server.api.hooks.error_hook import ErrorHook
 from cloudrunner_server.api.util import JsonOutput as O
-from cloudrunner_server.api.model import Deployment, Script
+from cloudrunner_server.api.model import Deployment, Script, User
 from cloudrunner_server.triggers.manager import TriggerManager
 from cloudrunner_server.util import parser
 
@@ -59,6 +59,8 @@ class Deployments(HookController):
         name = name or kwargs['name']
 
         try:
+            user = User.visible(request).filter(
+                User.id == request.user.id).first()
             if isinstance(kwargs['content'], dict):
                 content = kwargs['content']
             else:
@@ -73,7 +75,7 @@ class Deployments(HookController):
             return O.error(msg="Missing content data: %s" % kerr)
         depl = Deployment(name=name, content=json.dumps(content),
                           status='Pending',
-                          owner_id=request.user.id)
+                          owner=user)
         request.db.add(depl)
 
     @deployments.when(method='PATCH', template='json')

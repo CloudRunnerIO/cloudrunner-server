@@ -362,6 +362,10 @@ def main():
                           required=True)
     tier_add.add_argument('--api_keys', help='Api keys',
                           required=True)
+    tier_add.add_argument('--deployments', help='Deployments',
+                          required=True)
+    tier_add.add_argument('--cloud_profiles', help='Cloud profiles',
+                          required=True)
 
     tier_edit = tiers_actions.add_parser('edit',
                                          help='Edit usage tier')

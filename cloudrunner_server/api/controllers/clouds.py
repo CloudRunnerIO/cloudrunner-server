@@ -21,7 +21,7 @@ from cloudrunner_server.api.hooks.error_hook import ErrorHook
 from cloudrunner_server.api.hooks.db_hook import DbHook
 from cloudrunner_server.api.hooks.perm_hook import PermHook
 from cloudrunner_server.api.model import (CloudProfile, CloudShare,
-                                          AttachedProfile)
+                                          AttachedProfile, User)
 from cloudrunner_server.api.policy.decorators import check_policy
 from cloudrunner_server.api.util import JsonOutput as O, random_token
 
@@ -74,6 +74,8 @@ class Clouds(HookController):
     def add_profile(self, name, *args, **kwargs):
         p_type = kwargs['type']
         p_shared = kwargs.get('shared')
+        user = User.visible(request).filter(
+            User.id == request.user.id).first()
         if p_shared in ['true', 'True', '1']:
             username = kwargs.pop('username')
             password = kwargs.pop('password')
@@ -82,7 +84,7 @@ class Clouds(HookController):
                 CloudShare.password == password).first()
             if not share:
                 return O.error(msg="The specified shared profile is not found")
-            att_prof = AttachedProfile(share=share, owner_id=request.user.id)
+            att_prof = AttachedProfile(share=share, owner=user)
             request.db.add(att_prof)
         else:
             username = kwargs.pop('username')
@@ -95,7 +97,7 @@ class Clouds(HookController):
 
             prof = CloudProfile(name=name, username=username,
                                 password=password, arguments=arguments,
-                                owner_id=request.user.id,
+                                owner=user,
                                 clear_nodes=clear_nodes,
                                 type=p_type)
             request.db.add(prof)

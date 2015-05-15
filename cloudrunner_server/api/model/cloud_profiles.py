@@ -13,13 +13,15 @@
 #  *******************************************************/
 
 from sqlalchemy import (Column, Integer, String, DateTime, Text, Boolean,
-                        ForeignKey, UniqueConstraint, func)
+                        ForeignKey, UniqueConstraint, func, select, distinct,
+                        join, event)
 from sqlalchemy.orm import relationship, backref
 
+from cloudrunner_server.api.model.exceptions import QuotaExceeded
 
 from .base import TableBase
 from .nodes import Node
-from .users import User
+from .users import User, Org
 
 
 class CloudProfile(TableBase):
@@ -31,6 +33,7 @@ class CloudProfile(TableBase):
     id = Column(Integer, primary_key=True)
     name = Column(String(255))
     type = Column(String(25))
+    enabled = Column(Boolean, default=True)
     username = Column(Text)
     password = Column(Text)
     arguments = Column(Text)
@@ -45,6 +48,13 @@ class CloudProfile(TableBase):
         return ctx.db.query(CloudProfile).filter(
             CloudProfile.owner_id == ctx.user.id
         )
+
+    @staticmethod
+    def count(ctx):
+        return ctx.db.query(CloudProfile).join(User, Org).filter(
+            Org.name == ctx.user.org).count() + ctx.db.query(
+                AttachedProfile).join(User, Org).filter(
+                    Org.name == ctx.user.org).count()
 
 
 class CloudShare(TableBase):
@@ -107,3 +117,38 @@ class SharedNode(TableBase):
     node_id = Column(Integer, ForeignKey(Node.id))
     node = relationship(Node, backref=backref('shares', cascade='delete'),
                         cascade='delete')
+
+
+def quotas(connection, target):
+    org = target.owner.org
+    total_allowed = org.tier.cloud_profiles
+
+    current_total = connection.scalar(
+        select([func.count(distinct(CloudProfile.id))]).select_from(
+            join(CloudProfile, User)).where(
+            User.org_id == org.id).where(
+                CloudProfile.enabled == True))  # noqa
+    current_total += connection.scalar(
+        select([func.count(distinct(AttachedProfile.id))]).select_from(
+            join(AttachedProfile, User)).where(
+            User.org_id == org.id))  # noqa
+
+    return total_allowed, current_total
+
+
+@event.listens_for(CloudProfile, 'before_insert')
+def prof_before_insert(mapper, connection, target):
+    total_allowed, current_total = quotas(connection, target)
+    if total_allowed <= current_total:
+        raise QuotaExceeded(msg="Quota exceeded(%d of %d used)" % (
+            current_total, total_allowed), model="Cloud profile")
+
+
+@event.listens_for(CloudProfile, 'before_update')
+def prof_before_update(mapper, connection, target):
+    if not target.enabled:
+        return
+    total_allowed, current_total = quotas(connection, target)
+    if total_allowed < current_total:
+        raise QuotaExceeded(msg="Quota exceeded(%s of %s used)" % (
+            current_total, total_allowed), model="Cloud profile")

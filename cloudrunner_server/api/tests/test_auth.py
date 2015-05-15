@@ -43,6 +43,7 @@ class TestAuthentication(base.BaseRESTTestCase):
         args.pop('token')
         self.assertEquals(user, 'testuser')
         self.assertEquals(exp, 1440)
+        self.maxDiff = None
         self.assertEquals(args,
                           {'email_hash': '3bc81bc52e7f209c3455af320abeee00',
                               'uid': 1,
@@ -55,6 +56,7 @@ class TestAuthentication(base.BaseRESTTestCase):
                                   'groups': 5,
                                   'external_repos': True, 'nodes': 6,
                                   'log_retention_days': 7,
+                                  'deployments': 10, 'cloud_profiles': 12,
                                   'name': u'Free'},
                               'org': u'MyOrg', 'email': u'user1@domain.com',
                               'permissions': [u'is_admin']

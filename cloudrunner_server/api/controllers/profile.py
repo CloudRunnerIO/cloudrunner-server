@@ -19,7 +19,8 @@ from cloudrunner_server.api.decorators import wrap_command
 from cloudrunner_server.api.hooks.db_hook import DbHook
 from cloudrunner_server.api.hooks.error_hook import ErrorHook
 from cloudrunner_server.api.model import (User, Repository, Node, Group,
-                                          Job, ApiKey)
+                                          Job, ApiKey, Deployment,
+                                          CloudProfile)
 from cloudrunner_server.api.util import JsonOutput as O
 
 
@@ -40,6 +41,8 @@ class Profile(HookController):
         used['users'] = User.count(request)
         used['groups'] = Group.count(request)
         used['nodes'] = Node.count(request)
+        used['deployments'] = Deployment.count(request)
+        used['cloud_profiles'] = CloudProfile.count(request)
         quotas = dict((k, dict(allowed=v, used=used[k]))
                       for k, v in request.user.tier._items.items()
                       if k in used)
