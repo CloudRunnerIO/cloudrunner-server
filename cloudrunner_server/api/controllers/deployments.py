@@ -21,8 +21,8 @@ from cloudrunner_server.api.hooks.db_hook import DbHook
 from cloudrunner_server.api.hooks.error_hook import ErrorHook
 from cloudrunner_server.api.util import JsonOutput as O
 from cloudrunner_server.api.model import Deployment, Script
-from cloudrunner_server.util.parser import DeploymentParser
 from cloudrunner_server.triggers.manager import TriggerManager
+from cloudrunner_server.util import parser
 
 MAN = TriggerManager()
 
@@ -112,7 +112,7 @@ class Deployments(HookController):
         if not depl:
             return O.error(msg="Cannot find deployment '%s'" % name)
 
-        steps = DeploymentParser(depl.content)
+        steps = parser.DeploymentParser(depl.content)
         if steps and kwargs.get('env'):
             # Override ENV
 
