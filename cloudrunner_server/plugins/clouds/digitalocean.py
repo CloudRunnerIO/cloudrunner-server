@@ -58,12 +58,29 @@ class DigitalOcean(BaseCloudProvider):
                                 headers=headers)
             if res.status_code >= 300:
                 LOG.error("FAILURE %s(%s)" % (res.status_code, res.content))
-                return self.FAIL
+                return self.FAIL, []
+
+            return self.OK, [res]
         except Exception, ex:
             LOG.exception(ex)
             raise
 
-        return self.OK
+        return self.FAIL, []
 
-    def delete_machine(self, name, *args, **kwargs):
-        pass
+    def delete_machine(self, instance_ids, *args, **kwargs):
+        headers = {'Content-Type': 'application/json',
+                   'Authorization': 'Bearer %s' % self.credentials.password}
+
+        for iid in instance_ids:
+            url = 'https://api.digitalocean.com/v2/droplets/%s' % iid
+            try:
+                res = requests.delete(url, headers=headers)
+                if res.status_code >= 300:
+                    LOG.error("FAILURE %s(%s)" %
+                              (res.status_code, res.content))
+                    return self.FAIL, []
+
+                return self.OK, [res]
+            except Exception, ex:
+                LOG.exception(ex)
+                raise

@@ -92,7 +92,8 @@ def wrap_command(model=None, model_name=None, method=None, key_error=None,
                 request.db.rollback()
                 LOG.error(ierr)
                 if integrity_error and callable(integrity_error):
-                    return integrity_error(ierr)
+                    return O.error(msg=integrity_error(ierr),
+                                   reason='duplicate')
 
                 try:
                     try_find = DUPL_SEARCH2.findall(str(ierr.orig))

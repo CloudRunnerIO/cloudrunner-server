@@ -32,9 +32,18 @@ class AWS(BaseCloudProvider):
 
             instance_ids = [inst.id for inst in res.instances]
             self.conn.create_tags(instance_ids, {"Name": name})
+            return self.OK, instance_ids
+        except:
+            return self.FAIL, []
+
+    def delete_machine(self, instance_ids, region='us-west-2', **kwargs):
+        self.conn = ec2.connect_to_region(
+            region,
+            aws_access_key_id=self.credentials.user,
+            aws_secret_access_key=self.credentials.password)
+
+        try:
+            self.conn.terminate_instances(instance_ids)
         except:
             return self.FAIL
         return self.OK
-
-    def delete_machine(self, name, *args, **kwargs):
-        pass

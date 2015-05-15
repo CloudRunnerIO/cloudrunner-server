@@ -20,7 +20,12 @@ from cloudrunner_server.api.decorators import wrap_command
 from cloudrunner_server.api.hooks.db_hook import DbHook
 from cloudrunner_server.api.hooks.error_hook import ErrorHook
 from cloudrunner_server.api.util import JsonOutput as O
-from cloudrunner_server.api.model import Deployment
+from cloudrunner_server.api.model import Deployment, Script
+from cloudrunner_server.util.parser import DeploymentParser
+from cloudrunner_server.triggers.manager import TriggerManager
+
+MAN = TriggerManager()
+
 # from cloudrunner_server.plugins.clouds import BaseCloudProvider
 
 
@@ -46,17 +51,26 @@ class Deployments(HookController):
         return O.none()
 
     @deployments.when(method='POST', template='json')
-    @deployments.wrap_create()
+    @deployments.wrap_create(integrity_error=lambda er:
+                             "Duplicate deployment name")
     def create(self, name, **kwargs):
         if request.method != "POST":
             return O.none()
         name = name or kwargs['name']
 
-        content = json.loads(kwargs['content'])  # validate structure
-        content['steps']  # validate data
-        for step in content['steps']:
-            step['target']  # validate data
-            step['content']  # validate data
+        try:
+            if isinstance(kwargs['content'], dict):
+                content = kwargs['content']
+            else:
+                content = json.loads(kwargs['content'])
+            content['steps']  # validate data
+            if not isinstance(content['steps'], list):
+                return O.error(msg="Missing steps in content")
+            for step in content['steps']:
+                step['target']  # validate data
+                step['content']  # validate data
+        except KeyError, kerr:
+            return O.error(msg="Missing content data: %s" % kerr)
         depl = Deployment(name=name, content=json.dumps(content),
                           status='Pending',
                           owner_id=request.user.id)
@@ -69,7 +83,11 @@ class Deployments(HookController):
         depl = Deployment.my(request).filter(Deployment.name == name).first()
         if not depl:
             return O.error(msg="Cannot find deployment '%s'" % name)
-        content = json.loads(kwargs['content'])  # validate structure
+        if isinstance(kwargs['content'], dict):
+            content = kwargs['content']
+        else:
+            content = json.loads(kwargs['content'])
+
         content['steps']  # validate data
         for step in content['steps']:
             step['target']  # validate data
@@ -87,10 +105,51 @@ class Deployments(HookController):
 
     @expose('json', generic=True)
     @wrap_command(Deployment, method='start')
-    def start(self, *args, **kwargs):
-        if request.method != "POST":
-            return O.none()
-        return O.success(msg="Started")
+    def start(self, name, *args, **kwargs):
+        name = name or kwargs['name']
+
+        depl = Deployment.my(request).filter(Deployment.name == name).first()
+        if not depl:
+            return O.error(msg="Cannot find deployment '%s'" % name)
+
+        steps = DeploymentParser(depl.content)
+        if steps and kwargs.get('env'):
+            # Override ENV
+
+            if isinstance(kwargs['env'], dict):
+                env = kwargs['env']
+            else:
+                env = json.loads(kwargs['env'])
+            steps[0].env.update(env)
+
+        task_ids = []
+        for step in steps:
+            # Run step
+            if step.path:
+                repo, _dir, scr_name, rev = Script.parse(step.path)
+                scr = Script.find(request, step.path).one()
+                if not scr:
+                    return O.error(msg="Script '%s' not found" % step.path)
+
+                content = scr.contents(request, rev=rev)
+                if not content:
+                    if rev:
+                        return O.error(
+                            msg="Version %s of script '%s' not found" %
+                            (rev, step.path))
+                    else:
+                        return O.error(
+                            msg="Script contents for '%s' not found" %
+                            step.path)
+
+            user_id = request.user.id
+            task_ids.append(MAN.execute(user_id=user_id,
+                                        content=content,
+                                        db=request.db,
+                                        env=step.env,
+                                        **kwargs))
+
+        return O.success(msg="Started", task_ids=task_ids)
 
     @expose('json', generic=True)
     @wrap_command(Deployment, method='restart')
@@ -106,7 +165,10 @@ class Deployments(HookController):
         if request.method != "POST":
             return O.none()
 
-        content = json.loads(kwargs['content'])  # validate structure
+        if isinstance(kwargs['content'], dict):
+            content = kwargs['content']
+        else:
+            content = json.loads(kwargs['content'])
         for step in content['steps']:
             step['target']  # validate data
             step['content']  # validate data
