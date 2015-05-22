@@ -61,7 +61,8 @@ class CloudShare(TableBase):
 
     __tablename__ = 'cloud_profiles_shares'
     __table_args__ = (
-        UniqueConstraint("name", 'password'),
+        UniqueConstraint('name', 'password'),
+        UniqueConstraint('profile_id', 'name'),
     )
 
     id = Column(Integer, primary_key=True)

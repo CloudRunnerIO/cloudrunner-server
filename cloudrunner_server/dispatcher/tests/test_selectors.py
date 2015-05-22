@@ -73,8 +73,10 @@ whoami
                        hex='416728b252a411e3ae1600247e6dff02'))),
             patch('time.time', Mock(return_value=1385031137))
         ):
+            deployment_id = 2
             tasks = [{'body': script, 'target': '*'}]
             ret = disp.dispatch('user_id',
+                                deployment_id,
                                 tasks,
                                 access_map,
                                 env=env)

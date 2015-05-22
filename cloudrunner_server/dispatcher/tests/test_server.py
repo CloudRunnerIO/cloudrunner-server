@@ -14,8 +14,8 @@
 
 from mock import Mock
 
+import cloudrunner_server.core.message as M
 from cloudrunner_server.dispatcher.server import Dispatcher
-import cloudrunner.core.message as M
 from cloudrunner_server.tests import base
 
 

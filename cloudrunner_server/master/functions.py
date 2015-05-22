@@ -29,7 +29,7 @@ from sqlalchemy import create_engine, event
 from sqlalchemy.orm import scoped_session, sessionmaker
 
 from cloudrunner import VAR_DIR, LOG_DIR, TMP_DIR
-from cloudrunner.core.message import TOKEN_SEPARATOR
+from cloudrunner_server.core.message import TOKEN_SEPARATOR
 from cloudrunner_server.plugins.auth.base import NodeVerifier
 from cloudrunner_server.api.model import *  # noqa
 from cloudrunner_server.util.db import checkout_listener

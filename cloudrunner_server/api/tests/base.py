@@ -19,6 +19,7 @@ from pecan.testing import load_test_app
 from pecan import conf as p_conf, set_config
 
 from cloudrunner.util.crypto import hash_token
+from cloudrunner_server import util
 from ...tests.base import BaseTestCase
 from ..model import *  # noqa
 
@@ -31,6 +32,7 @@ modules = {
     'aerospike': aerospike,
     'aerospike.predicates': aerospike_p,
     'cloudrunner_server.util.cache': cache,
+    'cloudrunner_server.util': util,
     'cloudrunner_server.master.functions': ccont
 }
 
@@ -129,6 +131,9 @@ class BaseRESTTestCase(BaseTestCase):
                     first_name="User", last_name="One", department="Dept",
                     position="Sr engineer", email="user1@domain.com")
         Session.add(user)
+
+        apikey1 = ApiKey(value='123123123', user=user, enabled=True)
+        Session.add(apikey1)
         Session.commit()
 
         user.permissions.append(p1)
@@ -366,4 +371,61 @@ class BaseRESTTestCase(BaseTestCase):
                             run=run1)
         Session.add(run_node1)
         Session.add(run_node2)
+
+        prof1 = CloudProfile(name="ProfAWS", type='aws', username="AWS_KEY",
+                             password='AWS_SECRET', owner=user,
+                             created_at=datetime.strptime(
+                                 '2015-05-21', '%Y-%m-%d'))
+        Session.add(prof1)
+
+        prof2 = CloudProfile(name="ProfRAX", type='rackspace',
+                             username="RAX_user",
+                             password='RAX_APIKEY', owner=user,
+                             created_at=datetime.strptime(
+                                 '2015-05-22', '%Y-%m-%d'))
+        Session.add(prof2)
+
+        share21 = CloudShare(name="rax-share",
+                             password="some very secret password",
+                             created_at=datetime.strptime(
+                                 '2015-05-23', '%Y-%m-%d'),
+                             node_quota=2,
+                             profile=prof2)
+        Session.add(share21)
+
+        depl = Deployment(name="My deployment", status='Pending', owner=user,
+                          created_at=datetime.strptime(
+                              '2015-05-22', '%Y-%m-%d'),
+                          content='{"steps": [{"content": {'
+                          '"path": "/test/test2@HEAD", "env": {"a": "env_A"}},'
+                          ' "target": [{"name": "3232", '
+                          '"key_name": "ttrifonov", "image": "ami-59ecd169",'
+                          ' "number": "1", "provider": "aws", '
+                          '"inst_type": "t2.micro"}]}, {"content": '
+                          '{"path": "/test/test3@HEAD", '
+                          '"env": {"a": "env_A"}}, "target": ["yoga3"]}, '
+                          '{"content": {"path": "/test/test2@HEAD"}, '
+                          '"target": ["yoga3"]}], "env": {}}')
+        Session.add(depl)
+
+        depl2 = Deployment(name="My running deployment", status='Running',
+                           owner=user,
+                           created_at=datetime.strptime(
+                               '2015-05-22', '%Y-%m-%d'),
+                           content='{"steps": [{"content": {'
+                           '"path": "/cloudrunner/folder1/test1@HEAD", "env": {"a": "env_A"}},'  # noqa
+                           ' "target": [{"name": "3232", '
+                           '"key_name": "ttrifonov", "image": "ami-59ecd169",'
+                           ' "number": "1", "provider": "aws", '
+                           '"inst_type": "t2.micro"}]}, {"content": '
+                           '{"path": "/cloudrunner/folder1/test1@HEAD", '
+                           '"env": {"a": "env_A"}}, "target": ["yoga3"]}, '
+                           '{"content": {"path": "/cloudrunner/folder1/test1@HEAD"}, '  # noqa
+                           '"target": ["yoga3"]}], "env": {}}')
+        Session.add(depl2)
+
+        res1 = Resource(server_name='node1', server_id='ami-xyz',
+                        meta='{"region": "us-east-2"}',
+                        deployment=depl2, profile=prof1)
+        Session.add(res1)
         Session.commit()

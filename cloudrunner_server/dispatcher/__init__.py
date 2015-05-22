@@ -28,10 +28,18 @@ class TaskQueue(object):
 
     def __init__(self):
         self.tasks = []
+        self._callback = None
+        self._prepare = None
         self.owner = None
 
     def push(self, task):
         self.tasks.append(task)
+
+    def callback(self, task):
+        self._callback = task
+
+    def prepare(self, prepare):
+        self._prepare = prepare
 
     def find(self, task_id):
         return filter(lambda x: x.session_id == task_id, self.tasks)
@@ -43,8 +51,12 @@ class TaskQueue(object):
     def process(self):
         if not self.tasks:
             return
+        if self._prepare:
+            self._prepare.start()
         for task in self.tasks:
             task.start()
+        if self._callback:
+            self._callback.start()
 
     def __str__(self):
         return "%s (%s)" % (self.task_ids, self.owner)

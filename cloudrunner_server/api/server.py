@@ -21,7 +21,7 @@ import zmq
 from cloudrunner import VAR_DIR
 from cloudrunner import CONFIG_LOCATION
 from cloudrunner.util.config import Config
-from cloudrunner.core.message import M, Dispatch, GetNodes
+from cloudrunner_server.core.message import M, Dispatch, GetNodes
 from cloudrunner.util.logconfig import configure_loggers
 
 configure_loggers(logging.DEBUG, os.path.join(VAR_DIR,

@@ -45,7 +45,7 @@ class ServerTransportBackend(TransportBackend):
         pass
 
     @abc.abstractmethod
-    def subscribe_fanout(self, endpoint, sub_pattern=None, *args, **kwargs):
+    def subscribe_fanout(self, endpoint, sub_patterns=None, *args, **kwargs):
         pass
 
 
@@ -108,16 +108,16 @@ class Tenant(object):
     def update(self, node, usage):
         self.nodes[self.nodes.index(node)].usage = usage
 
-    def active_nodes(self):
-        return [node for node in self.nodes if node.refreshed > self.refreshed]
+    def active_nodes(self, adjust=0):
+        return [node for node in self.nodes
+                if node.refreshed + adjust > self.refreshed]
 
     def inactive_nodes(self):
-        nodes = []
-        for node in self.nodes:
-            if node.refreshed <= self.refreshed:
-                nodes.append(node)
-                self.pop(node)
-        return nodes
+        active = self.active_nodes(adjust=15)
+        inactive_nodes = [item for item in self.nodes if item not in active]
+        for node in inactive_nodes:
+            self.pop(node)
+        return inactive_nodes
 
 
 class TenantDict(dict):

@@ -18,18 +18,18 @@ import logging
 import os
 import requests
 
-from .base import BaseCloudProvider
+from .base import BaseCloudProvider, CR_SERVER
 
 LOG = logging.getLogger()
+HEADERS = {'Content-Type': 'application/json'}
 
 
 class DockerHost(BaseCloudProvider):
 
-    def __init__(self, config, credentials):
-        self.credentials = credentials
-        prefix = "%s-%s" % (credentials.org,
-                            credentials.id)
+    def __init__(self, profile):
+        super(DockerHost, self).__init__(profile)
 
+        prefix = "%s-%s" % (self.profile.owner.org, self.profile.id)
         self._path = os.path.join(VAR_DIR, "tmp", "creds", prefix)
         self._cert_path = os.path.join(
             VAR_DIR, "tmp", "creds", prefix, 'cert.pem')
@@ -41,12 +41,12 @@ class DockerHost(BaseCloudProvider):
                 os.makedirs(self._path, mode=500)
             # Re-create files if missing
             with open(self._cert_path, 'w') as f:
-                f.write(self.credentials.user)
+                f.write(self.profile.username)
             with open(self._key_path, 'w') as f:
-                f.write(self.credentials.password)
+                f.write(self.profile.password)
 
     def create_machine(self, name, server_address,
-                       image, server='master.cloudrunner.io',
+                       image, server=CR_SERVER,
                        port_bindings=None, privileged=False,
                        volume_bindings=None, **kwargs):
         ports = {}
@@ -59,9 +59,9 @@ class DockerHost(BaseCloudProvider):
                 volumes[binding] = {}
         # cmd = PROVISION % dict(server=server,
         #                        name=name,
-        #                        api_key=self.credentials.api_key)
+        #                        api_key=self.api_key)
         env = ["SERVER_ID=master.cloudrunner.io",
-               "ORG_ID=%s" % self.credentials.api_key]
+               "ORG_ID=%s" % self.api_key]
         json_data = dict(Hostname=name, Image=image, Env=env,
                          ExposedPorts=ports, Privileged=privileged,
                          Volumes=volumes,
@@ -70,31 +70,44 @@ class DockerHost(BaseCloudProvider):
         # Cmd=[cmd],
         # Entrypoint=['/bin/curl'])
         create_url = "https://%s/containers/create" % server_address
-        headers = {'Content-Type': 'application/json'}
 
         try:
+            server_ids = []
             res = requests.post(create_url, data=json.dumps(json_data),
                                 cert=(self._cert_path,
                                       self._key_path),
-                                headers=headers,
+                                headers=HEADERS,
                                 verify=False)
             if res.status_code >= 300:
                 LOG.error("FAILURE %s(%s)" % (res.status_code, res.content))
-                return self.FAIL
+                return self.FAIL, [], {}
             server_id = res.json()['Id']
+            server_ids.append(server_id)
             start_url = "https://%s/containers/%s/start" % (server_address,
                                                             server_id)
             res = requests.post(start_url, data=json.dumps({"Detach": False,
                                                             "Tty": False}),
                                 cert=(self._cert_path,
                                       self._key_path),
-                                headers=headers,
+                                headers=HEADERS,
                                 verify=False)
+            meta = dict(server_address=server_address)
         except Exception, ex:
             LOG.exception(ex)
             raise
 
-        return self.OK
+        return self.OK, server_ids, meta
 
-    def delete_machine(self, name, *args, **kwargs):
-        pass
+    def delete_machine(self, server_ids, server_address=None, **kwargs):
+        ret = self.OK
+        for server_id in server_ids:
+            delete_url = "https://%s/containers/%s" % (server_address,
+                                                       server_id)
+            res = requests.delete(delete_url, cert=(self._cert_path,
+                                                    self._key_path),
+                                  headers=HEADERS,
+                                  verify=False)
+            if res.status_code >= 300:
+                LOG.error("FAILURE %s(%s)" % (res.status_code, res.content))
+                ret = self.FAIL
+        return ret

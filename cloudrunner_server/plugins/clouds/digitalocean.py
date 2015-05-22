@@ -16,18 +16,15 @@ import json
 import logging
 import requests
 
-from .base import BaseCloudProvider, PROVISION
+from .base import BaseCloudProvider, PROVISION, CR_SERVER
 
 LOG = logging.getLogger()
 
 
 class DigitalOcean(BaseCloudProvider):
 
-    def __init__(self, config, credentials):
-        self.credentials = credentials
-
     def create_machine(self, name, server_address,
-                       image, server='master.cloudrunner.io',
+                       image, server=CR_SERVER,
                        inst_type='512MB', region='nyc3',
                        port_bindings=None, privileged=False,
                        ssh_keys=None,
@@ -40,9 +37,8 @@ class DigitalOcean(BaseCloudProvider):
         if volume_bindings:
             for binding in volume_bindings:
                 volumes[binding] = {}
-        cmd = PROVISION % dict(server=server,
-                               name=name,
-                               api_key=self.credentials.api_key)
+
+        cmd = PROVISION % dict(server=server, name=name, api_key=self.api_key)
         json_data = dict(name=name, region=region, size=inst_type,
                          image=image, ssh_keys=ssh_keys,
                          user_data="#!/bin/bash\n\n%s" % cmd,
@@ -50,7 +46,7 @@ class DigitalOcean(BaseCloudProvider):
                          ipv6=True,
                          private_networking=None)
         headers = {'Content-Type': 'application/json',
-                   'Authorization': 'Bearer %s' % self.credentials.password}
+                   'Authorization': 'Bearer %s' % self.profile.password}
 
         url = 'https://api.digitalocean.com/v2/droplets'
         try:
@@ -58,18 +54,19 @@ class DigitalOcean(BaseCloudProvider):
                                 headers=headers)
             if res.status_code >= 300:
                 LOG.error("FAILURE %s(%s)" % (res.status_code, res.content))
-                return self.FAIL, []
+                return self.FAIL, [], {}
 
-            return self.OK, [res]
+            meta = dict(region=region)
+            return self.OK, [res], meta
         except Exception, ex:
             LOG.exception(ex)
             raise
 
-        return self.FAIL, []
+        return self.FAIL, [], {}
 
-    def delete_machine(self, instance_ids, *args, **kwargs):
+    def delete_machine(self, instance_ids, **kwargs):
         headers = {'Content-Type': 'application/json',
-                   'Authorization': 'Bearer %s' % self.credentials.password}
+                   'Authorization': 'Bearer %s' % self.profile.password}
 
         for iid in instance_ids:
             url = 'https://api.digitalocean.com/v2/droplets/%s' % iid

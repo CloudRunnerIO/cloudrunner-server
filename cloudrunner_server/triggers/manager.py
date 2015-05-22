@@ -14,28 +14,25 @@
 
 import argparse
 from datetime import datetime
-from functools import partial
 import json
 import logging
 import os
 import re
 import redis
-from sqlalchemy.orm import (scoped_session, sessionmaker,
-                            joinedload, make_transient)
+from sqlalchemy.orm import (scoped_session, sessionmaker, make_transient)
 try:
     import argcomplete
 except ImportError:
     pass
 
 from cloudrunner import CONFIG_LOCATION, LOG_DIR
-from cloudrunner.core import parser
-from cloudrunner.core.message import Queued, DictWrapper
 from cloudrunner.util.config import Config
 from cloudrunner.util.daemon import Daemon
 from cloudrunner.util.logconfig import configure_loggers
 from cloudrunner.util.shell import colors
 from cloudrunner_server.api.model import *  # noqa
 from cloudrunner_server.api.server import Master
+from cloudrunner_server.core.message import Queued, DictWrapper
 from cloudrunner_server.plugins.repository.base import (PluginRepoBase,
                                                         NotModified)
 from cloudrunner_server.util import timestamp
@@ -176,14 +173,13 @@ class TriggerManager(Daemon):
         self.execute(user_id=job.owner_id, content=job.script,
                      started_by=job.name)
 
-    def execute(self, user_id=None, content=None, parent_uuid=None,
-                targets=None, **kwargs):
-        LOG.info("Starting %s " % content.script.name)
+    def execute(self, user_id, deployment, revision=None, **kwargs):
+        LOG.info("Starting %s " % deployment.name)
         self._prepare_db(user_id=user_id, **kwargs)
         self.db.begin(subtransactions=True)
         remote_tasks = []
         local_runs = []
-        batch_id = None
+        # batch_id = None
         ctx = self.get_user_ctx(user_id)
         try:
             tags = kwargs.get('tags', [])
@@ -191,59 +187,35 @@ class TriggerManager(Daemon):
                 tags = sorted(re.split(r'[\s,;]', tags))
             timeout = kwargs.get('timeout', 0)
 
-            env = kwargs.get('env')
+            env = kwargs.get('env') or {}
             if env and not isinstance(env, dict):
                 kwargs['env'] = env = json.loads(env)
+            if deployment.env:
+                deployment.env.update(env)
+                env = deployment.env
 
-            target_script = content.script
-            if target_script.mime_type == 'text/batch':
-                batch = target_script.batch
-                if not batch:
-                    return O.error(msg="Workflow seems to be a Batch, "
-                                   "but no Batch found")
-                script_step = next((s for s in batch.scripts if s.root), None)
-                script = script_step.script
-                if not script:
-                    return O.error(msg="Batch step points to invalid script")
-                script_rev = _parse_script_name(ctx, script.full_path())
-                batch_id = batch.id
-            else:
-                script_rev = content
-                script = content.script
-            parent = None
-            parent_id = None
-            if parent_uuid:
-                parent = self.db.query(Task).filter(
-                    Task.uuid == parent_uuid).options(joinedload(
-                        Task.group)).first()
-            if parent:
-                parent_id = parent.id
-                group = parent.group
-            else:
-                group = TaskGroup()
-                group.batch_id = batch_id
-                self.db.add(group)
+            # parent = None
+            # parent_id = None
+            # if parent_uuid:
+            #     parent = self.db.query(Task).filter(
+            #         Task.uuid == parent_uuid).options(joinedload(
+            #             Task.group)).first()
+            # if parent:
+            #     parent_id = parent.id
+            #     group = parent.group
+            # else:
+            #     group = TaskGroup()
+            #     group.batch_id = batch_id
+            #     self.db.add(group)
 
-            if script.mime_type == 'text/plain':
-                section = parser.Section()
-                section.body = script_rev.content
-                section.env = {}
-                section.target = targets
-                sections = [section]
-            else:
-                subst = partial(include_substitute, ctx)
-                sections = parser.parse_sections(
-                    script_rev.content,
-                    include_substitute=subst)
-            if not sections:
-                return O.error(msg="Empty script")
+            group = TaskGroup(deployment=deployment.object)
+            self.db.add(group)
 
-            LOG.info("Execute %s by %s" % (script.name, ctx.user.name))
+            LOG.info("Execute %s by %s" % (deployment.name, ctx.user.name))
             task = Task(status=LOG_STATUS.Running,
                         group=group,
-                        parent_id=parent_id,
                         owner_id=ctx.user.id,
-                        script_content=script_rev,
+                        script_content=revision,
                         exec_start=timestamp(),
                         timeout=timeout,
                         exit_code=-99)
@@ -251,32 +223,26 @@ class TriggerManager(Daemon):
             for tag in tags:
                 task.tags.append(Tag(name=tag))
 
-            for i, section in enumerate(sections):
-                atts = []
-                if i == 0:
-                    if section.env and section.env._items:
-                        # Pre-fill section static env
-                        env = section.env._items.update(env)
-
-                if section.args.timeout:
-                    timeout = section.args.timeout[0]
-
-                if section.args.attach:
-                    atts = section.args.attach
-                remote_task = dict(attachments=atts, body=section.body)
-                if timeout:
-                    remote_task['timeout'] = timeout
-                remote_task['target'] = self._expand_target(section.target)
-
+            for i, step in enumerate(deployment.steps):
+                targets = step.targets
+                remote_task = dict(attachments=step.atts, body=step.body,
+                                   targets=targets,
+                                   timeout=step.timeout, env=step.env or {})
+                flat_targets = []
+                for t in targets:
+                    if isinstance(t, dict):
+                        flat_targets.append("%(provider)s::%(name)s" % t)
+                    else:
+                        flat_targets.append(t)
                 run = Run(task=task,
-                          lang=section.args.lang,
+                          lang=step.lang,
                           exec_start=timestamp(),
                           exec_user_id=ctx.user.id,
-                          target=section.target,
+                          target=" ".join(flat_targets),
                           exit_code=-99,
-                          timeout=timeout,
+                          timeout=step.timeout,
                           step_index=i,
-                          full_script=section.body,)
+                          full_script=step.body)
                 if i == 0:
                     run.env_in = json.dumps(env)
 
@@ -293,7 +259,8 @@ class TriggerManager(Daemon):
                 return
 
             msg = Master(ctx.user.name).command(
-                'dispatch', tasks=remote_tasks, roles=self._roles(ctx),
+                'dispatch', deployment=deployment.object.id,
+                tasks=remote_tasks, roles=self._roles(ctx),
                 disabled_nodes=self.disabled_nodes(ctx), includes=[],
                 attachments=[], env=env)
             if not isinstance(msg, Queued):
@@ -306,7 +273,8 @@ class TriggerManager(Daemon):
                 run.uuid = job_id
             if msg.task_ids:
                 self.db.commit()
-            return O._anon(task_uid=task.uuid, group=task.taskgroup_id)
+            return O._anon(task_uid=task.uuid, group=task.taskgroup_id,
+                           parent_uid=task.uuid)
 
         except Exception, ex:
             LOG.exception(ex)
@@ -315,6 +283,7 @@ class TriggerManager(Daemon):
         return {}
 
     def resume(self, user_id=None, task_uuid=None, step=None, **kwargs):
+        # DEFUNCT
         try:
             self._prepare_db(user_id=user_id, **kwargs)
             self.db.begin(subtransactions=True)
@@ -347,7 +316,7 @@ class TriggerManager(Daemon):
                 run.step_index = i
                 remote_task = dict(attachments=atts, body=run.full_script)
                 remote_task['timeout'] = run.timeout
-                remote_task['target'] = self._expand_target(run.target)
+                # remote_task['target'] = self._expand_target(run.target)
 
                 remote_tasks.append(remote_task)
 
@@ -376,7 +345,8 @@ class TriggerManager(Daemon):
                 LOG.exception(ex)
 
             msg = Master(ctx.user.name).command(
-                'dispatch', tasks=remote_tasks, roles=self._roles(ctx),
+                'dispatch', tasks=remote_tasks,
+                deployment=deployment.object.id, roles=self._roles(ctx),
                 disabled_nodes=self.disabled_nodes(ctx), includes=[],
                 attachments=[], env=env)
             if not isinstance(msg, Queued):
@@ -405,18 +375,8 @@ class TriggerManager(Daemon):
             Node.enabled != True).all()]  # noqa
         return nodes
 
-    def _expand_target(self, target):
-        targets = [t.strip() for t in target.split(" ")]
-        groups = self.db.query(NodeGroup).filter(
-            NodeGroup.name.in_(targets)).all()
-        expanded_nodes = set(targets)
-        for g in groups:
-            for n in g.nodes:
-                expanded_nodes.add(n.name)
-
-        return " ".join(expanded_nodes)
-
     def run(self, **kwargs):
+        # DEFUNCT
         self._prepare_db()
         LOG.info('Listening for events')
 

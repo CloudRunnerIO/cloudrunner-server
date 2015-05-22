@@ -15,13 +15,24 @@
 import json
 import logging
 from os import path
-from Queue import Queue
+from threading import Thread, Event
+import time
+from Queue import Queue, Empty
 import uuid
 
+from sqlalchemy import create_engine, event
+from sqlalchemy.orm import scoped_session, sessionmaker
+
 from cloudrunner import LIB_DIR
-from cloudrunner.core.message import SafeDictWrapper
+from cloudrunner_server.api.model import (CloudProfile, NodeGroup, User,
+                                          Resource, Deployment, metadata)
+from cloudrunner_server.core.message import (SafeDictWrapper, ErrorMessage,
+                                             EndMessage)
 from cloudrunner_server.dispatcher import TaskQueue
 from cloudrunner_server.dispatcher.session import JobSession
+from cloudrunner_server.plugins.clouds.base import BaseCloudProvider
+from cloudrunner_server.util import timestamp
+from cloudrunner_server.util.db import checkout_listener
 
 LOG = logging.getLogger('Publisher')
 
@@ -30,6 +41,7 @@ class SessionManager(object):
 
     def __init__(self, config, backend):
         self.config = config
+        self.db_path = config.db
         self.backend = backend
         self.discovery_timeout = int(self.config.discovery_timeout or 2)
         self.wait_timeout = int(self.config.wait_timeout or 300)
@@ -51,27 +63,71 @@ class SessionManager(object):
                 except Exception, ex:
                     LOG.exception(ex)
 
-    def prepare_session(self, user, tasks,
+    def set_context_from_config(self, recreate=None, **configuration):
+        session = scoped_session(sessionmaker())
+        engine = create_engine(self.db_path, **configuration)
+        if 'mysql+pymysql://' in self.db_path:
+            event.listen(engine, 'checkout', checkout_listener)
+        session.bind = engine
+        metadata.bind = session.bind
+        if recreate:
+            # For tests: re-create tables
+            metadata.create_all(engine)
+        self.db = session
+
+    def _expand_target(self, targets):
+        possible_groups = [t for t in targets if not isinstance(t, dict)
+                           and "=" not in t]
+        expanded_nodes = []
+        if possible_groups:
+            groups = self.db.query(NodeGroup).filter(
+                NodeGroup.name.in_(targets)).all()
+            for g in groups:
+                for n in g.nodes:
+                    expanded_nodes.append(n.name)
+
+        return targets + expanded_nodes
+
+    def prepare_session(self, user, deployment_id, tasks,
                         remote_user_map, **kwargs):
         queue = TaskQueue()
         queue.owner = user
         timeout = 0
         env_in = Queue()
-        env_in.put((kwargs.get('env', {}), kwargs.get('attachments')))
+        start_args = (kwargs.get('env', {}), kwargs.get('attachments'))
+        # env_in.put()
         env_out = Queue()
+        global_job_event = Event()
+        job_id = uuid.uuid4().hex
+        for task in tasks:
+            task['targets'] = self._expand_target(task['targets'])
+
+        prepare_thread = PrepareThread(self, job_id, user, deployment_id,
+                                       tasks, remote_user_map['org'],
+                                       env_in, start_args,
+                                       global_job_event)
+        queue.prepare(prepare_thread)
+
         prev = None
         for task in tasks:
+
             session_id = uuid.uuid4().hex
             LOG.info("Enqueue new session %s" % session_id)
             sess_thread = JobSession(self, user, session_id, task,
                                      remote_user_map, env_in, env_out,
-                                     timeout, prev, **kwargs)
+                                     timeout, prev,
+                                     stop_event=global_job_event, **kwargs)
             timeout += sess_thread.timeout + 2
             env_in = env_out
             env_out = Queue()
             queue.push(sess_thread)
             self.sessions[session_id] = sess_thread
             prev = session_id
+        if queue.tasks:
+            end_thread = EndThread(self, session_id, remote_user_map['org'],
+                                   queue.tasks[-1].env_out,
+                                   timeout)
+            queue.callback(end_thread)
         self.subscriptions.append(queue)
         return queue
 
@@ -79,6 +135,7 @@ class SessionManager(object):
         queue = TaskQueue()
         timeout = 0
         sessions = sorted(sessions, key=lambda s: bool(s.get('parent')))
+        env_out = Queue()
         for session in sessions:
             try:
                 s = SafeDictWrapper(session)
@@ -89,11 +146,11 @@ class SessionManager(object):
                 restore = True
                 if s.parent:
                     parent = any([sess for sess in sessions
-                                  if sess.session_id == s.parent])
+                                  if sess['session_id'] == s.parent])
                     if parent:
                         parent_thread = queue.find(s.parent)
                         if parent_thread:
-                            env_in = parent_thread.env_out
+                            env_in = parent_thread[0].env_out
 
                 env_out = Queue()
                 sess_thread = JobSession(self, s.user, session_id, s.task,
@@ -102,11 +159,15 @@ class SessionManager(object):
                                          node_map=s.node_map,
                                          **s.kwargs)
                 sess_thread.restore = restore
-                timeout += sess_thread.timeout + 2
                 queue.push(sess_thread)
                 self.sessions[session_id] = sess_thread
             except Exception, ex:
                 LOG.exception(ex)
+        if queue.tasks:
+            end_thread = EndThread(self, session_id, s.remote_user_map['org'],
+                                   queue.tasks[-1].env_out,
+                                   timeout)
+            queue.callback(end_thread)
         self.subscriptions.append(queue)
         queue.process()
 
@@ -145,3 +206,120 @@ class SessionManager(object):
                 session.join(.2)
 
         LOG.info("Stopped Publisher")
+
+
+class PrepareThread(Thread):
+
+    def __init__(self, manager, session_id, user, deployment_id, tasks,
+                 org, out_queue, start_args, job_event):
+        super(PrepareThread, self).__init__()
+        self.session_id = str(session_id)
+        self.user = user
+        self.deployment_id = deployment_id
+        self.tasks = tasks
+        self.org = org
+        self.out_queue = out_queue
+        self.start_args = start_args
+        self.manager = manager
+        self.job_event = job_event
+
+    def run(self):
+        waiter = Event()
+        targets = []
+        self.job_done = self.manager.backend.publish_queue('logger')
+        self.node_connected = self.manager.backend.subscribe_fanout(
+            'admin_fwd', sub_patterns=[self.org])
+
+        wait_for_machines = []
+        for task in self.tasks:
+            for target in task['targets']:
+                if isinstance(target, dict):
+                    if target['name'] in targets:
+                        continue
+                    targets.append(target['name'])
+
+                    # Provider value
+                    server_name = target.pop('name')
+                    self.manager.user = self.manager.db.query(User).filter(
+                        User.username == self.user).first()
+                    profile = CloudProfile.my(self.manager).filter(
+                        CloudProfile.name == target['provider']).first()
+                    if not profile:
+                        raise ValueError("Cloud profile: '%s' not found!" %
+                                         target['provider'])
+                    deployment = Deployment.my(self.manager).filter(
+                        Deployment.id == self.deployment_id).first()
+                    if not deployment:
+                        raise ValueError("Deployment: '%s' not found!" %
+                                         self.deployment_id)
+                    provider = BaseCloudProvider.find(profile.type)
+                    if not provider:
+                        raise ValueError(
+                            "Cloud profile type '%s' not supported!" %
+                            profile.type)
+                    status, machine_ids, meta = provider(
+                        profile).create_machine(server_name, **target)
+                    for m_id in machine_ids:
+                        res = Resource(server_name=server_name, server_id=m_id,
+                                       deployment=deployment, profile=profile,
+                                       meta=json.dumps(meta))
+                        self.manager.db.add(res)
+                    self.manager.db.commit()
+                    wait_for_machines.append(server_name)
+                    # Return arg to dict
+                    target['name'] = server_name
+                    targets.append(server_name)
+                else:
+                    targets.append(target)
+
+        try:
+
+            max_timeout = time.time() + 600  # 10 minutes
+            while not waiter.is_set():
+                ret = self.node_connected.recv(timeout=1)
+                if ret:
+                    LOG.warn("Node %s has just appeared online" % ret[0])
+                    if ret[1] in wait_for_machines:
+                        wait_for_machines.remove(ret[1])
+                    if not any(wait_for_machines):
+                        waiter.set()
+                else:
+                    if time.time() > max_timeout:
+                        LOG.error("Timeout waiting to create nodes")
+                        waiter.set()
+                        # Set global event to prevent task execution
+                        self.job_event.set()
+
+        except Exception, ex:
+            LOG.exception(ex)
+            message = ErrorMessage(ts=timestamp(),
+                                   session_id=self.session_id,
+                                   user=self.user,
+                                   org=self.org,
+                                   error=ex.message)
+
+            self.job_done.send(message._)
+
+        self.out_queue.put(self.start_args)
+        self.node_connected.close()
+        self.job_done.close()
+
+
+class EndThread(Thread):
+
+    def __init__(self, manager, session_id, org, event, timeout):
+        super(EndThread, self).__init__()
+        self.session_id = str(session_id)
+        self.org = org
+        self.event = event
+        self.timeout = timeout
+        self.job_done = manager.backend.publish_queue('logger')
+
+    def run(self):
+        try:
+            self.event.get(True, self.timeout)
+        except Empty:
+            pass
+        message = EndMessage(session_id=self.session_id, org=self.org)
+        self.job_done.send(message._)
+        self.job_done.close()

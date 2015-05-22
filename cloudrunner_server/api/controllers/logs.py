@@ -127,6 +127,9 @@ class Logs(HookController):
                         skip=["source_id", "created_at", "id", "enabled"],
                         rel=[('source', 'name', lambda s: s.full_path()
                               if s else 'N/A')])
+                elif t.group.deployment:
+                    ser['deployment'] = t.group.deployment.serialize(
+                        skip=["id", "content", "owner_id"])
                 else:
                     ser['batch'] = {}
                 task_list.append(ser)

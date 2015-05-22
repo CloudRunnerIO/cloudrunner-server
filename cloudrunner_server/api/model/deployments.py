@@ -20,6 +20,7 @@ from sqlalchemy.orm import relationship, backref
 from cloudrunner_server.api.model.exceptions import QuotaExceeded
 
 from .base import TableBase
+from .cloud_profiles import CloudProfile
 from .users import User, Org
 
 
@@ -34,8 +35,13 @@ class Deployment(TableBase):
     content = Column(Text)
     created_at = Column(DateTime, default=func.now())
     enabled = Column(Boolean, default=True)
-    status = Column(Enum('Pending', 'Started', 'Rebuilding', 'Patching',
-                         'Stopped', 'Deleting', name="status"))
+    status = Column(Enum('Pending',
+                         'Starting', 'Running',
+                         'Rebuilding',
+                         'Patching',
+                         'Stopping', 'Stopped',
+                         'Deleting',
+                         name="status"))
     owner_id = Column(Integer, ForeignKey(User.id))
     owner = relationship(User, backref=backref('deployments',
                                                cascade='delete'))
@@ -81,3 +87,23 @@ def depl_before_update(mapper, connection, target):
     if total_allowed < current_total:
         raise QuotaExceeded(msg="Quota exceeded(%d of %d used)" % (
             current_total, total_allowed), model="Deployment")
+
+
+class Resource(TableBase):
+    __tablename__ = 'depl_resources'
+    __table_args__ = (
+        UniqueConstraint('server_id', 'profile_id'),
+    )
+
+    id = Column(Integer, primary_key=True)
+    server_name = Column(String(255))
+    server_id = Column(String(255))
+    meta = Column(Text)
+    created_at = Column(DateTime, default=func.now())
+
+    deployment_id = Column(Integer, ForeignKey(Deployment.id))
+    deployment = relationship(Deployment,
+                              backref=backref('resources', cascade='delete'))
+    profile_id = Column(Integer, ForeignKey(CloudProfile.id))
+    profile = relationship(CloudProfile,
+                           backref=backref('resources', cascade='delete'))

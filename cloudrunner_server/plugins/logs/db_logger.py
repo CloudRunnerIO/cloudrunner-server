@@ -57,6 +57,8 @@ class DbLogger(LoggerPluginBase):
             task = self.db.query(Task).join(User, Org).join(
                 Run, Task.runs).filter(
                     Run.uuid == session_id, Org.name == org).one()
+            if task.group.deployment:
+                task.group.deployment.status = 'Running'
             run = [r for r in task.runs if r.uuid == session_id][0]
             success = True
             run.exec_end = timestamp()
@@ -77,6 +79,26 @@ class DbLogger(LoggerPluginBase):
                 task.exit_code = int(any([bool(r.exit_code)
                                           for r in task.runs]))
             self.db.add(run)
+            self.db.add(task)
+            self.db.commit()
+        except Exception, ex:
+            LOG.exception(ex)
+            self.db.rollback()
+
+    def _end(self, msg):
+        session_id = msg.session_id
+        org = msg.org
+        try:
+            task = self.db.query(Task).join(User, Org).join(
+                Run, Task.runs).filter(
+                    Run.uuid == session_id, Org.name == org).one()
+            if task.group.deployment:
+                task.group.deployment.status = 'Running'
+            task.exec_end = timestamp()
+            if all([r.exit_code != -99 for r in task.runs]):
+                task.status = LOG_STATUS.Finished
+                task.exit_code = int(any([bool(r.exit_code)
+                                          for r in task.runs]))
             self.db.add(task)
             self.db.commit()
         except Exception, ex:
@@ -118,6 +140,10 @@ class DbLogger(LoggerPluginBase):
 
             msg = dict(id=msg.session_id, env=msg.env)
             self.r.publish("task:end", json.dumps(msg))
+
+        elif msg.control == "ENDMESSAGE":
+            self._end(msg)
+            self.r.publish("deployment:end", msg.session_id)
 
         elif msg.control == "INITIALMESSAGE":
             with self.cache.writer(msg.org, msg.session_id) as cache:

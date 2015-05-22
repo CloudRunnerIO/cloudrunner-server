@@ -85,7 +85,6 @@ class Workflows(HookController):
                 request.db.add(revision)
             except NotModified:
                 revision = script.contents(request, rev=rev)
-                sections = parser.parse_sections(revision.content)
             except NotAccessible:
                 return O.error(msg="Cannot connect to %s API" % plugin.type)
 
@@ -99,31 +98,28 @@ class Workflows(HookController):
         response.cache_control.private = True
         response.cache_control.max_age = 1
 
-        sections = parser.parse_sections(revision.content)
+        body, lang, args = parser.parse_content(revision.content)
 
-        for s in sections:
-            atts = []
-            options = {}
-            if s.args:
-                for arg, vals in s.args.items():
-                    if arg == 'attach':
-                        atts.extend([dict(path=scr_name) for scr_name in vals])
-                    elif arg == 'timeout':
-                        try:
-                            s.timeout = int(vals[0])
-                        except:
-                            pass
-                    else:
-                        options[arg] = vals
+        atts = []
+        options = {}
+        timeout = 0
+        if args:
+            for arg, vals in args.items():
+                if arg == 'attach':
+                    atts.extend([dict(path=scr_name) for scr_name in vals])
+                elif arg == 'timeout':
+                    try:
+                        timeout = int(vals[0])
+                    except:
+                        pass
+                else:
+                    options[arg] = vals
 
-            section = dict(content=parser.remove_shebangs(s.body.strip()),
-                           targets=[t.strip() for t in s.target.split(' ')
-                                    if t.strip()],
-                           lang=s.lang,
-                           attachments=atts,
-                           env=s.env._items,
-                           timeout=s.timeout)
-            data.append(section)
+        section = dict(content=parser.remove_shebangs(body.strip()),
+                       lang=lang,
+                       attachments=atts,
+                       timeout=timeout)
+        data.append(section)
         revisions = sorted([r.serialize(
             skip=['id', 'script_id', 'draft', 'content'],
             rel=[("created_at", "created_at", lambda d: d)])
@@ -203,11 +199,7 @@ class Workflows(HookController):
 
 def flatten_workflow(workflow, expand=False):
     new_content = []
-    header = ("#! switch [%(targets)s] "
-              "%(attachments)s %(env)s %(timeout)s")
     for section in workflow['sections']:
-        targets = " ".join([s.strip() for s in section['targets']
-                            if s.strip()])
         timeout = section['timeout'] or ''
         lang = section.get('lang')
         shebang_lang = ""
@@ -215,14 +207,6 @@ def flatten_workflow(workflow, expand=False):
             shebang_lang = "#! /usr/bin/%s" % lang
         if timeout:
             timeout = '--timeout=%s' % timeout
-        attachments = ['--attach=%s' % i['path']
-                       for i in section['attachments']]
-        if section.get("env"):
-            env = " ".join(['%s="%s"' % (k, v)
-                            for k, v in section["env"].items()])
-        else:
-            env = ""
-
         subst = None
         if expand:
             subst = partial(include_substitute, request)
@@ -230,11 +214,6 @@ def flatten_workflow(workflow, expand=False):
             parts = [parser.substitute_includes(content, callback=subst)]
         else:
             parts = [section['content'].strip()]
-        _header = header % dict(targets=targets,
-                                attachments=" ".join(attachments),
-                                timeout=timeout,
-                                env=env)
-        new_content.append(_header)
         if shebang_lang:
             new_content.append(shebang_lang)
         new_content.extend(parts)

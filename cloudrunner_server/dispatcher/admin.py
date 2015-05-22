@@ -21,7 +21,7 @@ from sqlalchemy.orm import scoped_session, sessionmaker
 from sqlalchemy.exc import IntegrityError
 
 from cloudrunner.core.exceptions import ConnectionError
-from cloudrunner.core.message import (ADMIN_TOWER, M, Control)
+from cloudrunner_server.core.message import (ADMIN_TOWER, M, Control)
 from cloudrunner_server.util.db import checkout_listener
 from cloudrunner_server.api.model import (metadata, Node, NodeTag,
                                           Org, ApiKey, User)

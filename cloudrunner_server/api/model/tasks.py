@@ -19,6 +19,7 @@ from sqlalchemy.sql.expression import func
 import uuid
 
 from .base import TableBase
+from .deployments import Deployment
 from .users import User, Org
 from .library import Revision, Script, Folder
 
@@ -32,8 +33,10 @@ class TaskGroup(TableBase):
 
     id = Column(Integer, primary_key=True)
     batch_id = Column(Integer, ForeignKey('batches.id'))
+    deployment_id = Column(Integer, ForeignKey('deployments.id'))
 
     batch = relationship('Batch')
+    deployment = relationship(Deployment)
 
     @staticmethod
     def unique(ctx):
@@ -103,8 +106,10 @@ class Task(TableBase):
 
 @event.listens_for(Task, 'before_insert')
 def task_before_insert(mapper, connection, target):
-    if target.script_content:
+    if target.script_content and target.script_content.script:
         target.script_name = target.script_content.script.full_path()
+    elif target.group and target.group.deployment:
+        target.script_name = target.group.deployment.name
 
 
 class Run(TableBase):

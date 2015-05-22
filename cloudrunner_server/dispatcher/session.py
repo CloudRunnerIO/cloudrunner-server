@@ -22,13 +22,11 @@ import time
 from cloudrunner.core.parser import has_params
 from cloudrunner.core.exceptions import (ConnectionError, InterruptExecution,
                                          InterruptStep)
-from cloudrunner.core.message import (M, Ready, StdOut, StdErr, FileExport,
-                                      Finished, Events, Job, Term, JobTarget,
-                                      InitialMessage,
-                                      PipeMessage,
-                                      FinishedMessage,
-                                      SafeDictWrapper)
-from cloudrunner.core.message import StatusCodes
+from cloudrunner_server.core.message import (M, Ready, StdOut, StdErr,
+                                             FileExport, Finished, Events, Job,
+                                             Term, JobTarget, SafeDictWrapper,
+                                             InitialMessage, PipeMessage,
+                                             FinishedMessage, StatusCodes)
 from cloudrunner.util.string import stringify
 from cloudrunner.util.string import stringify1
 
@@ -160,14 +158,13 @@ class JobSession(Thread):
                             condition)
                         raise
 
-            self.update_target(env)
             self.request['env'].update(env)
 
             #
             # Exec section
             #
             self.run_script(
-                self.task.target)
+                self.task.targets)
 
         except Exception, ex:
             LOG.exception(ex)
@@ -180,7 +177,7 @@ class JobSession(Thread):
             self._execute()
 
         result = {}
-        env = self.env
+        env = self.env or {}
         msg_ret = []
 
         try:
@@ -258,7 +255,6 @@ class JobSession(Thread):
                                       result=result,
                                       env=env)
             self._reply(message)
-
             self.env_out.put((env, self.file_exports))
 
         self.session_event.set()
@@ -274,10 +270,26 @@ class JobSession(Thread):
         targets     --  Target nodes, described by Id or Selector
 
         """
+        targets = [t['name'] if isinstance(t, dict) else t for t in targets]
+        env = self.request['env']
+        for i, t in enumerate(targets):
+            params = has_params(t)
+            if params:
+                for sel_param in params:
+                    sel, param = sel_param
+                    param_name = param.replace('$', '')
+                    if param_name in env:
+                        param_val = env[param_name]
+                        if isinstance(param_val, list):
+                            repl_params = ' '.join(
+                                ['%s%s' % (sel, val) for val in param_val])
+                        else:
+                            repl_params = sel + param_val
+                        targets[i] = t.replace(sel + param, repl_params)
 
         remote_user_map = self.request.pop('remote_user_map')
 
-        target = JobTarget(self.session_id, str(targets))
+        target = JobTarget(self.session_id, str(" ".join(targets)))
         target.hdr.org = remote_user_map['org']
         self.start_at = timestamp()
         self.manager.publisher.send(target._)
@@ -477,22 +489,6 @@ class JobSession(Thread):
         millis = round(time.time() % 1, 3)
         ts += millis
         return ts
-
-    def update_target(self, env):
-        params = has_params(self.task.target)
-        if params:
-            for sel_param in params:
-                sel, param = sel_param
-                param_name = param.replace('$', '')
-                if param_name in env:
-                    param_val = env[param_name]
-                    if isinstance(param_val, list):
-                        repl_params = ' '.join(
-                            ['%s%s' % (sel, val) for val in param_val])
-                    else:
-                        repl_params = sel + param_val
-                    self.task.target = self.task.target.replace(
-                        sel + param, repl_params)
 
 
 class UserMap(object):

@@ -68,7 +68,6 @@ class TestCert(base.BaseDBTestCase):
         self.assertEqual(messages.pop(0), (2, 'TEST_NODE signed'))
 
         messages = [x for x in CertController(base.CONFIG).list()]
-        print messages
 
         self.assertEqual(messages.pop(0), (1, 'Pending node requests:'))
         self.assertEqual(messages.pop(0), (2, '--None--'))

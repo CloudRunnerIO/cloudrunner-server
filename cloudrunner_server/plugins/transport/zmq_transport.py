@@ -28,12 +28,12 @@ from sqlalchemy import create_engine, event
 from sqlalchemy.orm import scoped_session, sessionmaker
 
 from cloudrunner.util.tlszmq import TLSZmqServerSocket
-from cloudrunner.core.message import *  # noqa
 from cloudrunner.plugins.transport.zmq_transport import (SockWrapper,
                                                          PollerWrapper)
 from cloudrunner.util.aes_crypto import Crypter
 from cloudrunner.util.shell import Timer
 
+from cloudrunner_server.core.message import *  # noqa
 from cloudrunner_server.plugins.transport.base import (ServerTransportBackend,
                                                        Tenant, TenantDict)
 from cloudrunner_server.api.model import metadata, Node, Org
@@ -43,9 +43,11 @@ from cloudrunner_server.util.db import checkout_listener
 LOGR = logging.getLogger('ZMQ ROUTER')
 LOGA = logging.getLogger('ZMQ ACCESS')
 LOGL = logging.getLogger('ZMQ LOGGER')
+LOGN = logging.getLogger('ZMQ ADMIN NODES')
 LOGPUB = logging.getLogger('ZMQ PUBLISH')
 
 LOGL.setLevel(logging.ERROR)
+LOGN.setLevel(logging.ERROR)
 
 
 class Pipe(object):
@@ -119,6 +121,19 @@ class ZmqTransport(ServerTransportBackend):
             config.logger_uri or (
                 "ipc://%(sock_dir)s/logger.sock" % config),
             None
+        )
+
+        self.buses.admin_nodes = Pipe(
+            config.admin_nodes_uri or (
+                "ipc://%(sock_dir)s/admin_nodes.sock" % config),
+            None
+        )
+
+        self.buses.admin_fwd = Pipe(
+            config.admin_nodes_pub_uri or (
+                "ipc://%(sock_dir)s/admin_nodes_pub.sock" % config),
+            config.admin_nodes_pub_uri or (
+                "ipc://%(sock_dir)s/admin_nodes_pub.sock" % config)
         )
 
         self.buses.publisher = Pipe(
@@ -321,18 +336,54 @@ class ZmqTransport(ServerTransportBackend):
                             getattr(err, 'errno', 0) == zmq.ENOTSUP:
                         # System interrupt
                         break
-                    LOGR.exception(err)
+                    LOGL.exception(err)
                     continue
                 except KeyboardInterrupt:
                     break
                 except Exception, ex:
-                    LOGR.exception(ex)
+                    LOGL.exception(ex)
                     continue
 
             log_proxy.close()
             log_proxy_fwd.close()
             log_pub_fwd.close(0)
-            LOGR.info("Exited logger queue")
+            LOGL.info("Exited logger queue")
+
+        def admin_nodes():
+            # Admin nodes registration forwarder
+            admin_proxy = self.context.socket(zmq.DEALER)
+            admin_proxy.bind(self.buses.admin_nodes.publish)
+            # Logger PUB forwarder
+            admin_pub_fwd = self.context.socket(zmq.PUB)
+            admin_pub_fwd.bind(self.buses.admin_fwd.publish)
+            LOGN.info("Admin nodes publishing at %s" %
+                      self.buses.admin_fwd.publish)
+            while not self.running.is_set():
+                try:
+                    if not admin_proxy.poll(500):
+                        continue
+                    frames = admin_proxy.recv()
+                    msg = M.build(frames)
+                    LOGN.info("Notifying new node: %s" % [msg.org, msg.name])
+                    admin_pub_fwd.send_multipart([msg.org, msg.name])
+                except zmq.ZMQError, err:
+                    if self.context.closed or \
+                            getattr(err, 'errno', 0) == zmq.ETERM or \
+                            getattr(err, 'errno', 0) == zmq.ENOTSOCK or \
+                            getattr(err, 'errno', 0) == zmq.ENOTSUP:
+                        # System interrupt
+                        break
+                    LOGN.exception(err)
+                    continue
+                except KeyboardInterrupt:
+                    break
+                except Exception, ex:
+                    LOGN.exception(ex)
+                    continue
+
+            admin_proxy.close()
+            admin_pub_fwd.close(0)
+            LOGN.info("Exited admin nodes queue")
 
         def scheduler_queue():
             # Listens to scheduler queue and transmits to ...
@@ -390,6 +441,9 @@ class ZmqTransport(ServerTransportBackend):
         Thread(target=logger_queue).start()
         self.bindings['logger'] = True
 
+        Thread(target=admin_nodes).start()
+        self.bindings['admin_nodes'] = True
+
         self.bindings['in_messages'] = True
         self.bindings['out_messages'] = True
 
@@ -404,6 +458,8 @@ class ZmqTransport(ServerTransportBackend):
         if self.proxies:
             Thread(target=self.proxy_replicator).start()
             self.bindings["replicator"] = True
+
+        self.node_registered_queue = self.publish_queue('admin_nodes')
 
     def heartbeat(self, msg):
         if msg.control == 'QUIT':
@@ -429,9 +485,24 @@ class ZmqTransport(ServerTransportBackend):
                 self.tenants[msg.hdr.org].update(msg.hdr.peer, msg.usage)
 
             if is_new:
+                LOGPUB.info(self.tenants[msg.hdr.org])
                 # New node
                 LOGPUB.info("Node %s attached to %s" % (msg.hdr.peer,
                                                         msg.hdr.org))
+                try:
+                    new_node = NodeRegistration(org=msg.hdr.org,
+                                                name=msg.hdr.peer)
+                    self.node_registered_queue.send(new_node._)
+                except zmq.ZMQError, err:
+                    if self.context.closed or \
+                            getattr(err, 'errno', 0) == zmq.ETERM or \
+                            getattr(err, 'errno', 0) == zmq.ENOTSOCK:
+                        return True
+                    else:
+                        raise err
+                except Exception, ex:
+                    LOGPUB.error(ex)
+
                 return True
 
     def pubsub_queue(self):
@@ -780,7 +851,14 @@ class ZmqTransport(ServerTransportBackend):
         return self._connect(endp_type, self.buses[endp_type].publish, ident)
 
     def _connect(self, endp_type, endpoint, ident):
-        sock = self.context.socket(zmq.DEALER)
+        try:
+            sock = self.context.socket(zmq.DEALER)
+        except ZMQError, zerr:
+            if zerr.errno == zmq.ETERM or zerr.errno == zmq.ENOTSUP \
+                    or zerr.errno == zmq.ENOTSOCK:
+                return None
+            else:
+                raise
         if ident:
             sock.setsockopt(zmq.IDENTITY, ident)
         sock.connect(endpoint)
@@ -796,9 +874,10 @@ class ZmqTransport(ServerTransportBackend):
         self._sockets.append(_sock)
         return _sock
 
-    def subscribe_fanout(self, endpoint, sub_pattern=None, *args, **kwargs):
+    def subscribe_fanout(self, endpoint, sub_patterns=[''], *args, **kwargs):
         sock = self.context.socket(zmq.SUB)
-        sock.setsockopt(zmq.SUBSCRIBE, sub_pattern or '')
+        for pattern in sub_patterns:
+            sock.setsockopt(zmq.SUBSCRIBE, pattern)
         sock.connect(getattr(self.buses, endpoint).consume)
         _sock = SockWrapper(endpoint, sock)
         self._sockets.append(_sock)
@@ -809,6 +888,7 @@ class ZmqTransport(ServerTransportBackend):
         for sock in self._sockets:
             LOGR.debug("Closing %s", sock.endpoint)
             sock._sock.close()
+        self.node_registered_queue.close()
         self.running.set()
         self.router.close()
         self.context.term()

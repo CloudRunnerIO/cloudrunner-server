@@ -133,27 +133,27 @@ class Clouds(HookController):
     @expose('json', generic=True)
     @wrap_command(CloudShare, model_name='Cloud Share')
     def shares(self, profile, *args, **kwargs):
-        name = kwargs.get('name')
 
         def nodes(p):
             return []
 
-        if name:
+        if args:
             sh = CloudShare.my(request, profile).filter(
-                CloudShare.name == name).first()
+                CloudShare.name == args[0]).first()
             return O.share(sh.serialize(
-                skip=['id', 'profile_id', 'password'],
+                skip=['id', 'profile_id'],
                 rel=[('shared_nodes', 'nodes', nodes)]))
         else:
             profs = [p.serialize(
-                skip=['id', 'profile_id'],
+                skip=['id', 'profile_id', 'password'],
                 rel=[('shared_nodes', 'nodes', nodes)])
                 for p in CloudShare.my(request, profile).all()]
             return O._anon(shares=profs)
 
     @shares.when(method='POST', template='json')
     @check_policy('is_admin')
-    @shares.wrap_modify()
+    @shares.wrap_modify(integrity_error=lambda er:
+                        "Duplicate share name for the same profile")
     def add_share(self, profile, *args, **kwargs):
         name = kwargs.get('name')
         node_quota = int(kwargs.get('node_quota', 0))
@@ -165,7 +165,7 @@ class Clouds(HookController):
         if not prof:
             return O.error(msg="Cloud Profile '%s' not found" % profile)
 
-        share = CloudShare(name=name, password=random_token(length=24),
+        share = CloudShare(name=name, password=random_token(length=64),
                            node_quota=node_quota, profile=prof)
         request.db.add(share)
 

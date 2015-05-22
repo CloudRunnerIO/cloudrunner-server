@@ -468,7 +468,10 @@ class TestLibrary(base.BaseRESTTestCase):
                   {
                       'editable': True,
                       'rev': '4',
-                      'sections': [],
+                      'sections': [{'attachments': [],
+                                    'content': 'Version 4 Final',
+                                    'lang': 'bash',
+                                    'timeout': 0}],
                       'revisions': [
                           {
                               'created_at': '2014-01-01 10:00:00',
@@ -484,7 +487,6 @@ class TestLibrary(base.BaseRESTTestCase):
                               'version': '1'}
                       ]
                   }}
-
         self.assertEqual(
             resp_json['workflow'], result['workflow'])
 
@@ -500,10 +502,8 @@ class TestLibrary(base.BaseRESTTestCase):
             "sections": [
                 {
                     "lang": "bash",
-                    "env": {},
-                    "content": "echo 'Done'",
-                    "timeout": None,
-                    "targets": ["*"],
+                    "content": "#! switch [*]\necho 'Done'",
+                    "timeout": 0,
                     "attachments": []
                 }
             ],
@@ -516,5 +516,4 @@ class TestLibrary(base.BaseRESTTestCase):
                 }
             ]
         }}
-
         self.assertEqual(resp_json['workflow'], result['workflow'])

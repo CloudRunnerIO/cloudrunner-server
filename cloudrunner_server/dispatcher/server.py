@@ -37,13 +37,13 @@ else:
                       LOG_LOCATION)
 
 from cloudrunner.core.exceptions import ConnectionError
-from cloudrunner.core.message import (M, Dispatch, GetNodes, Nodes,
-                                      Error, Queued)
 from cloudrunner.plugins.args_provider import ManagedPlugin
 from cloudrunner.util.daemon import Daemon
 from cloudrunner.util.loader import load_plugins, local_plugin_loader
 from cloudrunner.util.shell import colors
 
+from cloudrunner_server.core.message import (M, Dispatch, GetNodes, Nodes,
+                                             Error, Queued)
 from cloudrunner_server.dispatcher import (TaskQueue)
 from cloudrunner_server.dispatcher.admin import Admin
 from cloudrunner_server.dispatcher.manager import SessionManager
@@ -203,14 +203,14 @@ class Dispatcher(Daemon):
         else:
             return [False, "Session not found"]
 
-    def dispatch(self, user, tasks, remote_user_map, env=None,
+    def dispatch(self, user, deployment_id, tasks, remote_user_map, env=None,
                  disabled_nodes=None):
         """
         Dispatch script to targeted nodes
         """
 
         queue = self.manager.prepare_session(
-            self.user_id, tasks, remote_user_map, env=env,
+            self.user_id, deployment_id, tasks, remote_user_map, env=env,
             disabled_nodes=disabled_nodes)
         return queue
 
@@ -250,7 +250,8 @@ class Dispatcher(Daemon):
                     disabled_nodes = msg.disabled_nodes or []
                     LOG.info('user: %s/%s' % (msg.user,
                                               remote_user_map['org']))
-                    response = self.dispatch(msg.user, msg.tasks, msg.roles,
+                    response = self.dispatch(msg.user, msg.deployment,
+                                             msg.tasks, msg.roles,
                                              env=getattr(msg, 'env', {}),
                                              disabled_nodes=disabled_nodes)
 
@@ -326,6 +327,7 @@ class Dispatcher(Daemon):
         self.admin.start()
 
         self.manager = SessionManager(self.config, self.backend)
+        self.manager.set_context_from_config()
         self.threads = []
         for i in range(WORKER_COUNT):
             thread = threading.Thread(target=self.worker, args=[])
