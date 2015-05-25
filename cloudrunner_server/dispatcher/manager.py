@@ -272,31 +272,31 @@ class PrepareThread(Thread):
                 else:
                     targets.append(target)
 
-        try:
+        if wait_for_machines:
+            try:
+                max_timeout = time.time() + 600  # 10 minutes
+                while not waiter.is_set():
+                    ret = self.node_connected.recv(timeout=1)
+                    if ret:
+                        LOG.warn("Node %s has just appeared online" % ret[0])
+                        if ret[1] in wait_for_machines:
+                            wait_for_machines.remove(ret[1])
+                        if not any(wait_for_machines):
+                            waiter.set()
+                    else:
+                        if time.time() > max_timeout:
+                            LOG.error("Timeout waiting to create nodes")
+                            waiter.set()
+                            # Set global event to prevent task execution
+                            self.job_event.set()
 
-            max_timeout = time.time() + 600  # 10 minutes
-            while not waiter.is_set():
-                ret = self.node_connected.recv(timeout=1)
-                if ret:
-                    LOG.warn("Node %s has just appeared online" % ret[0])
-                    if ret[1] in wait_for_machines:
-                        wait_for_machines.remove(ret[1])
-                    if not any(wait_for_machines):
-                        waiter.set()
-                else:
-                    if time.time() > max_timeout:
-                        LOG.error("Timeout waiting to create nodes")
-                        waiter.set()
-                        # Set global event to prevent task execution
-                        self.job_event.set()
-
-        except Exception, ex:
-            LOG.exception(ex)
-            message = ErrorMessage(ts=timestamp(),
-                                   session_id=self.session_id,
-                                   user=self.user,
-                                   org=self.org,
-                                   error=ex.message)
+            except Exception, ex:
+                LOG.exception(ex)
+                message = ErrorMessage(ts=timestamp(),
+                                       session_id=self.session_id,
+                                       user=self.user,
+                                       org=self.org,
+                                       error=ex.message)
 
             self.job_done.send(message._)
 

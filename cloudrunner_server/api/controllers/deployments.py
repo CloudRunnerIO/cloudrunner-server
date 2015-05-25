@@ -78,6 +78,7 @@ class Deployments(HookController):
                           owner=user)
         request.db.add(depl)
 
+    """
     @deployments.when(method='PATCH', template='json')
     @deployments.wrap_modify()
     def patch(self, name=None, **kwargs):
@@ -103,6 +104,7 @@ class Deployments(HookController):
         depl.content = json.dumps(new_content)
         task_ids = _execute(depl, **kwargs)
         return O.success(msg="Patched", task_ids=task_ids)
+    """
 
     @deployments.when(method='PUT', template='json')
     @deployments.wrap_modify()
@@ -134,6 +136,7 @@ class Deployments(HookController):
         depl = Deployment.my(request).filter(Deployment.name == name).first()
         if not depl:
             return O.error(msg="Cannot find deployment '%s'" % name)
+        _cleanup(depl)
         request.db.delete(depl)
 
     @expose('json', generic=True)
@@ -164,14 +167,11 @@ class Deployments(HookController):
         depl = Deployment.my(request).filter(Deployment.name == name).first()
         if not depl:
             return O.error(msg="Cannot find deployment '%s'" % name)
-        if depl.status not in ['Running', 'Stopped']:
-            return O.error(msg="Deployment must be Running or Stopped "
-                           "to be Started.")
 
         content = json.loads(depl.content)
         _validate(content)
         request.db.commit()
-        # depl.status = "Starting"
+        depl.status = "Starting"
         task_ids = _execute(depl, **kwargs)
 
         return O.success(msg="Started", task_ids=task_ids)
@@ -184,9 +184,6 @@ class Deployments(HookController):
         depl = Deployment.my(request).filter(Deployment.name == name).first()
         if not depl:
             return O.error(msg="Cannot find deployment '%s'" % name)
-        if depl.status not in ['Running']:
-            return O.error(msg="Deployment must be Running before "
-                           "being Stopped")
         depl.status = "Stopped"
         _cleanup(depl)
 
