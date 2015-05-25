@@ -151,6 +151,7 @@ fi
 %{_bindir}/cloudrunner-trigger
 %{_bindir}/cloudrunner-server-autocomplete
 
+%{python_sitelib}/cloudrunner_server/core
 %{python_sitelib}/cloudrunner_server/dispatcher
 %{python_sitelib}/cloudrunner_server/master
 %{python_sitelib}/cloudrunner_server/api
