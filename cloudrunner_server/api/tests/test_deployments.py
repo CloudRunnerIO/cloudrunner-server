@@ -13,7 +13,7 @@
 #  *******************************************************/
 
 import json
-from mock import Mock, patch, call
+from mock import Mock, patch
 
 from cloudrunner_server.core import message as M
 from cloudrunner_server.api.tests import base
