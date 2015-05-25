@@ -36,7 +36,8 @@ class TaskGroup(TableBase):
     deployment_id = Column(Integer, ForeignKey('deployments.id'))
 
     batch = relationship('Batch')
-    deployment = relationship(Deployment)
+    deployment = relationship(Deployment,
+                              backref=backref('tasks', cascade="save-update"))
 
     @staticmethod
     def unique(ctx):

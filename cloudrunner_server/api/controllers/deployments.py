@@ -230,7 +230,7 @@ def _cleanup(depl):
     for res in depl.resources:
         provider_class = BaseCloudProvider.find(res.profile.type)
         if not provider_class:
-            raise ValueError("Cloud pprofile with type: %s not found!" %
+            raise ValueError("Cloud profile with type: %s not found!" %
                              res.profile.type)
         provider = provider_class(res.profile)
         LOG.info("Cleaning instance[%s::%s] for node '%s'" % (
