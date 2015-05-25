@@ -1,3 +1,18 @@
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+# vim: tabstop=4 shiftwidth=4 softtabstop=4
+
+# /*******************************************************
+#  * Copyright (C) 2013-2014 CloudRunner.io <info@cloudrunner.io>
+#  *
+#  * Proprietary and confidential
+#  * This file is part of CloudRunner Server.
+#  *
+#  * CloudRunner Server can not be copied and/or distributed
+#  * without the express permission of CloudRunner.io
+#  *******************************************************/
+
+from functools import partial
 import json
 import logging
 import re
@@ -73,7 +88,7 @@ class Step(object):
                 raise ParseError("Cannot find step body")
 
             scr_parse = ScriptParser()
-            scr_parse.parse(c)
+            scr_parse.parse(ctx, c)
             self.body = scr_parse.body
             self.lang = scr_parse.lang
             self.args = scr_parse.args
@@ -122,7 +137,7 @@ class ScriptParser(object):
         self.body = ''
         self.lang = DEFAULT_LANG
 
-    def parse(self, content):
+    def parse(self, ctx, content):
         try:
             args = []
             m_args = ARGS.findall(content)
@@ -131,8 +146,8 @@ class ScriptParser(object):
             args = ArgsCollection(*args)
 
             lang = parse_lang(content)
-            self.body = substitute_includes(content,
-                                            callback=include_substitute)
+            subst = partial(include_substitute, ctx)
+            self.body = substitute_includes(content, callback=subst)
 
             self.content = self.body
             self.lang = lang
