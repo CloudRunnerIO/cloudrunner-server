@@ -30,7 +30,7 @@ Requires:      openssl
 Requires:      python-zmq >= 13.0
 Requires:      python-httplib2
 Requires:      python-setuptools
-Requires:      cloudrunner >= 1.0
+Requires:      cloudrunner >= 1.3.3
 Requires:      python-crontab
 Requires:      python-redis
 Requires:      python-requests
