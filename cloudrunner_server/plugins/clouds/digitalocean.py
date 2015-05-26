@@ -23,8 +23,7 @@ LOG = logging.getLogger()
 
 class DigitalOcean(BaseCloudProvider):
 
-    def create_machine(self, name, server_address,
-                       image, server=CR_SERVER,
+    def create_machine(self, name, image=None, server=CR_SERVER,
                        inst_type='512MB', region='nyc3',
                        port_bindings=None, privileged=False,
                        ssh_keys=None,
@@ -53,13 +52,17 @@ class DigitalOcean(BaseCloudProvider):
             res = requests.post(url, data=json.dumps(json_data),
                                 headers=headers)
             if res.status_code >= 300:
-                LOG.error("FAILURE %s(%s)" % (res.status_code, res.content))
+                LOG.error("FAILURE %s(%s) [[%s]]" % (res.status_code,
+                                                     res.content,
+                                                     json_data
+                                                     ))
                 return self.FAIL, [], {}
 
             meta = dict(region=region)
             return self.OK, [res], meta
         except Exception, ex:
             LOG.exception(ex)
+            LOG.warn(json_data)
             raise
 
         return self.FAIL, [], {}

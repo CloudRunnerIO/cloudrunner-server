@@ -44,9 +44,9 @@ class DockerHost(BaseCloudProvider):
                 f.write(self.profile.username)
             with open(self._key_path, 'w') as f:
                 f.write(self.profile.password)
+        self.server_address = self.profile.args
 
-    def create_machine(self, name, server_address,
-                       image, server=CR_SERVER,
+    def create_machine(self, name, image=None, server=CR_SERVER,
                        port_bindings=None, privileged=False,
                        volume_bindings=None, **kwargs):
         ports = {}
@@ -69,7 +69,7 @@ class DockerHost(BaseCloudProvider):
                          OpenStdin=True,)
         # Cmd=[cmd],
         # Entrypoint=['/bin/curl'])
-        create_url = "https://%s/containers/create" % server_address
+        create_url = "https://%s/containers/create" % self.server_address
 
         try:
             server_ids = []
@@ -83,25 +83,26 @@ class DockerHost(BaseCloudProvider):
                 return self.FAIL, [], {}
             server_id = res.json()['Id']
             server_ids.append(server_id)
-            start_url = "https://%s/containers/%s/start" % (server_address,
-                                                            server_id)
+            start_url = "https://%s/containers/%s/start" % (
+                self.server_address,
+                server_id)
             res = requests.post(start_url, data=json.dumps({"Detach": False,
                                                             "Tty": False}),
                                 cert=(self._cert_path,
                                       self._key_path),
                                 headers=HEADERS,
                                 verify=False)
-            meta = dict(server_address=server_address)
+            meta = dict(server_address=self.server_address)
         except Exception, ex:
             LOG.exception(ex)
             raise
 
         return self.OK, server_ids, meta
 
-    def delete_machine(self, server_ids, server_address=None, **kwargs):
+    def delete_machine(self, server_ids, **kwargs):
         ret = self.OK
         for server_id in server_ids:
-            delete_url = "https://%s/containers/%s" % (server_address,
+            delete_url = "https://%s/containers/%s" % (self.server_address,
                                                        server_id)
             res = requests.delete(delete_url, cert=(self._cert_path,
                                                     self._key_path),

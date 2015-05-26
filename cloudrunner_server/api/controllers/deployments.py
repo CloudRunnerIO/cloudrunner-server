@@ -39,12 +39,20 @@ class Deployments(HookController):
     @wrap_command(Deployment)
     def deployments(self, name=None, **kwargs):
         skip = ['id', 'owner_id']
+
+        def _encode(s):
+            try:
+                return json.loads(s)
+            except ValueError:
+                return {}
         if name:
             depl = Deployment.my(request).filter(
                 Deployment.name == name).first()
             if depl:
                 return O.deployment(**depl.serialize(
-                    skip=skip))
+                    skip=skip,
+                    rel=[('content', 'content',
+                          lambda p: _encode(p))]))
             else:
                 return O.error(msg="Cannot find deployment '%s'" % name)
         else:
@@ -123,7 +131,6 @@ class Deployments(HookController):
         request.db.commit()
 
         _validate(content)
-
         depl.content = json.dumps(content)
 
         task_ids = _execute(depl, **kwargs)
@@ -199,6 +206,7 @@ def _validate(content):
 def _execute(depl, **kwargs):
     dep = parser.DeploymentParser(conf, request)
     dep.parse(depl)
+    print "dep", dep.content
     if dep.steps and kwargs.get('env'):
         # Override ENV
 
