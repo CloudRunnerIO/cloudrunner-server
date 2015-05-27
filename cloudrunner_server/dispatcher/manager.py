@@ -247,6 +247,8 @@ class PrepareThread(Thread):
                     if not profile:
                         raise ValueError("Cloud profile: '%s' not found!" %
                                          target['provider'])
+                    if profile.shared:
+                        profile = profile.shared
                     deployment = Deployment.my(self.manager).filter(
                         Deployment.id == self.deployment_id).first()
                     if not deployment:

@@ -42,6 +42,10 @@ class CloudProfile(TableBase):
     owner_id = Column(Integer, ForeignKey(User.id))
     owner = relationship(User, backref=backref('cloud_profiles',
                                                cascade='delete'))
+    share_id = Column(Integer, ForeignKey('cloud_profiles.id'))
+
+    shared = relationship('CloudProfile', remote_side=[id],
+                          backref=backref('linked', cascade='delete'))
 
     @staticmethod
     def my(ctx):
@@ -52,9 +56,7 @@ class CloudProfile(TableBase):
     @staticmethod
     def count(ctx):
         return ctx.db.query(CloudProfile).join(User, Org).filter(
-            Org.name == ctx.user.org).count() + ctx.db.query(
-                AttachedProfile).join(User, Org).filter(
-                    Org.name == ctx.user.org).count()
+            Org.name == ctx.user.org).count()
 
 
 class CloudShare(TableBase):
@@ -82,29 +84,6 @@ class CloudShare(TableBase):
         )
 
 
-class AttachedProfile(TableBase):
-
-    __tablename__ = 'cloud_attached_profiles'
-    __table_args__ = (
-        UniqueConstraint("owner_id", 'share_id'),
-    )
-
-    id = Column(Integer, primary_key=True)
-
-    owner_id = Column(Integer, ForeignKey(User.id))
-    owner = relationship(User, backref=backref('profile_attachments',
-                                               cascade='delete'))
-    share_id = Column(Integer, ForeignKey(CloudShare.id))
-    share = relationship(CloudShare, backref=backref('attachments',
-                                                     cascade='delete'))
-
-    @staticmethod
-    def my(ctx):
-        return ctx.db.query(AttachedProfile).filter(
-            AttachedProfile.owner_id == ctx.user.id
-        )
-
-
 class SharedNode(TableBase):
 
     __tablename__ = 'node_shares'
@@ -129,10 +108,6 @@ def quotas(connection, target):
             join(CloudProfile, User)).where(
             User.org_id == org.id).where(
                 CloudProfile.enabled == True))  # noqa
-    current_total += connection.scalar(
-        select([func.count(distinct(AttachedProfile.id))]).select_from(
-            join(AttachedProfile, User)).where(
-            User.org_id == org.id))  # noqa
 
     return total_allowed, current_total
 

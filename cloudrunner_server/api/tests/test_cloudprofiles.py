@@ -71,7 +71,8 @@ class TestCloudProfiles(base.BaseRESTTestCase):
                 'name': 'digitalocean',
                 'enabled': True,
                 'shares': [],
-                'clear_nodes': False, 'type': 'digitalocean'}
+                'clear_nodes': False,
+                'type': 'digitalocean'}
         ]}
 
         resp = self.app.post('/rest/clouds/profiles',

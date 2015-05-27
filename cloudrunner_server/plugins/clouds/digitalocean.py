@@ -84,9 +84,9 @@ class DigitalOcean(BaseCloudProvider):
                 if res.status_code >= 300:
                     LOG.error("FAILURE %s(%s)" %
                               (res.status_code, res.content))
-                    return self.FAIL, []
+                    return self.FAIL
 
-                return self.OK, [res]
+                return self.OK
             except Exception, ex:
                 LOG.exception(ex)
                 raise

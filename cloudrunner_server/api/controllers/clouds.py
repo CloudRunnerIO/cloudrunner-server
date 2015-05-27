@@ -20,8 +20,7 @@ from cloudrunner_server.api.decorators import wrap_command
 from cloudrunner_server.api.hooks.error_hook import ErrorHook
 from cloudrunner_server.api.hooks.db_hook import DbHook
 from cloudrunner_server.api.hooks.perm_hook import PermHook
-from cloudrunner_server.api.model import (CloudProfile, CloudShare,
-                                          AttachedProfile, User)
+from cloudrunner_server.api.model import (CloudProfile, CloudShare, User)
 from cloudrunner_server.api.policy.decorators import check_policy
 from cloudrunner_server.api.util import JsonOutput as O, random_token
 
@@ -50,33 +49,27 @@ class Clouds(HookController):
         if name:
             prof = CloudProfile.my(request).filter(
                 CloudProfile.name == name).first()
+
             return O.profile(prof.serialize(
-                skip=['id', 'owner_id', 'password', 'arguments'],
+                skip=['id', 'owner_id', 'share_id', 'password', 'arguments'],
                 rel=[('shares', 'shares', shares_details)]))
         else:
             profs = [p.serialize(
-                skip=['id', 'owner_id', 'password', 'arguments'],
+                skip=['id', 'owner_id', 'share_id', 'password', 'arguments'],
                 rel=[('shares', 'shares', shares)])
                 for p in CloudProfile.my(request).all()]
-            attached_profs = [p.share.serialize(
-                skip=['id', 'owner_id', 'name', 'password', 'profile_id'],
-                rel=[('id', 'shared', lambda x: True),
-                     ('id', 'type', lambda x: p.share.profile.type),
-                     ('profile', 'owner', lambda x: x.owner.username),
-                     ('profile', 'name', lambda x: x.name),
-                     ('name', 'username')])
-                for p in AttachedProfile.my(request).all()]
-            return O._anon(profiles=profs + attached_profs)
+            return O._anon(profiles=profs)
 
     @profiles.when(method='POST', template='json')
     @check_policy('is_admin')
     @profiles.wrap_create()
     def add_profile(self, name, *args, **kwargs):
         p_type = kwargs['type']
-        p_shared = kwargs.get('shared')
         user = User.visible(request).filter(
             User.id == request.user.id).first()
-        if p_shared in ['true', 'True', '1']:
+        name = name or kwargs['name']
+
+        if p_type == "shared":
             username = kwargs.pop('username')
             password = kwargs.pop('password')
             share = request.db.query(CloudShare).filter(
@@ -84,8 +77,12 @@ class Clouds(HookController):
                 CloudShare.password == password).first()
             if not share:
                 return O.error(msg="The specified shared profile is not found")
-            att_prof = AttachedProfile(share=share, owner=user)
-            request.db.add(att_prof)
+            prof = CloudProfile(name=name, username=username,
+                                password=password,
+                                owner=user,
+                                type=share.profile.type,
+                                shared=share.profile)
+            request.db.add(prof)
         else:
             username = kwargs.pop('username')
             password = kwargs.pop('password')
@@ -93,7 +90,6 @@ class Clouds(HookController):
             clear_nodes = (bool(kwargs.get('clear_nodes'))
                            and not kwargs.get('clear_nodes')
                            in ['0', 'false', 'False'])
-            name = name or kwargs['name']
 
             prof = CloudProfile(name=name, username=username,
                                 password=password, arguments=arguments,
