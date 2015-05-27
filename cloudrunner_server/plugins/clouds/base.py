@@ -1,7 +1,10 @@
 import abc
+from cloudrunner.util.config import Config
+from cloudrunner import CONFIG_LOCATION
 
+CONFIG = Config(CONFIG_LOCATION)
 PROVISION = """curl -s https://raw.githubusercontent.com/CloudRunnerIO/cloudrunner-library/master/bootstrap.sh | CRN_NODE=%(name)s CRN_SERVER=%(server)s CRN_KEY=%(api_key)s CRN_OVERWRITE=1 bash"""  # noqa
-CR_SERVER = 'master.cloudrunner.io'
+CR_SERVER = CONFIG.master_url or 'master.cloudrunner.io'
 
 
 class BaseCloudProvider(object):

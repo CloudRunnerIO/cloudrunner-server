@@ -36,6 +36,8 @@ class DigitalOcean(BaseCloudProvider):
         if volume_bindings:
             for binding in volume_bindings:
                 volumes[binding] = {}
+        LOG.info("Registering DigitalOcean machine [%s::%s] for [%s]" %
+                 (name, image, CR_SERVER))
 
         cmd = PROVISION % dict(server=server, name=name, api_key=self.api_key)
         json_data = dict(name=name, region=region, size=inst_type,
@@ -49,6 +51,7 @@ class DigitalOcean(BaseCloudProvider):
 
         url = 'https://api.digitalocean.com/v2/droplets'
         try:
+            instance_ids = []
             res = requests.post(url, data=json.dumps(json_data),
                                 headers=headers)
             if res.status_code >= 300:
@@ -58,8 +61,11 @@ class DigitalOcean(BaseCloudProvider):
                                                      ))
                 return self.FAIL, [], {}
 
+            json_res = res.json()
+            instance_ids.append(json_res['droplet']['id'])
+
             meta = dict(region=region)
-            return self.OK, [res], meta
+            return self.OK, instance_ids, meta
         except Exception, ex:
             LOG.exception(ex)
             LOG.warn(json_data)

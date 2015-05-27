@@ -16,7 +16,10 @@ from azure.servicemanagement import (ServiceManagementService,
                                      LinuxConfigurationSet,
                                      OSVirtualHardDisk)
 import logging
+import os
+import tempfile
 
+from cloudrunner import VAR_DIR
 from .base import BaseCloudProvider, CR_SERVER  # , PROVISION
 
 LOG = logging.getLogger()
@@ -25,6 +28,18 @@ URL = "https://management.core.windows.net/%(username)s/services/hostedservices/
 
 class Azure(BaseCloudProvider):
 
+    def __init__(self, profile):
+        super(Azure, self).__init__(profile)
+        prefix = "%s-%s" % (self.profile.owner.org, self.profile.id)
+        self._path = os.path.join(VAR_DIR, "tmp", "creds", prefix)
+        self.server_address = self.profile.username
+        _, self._cert_path = tempfile.mkstemp(dir=self._path,
+                                              suffix='pem',
+                                              text=True)
+
+    def _cleanup(self):
+        os.unlink(self._cert_path)
+
     def create_machine(self, name, region='West US',
                        image=None, role_size='Small',
                        min_count=1, max_count=1,
@@ -32,9 +47,11 @@ class Azure(BaseCloudProvider):
                        username='', password='', ssh_pub_key='',
                        server=CR_SERVER,
                        cleanup=None, **kwargs):
+        LOG.info("Registering Azure machine [%s::%s] for [%s]" %
+                 (name, image, CR_SERVER))
         try:
             sms = ServiceManagementService(self.profile.username,
-                                           self.cert_path)
+                                           self._cert_path)
             server_config = LinuxConfigurationSet('myhostname', 'myuser',
                                                   'mypassword', True)
             media_link = "%s__%s" % (media, name)

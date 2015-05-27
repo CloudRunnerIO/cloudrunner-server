@@ -24,13 +24,15 @@ AUTH_URL = "https://identity.api.rackspacecloud.com/v2.0/tokens"
 
 class Rax(BaseCloudProvider):
 
-    def create_machine(self, name, server_address, image, region='ord',
-                       server=CR_SERVER, flavor='2',
+    def create_machine(self, name, image=None, region='ord',
+                       flavor='2',
                        key_name=None,
                        metadata=None,
                        networks=None,
                        **kwargs):
-        cmd = PROVISION % dict(server=server,
+        LOG.info("Registering AWS machine [%s::%s] for [%s]" %
+                 (name, image, CR_SERVER))
+        cmd = PROVISION % dict(server=CR_SERVER,
                                name=name,
                                api_key=self.api_key)
         json_data = dict(name=name, flavorRef=flavor,

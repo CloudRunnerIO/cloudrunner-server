@@ -56,8 +56,9 @@ class Deployments(HookController):
             else:
                 return O.error(msg="Cannot find deployment '%s'" % name)
         else:
-            depl = [d.serialize(skip=skip)
-                    for d in Deployment.my(request).all()]
+            depl = sorted([d.serialize(skip=skip)
+                           for d in Deployment.my(request).all()],
+                          key=lambda d: d['name'])
             return O._anon(deployments=depl)
         return O.none()
 
@@ -259,3 +260,5 @@ def _cleanup(depl):
             LOG.info("Revoke node: %s" % node.name)
             [m[1] for m in cert.revoke(node.name, ca=request.user.org)]
             request.db.delete(node)
+        else:
+            LOG.warn("Local Node with name '%s' not found" % res.server_name)

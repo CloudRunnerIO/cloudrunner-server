@@ -28,6 +28,8 @@ class AWS(BaseCloudProvider):
                        server=CR_SERVER,
                        security_groups=None,
                        key_name=None, **kwargs):
+        LOG.info("Registering AWS machine [%s::%s] for [%s]" %
+                 (name, image, CR_SERVER))
         try:
             self.conn = ec2.connect_to_region(
                 region,

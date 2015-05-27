@@ -12,39 +12,49 @@
 #  * without the express permission of CloudRunner.io
 #  *******************************************************/
 
-from cloudrunner import VAR_DIR
 import json
 import logging
 import os
 import requests
+import tempfile
 
+from cloudrunner import VAR_DIR
 from .base import BaseCloudProvider, CR_SERVER
 
 LOG = logging.getLogger()
 HEADERS = {'Content-Type': 'application/json'}
 
 
-class DockerHost(BaseCloudProvider):
+class Docker(BaseCloudProvider):
 
     def __init__(self, profile):
-        super(DockerHost, self).__init__(profile)
+        super(Docker, self).__init__(profile)
 
-        prefix = "%s-%s" % (self.profile.owner.org, self.profile.id)
+        prefix = "%s-%s" % (self.profile.owner.org.name, self.profile.id)
         self._path = os.path.join(VAR_DIR, "tmp", "creds", prefix)
-        self._cert_path = os.path.join(
-            VAR_DIR, "tmp", "creds", prefix, 'cert.pem')
-        self._key_path = os.path.join(
-            VAR_DIR, "tmp", "creds", prefix, 'key.pem')
-        if (not os.path.exists(self._cert_path) or
-                not os.path.exists(self._key_path)):
-            if not os.path.exists(self._path):
-                os.makedirs(self._path, mode=500)
-            # Re-create files if missing
-            with open(self._cert_path, 'w') as f:
-                f.write(self.profile.username)
-            with open(self._key_path, 'w') as f:
-                f.write(self.profile.password)
-        self.server_address = self.profile.args
+        if ":" in self.profile.username:
+            self.server_address = self.profile.username
+        else:
+            self.server_address = "%s:2376" % self.profile.username
+        try:
+            os.makedirs(self._path)
+        except:
+            pass
+        _, self._cert_path = tempfile.mkstemp(dir=self._path,
+                                              suffix='pem',
+                                              text=True)
+        _, self._key_path = tempfile.mkstemp(dir=self._path,
+                                             suffix='pem',
+                                             text=True)
+
+        with open(self._cert_path, 'w') as f:
+            f.write(self.profile.password)
+        with open(self._key_path, 'w') as f:
+            f.write(self.profile.arguments)
+
+    def _cleanup(self):
+        os.unlink(self._cert_path)
+        os.unlink(self._key_path)
 
     def create_machine(self, name, image=None, server=CR_SERVER,
                        port_bindings=None, privileged=False,
@@ -57,11 +67,12 @@ class DockerHost(BaseCloudProvider):
         if volume_bindings:
             for binding in volume_bindings:
                 volumes[binding] = {}
+        LOG.info("Registering Docker machine [%s::%s] for [%s] at [%s]" %
+                 (name, image, CR_SERVER, self.server_address))
         # cmd = PROVISION % dict(server=server,
         #                        name=name,
         #                        api_key=self.api_key)
-        env = ["SERVER_ID=master.cloudrunner.io",
-               "ORG_ID=%s" % self.api_key]
+        env = ["SERVER_ID=%s" % CR_SERVER, "ORG_ID=%s" % self.api_key]
         json_data = dict(Hostname=name, Image=image, Env=env,
                          ExposedPorts=ports, Privileged=privileged,
                          Volumes=volumes,
@@ -96,14 +107,16 @@ class DockerHost(BaseCloudProvider):
         except Exception, ex:
             LOG.exception(ex)
             raise
+        finally:
+            self._cleanup()
 
         return self.OK, server_ids, meta
 
     def delete_machine(self, server_ids, **kwargs):
         ret = self.OK
         for server_id in server_ids:
-            delete_url = "https://%s/containers/%s" % (self.server_address,
-                                                       server_id)
+            delete_url = "https://%s/containers/%s?force=true" % (
+                self.server_address, server_id)
             res = requests.delete(delete_url, cert=(self._cert_path,
                                                     self._key_path),
                                   headers=HEADERS,
