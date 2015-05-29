@@ -108,12 +108,12 @@ class SessionManager(object):
         queue.prepare(prepare_thread)
 
         prev = None
-        for task in tasks:
+        for step_id, task in enumerate(tasks):
 
             session_id = uuid.uuid4().hex
             LOG.info("Enqueue new session %s" % session_id)
-            sess_thread = JobSession(self, user, session_id, task,
-                                     remote_user_map, env_in, env_out,
+            sess_thread = JobSession(self, user, session_id, task_id, step_id,
+                                     task, remote_user_map, env_in, env_out,
                                      timeout, prev,
                                      stop_event=global_job_event, **kwargs)
             timeout += sess_thread.timeout + 2
@@ -123,7 +123,8 @@ class SessionManager(object):
             self.sessions[session_id] = sess_thread
             prev = session_id
         if queue.tasks:
-            end_thread = EndThread(self, session_id, remote_user_map['org'],
+            end_thread = EndThread(self, session_id, task_id, user,
+                                   remote_user_map['org'],
                                    queue.tasks[-1].env_out,
                                    timeout)
             queue.callback(end_thread)
@@ -152,9 +153,9 @@ class SessionManager(object):
                             env_in = parent_thread[0].env_out
 
                 env_out = Queue()
-                sess_thread = JobSession(self, s.user, session_id, s.task,
-                                         s.remote_user_map, env_in,
-                                         env_out, s.timeout, s.parent,
+                sess_thread = JobSession(self, s.user, s.task_id, session_id,
+                                         s.step_id, s.task, s.remote_user_map,
+                                         env_in, env_out, s.timeout, s.parent,
                                          node_map=s.node_map,
                                          **s.kwargs)
                 sess_thread.restore = restore
@@ -163,7 +164,8 @@ class SessionManager(object):
             except Exception, ex:
                 LOG.exception(ex)
         if queue.tasks:
-            end_thread = EndThread(self, session_id, s.remote_user_map['org'],
+            end_thread = EndThread(self, session_id, s.task_id, s.user,
+                                   s.remote_user_map['org'],
                                    queue.tasks[-1].env_out,
                                    timeout)
             queue.callback(end_thread)
@@ -328,19 +330,29 @@ class PrepareThread(Thread):
 
 class EndThread(Thread):
 
-    def __init__(self, manager, session_id, org, event, timeout):
+    def __init__(self, manager, session_id, task_id, user, org, event,
+                 timeout):
         super(EndThread, self).__init__()
         self.session_id = str(session_id)
+        self.task_id = str(task_id)
         self.org = org
+        self.user = user
         self.event = event
         self.timeout = timeout
         self.job_done = manager.backend.publish_queue('logger')
+
+    def log(self, stdout=None, stderr=None):
+        message = SysMessage(session_id=self.task_id, ts=timestamp(),
+                             org=self.org, user=self.user,
+                             stdout=stdout, stderr=stderr)
+        self.job_done.send(message._)
 
     def run(self):
         try:
             self.event.get(True, self.timeout)
         except Empty:
             pass
+        self.log(stdout="Finished processing tasks")
         message = EndMessage(session_id=self.session_id, org=self.org)
         self.job_done.send(message._)
         self.job_done.close()

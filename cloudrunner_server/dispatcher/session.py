@@ -26,7 +26,8 @@ from cloudrunner_server.core.message import (M, Ready, StdOut, StdErr,
                                              FileExport, Finished, Events, Job,
                                              Term, JobTarget, SafeDictWrapper,
                                              InitialMessage, PipeMessage,
-                                             FinishedMessage, StatusCodes)
+                                             FinishedMessage, StatusCodes,
+                                             SysMessage)
 from cloudrunner.util.string import stringify
 from cloudrunner.util.string import stringify1
 
@@ -41,12 +42,14 @@ class JobSession(Thread):
     communication with nodes and for processing and agregating results
     """
 
-    def __init__(self, manager, user, session_id, task, remote_user_map,
-                 env_in, env_out, timeout, parent, stop_event=None,
-                 **kwargs):
+    def __init__(self, manager, user, session_id, task_id, step_id, task,
+                 remote_user_map, env_in, env_out, timeout, parent,
+                 stop_event=None, **kwargs):
         super(JobSession, self).__init__()
         self.session_id = str(session_id)
         self.user = user
+        self.step_id = step_id
+        self.task_id = task_id
         self.task = SafeDictWrapper(task)
         self.remote_user_map = remote_user_map
         self.stop_reason = 'term'
@@ -79,8 +82,10 @@ class JobSession(Thread):
     def serialize(self):
         ser = dict(task=self.task, session_id=self.session_id,
                    timeout=self.timeout, parent=self.parent,
-                   user=self.user, remote_user_map=self.remote_user_map,
+                   task_name=self.task_name, user=self.user,
+                   remote_user_map=self.remote_user_map,
                    node_map=self.node_map, start_at=self.start_at,
+                   step_id=self.step_id, disabled_nodes=self.disabled_nodes,
                    kwargs=self.kwargs)
         return ser
 
@@ -100,7 +105,14 @@ class JobSession(Thread):
         try:
             env, self.file_exports = self.env_in.get(True, self.global_timeout)
         except Empty:
-            LOG.warn("Timeout waiting for previous task to finish")
+            _msg = "Timeout waiting for previous task to finish"
+            message = SysMessage(session_id=self.task_id,
+                                 ts=timestamp(),
+                                 org=self.user_org[1],
+                                 user=self.user_org[0],
+                                 stdout=_msg)
+            self._reply(message)
+            LOG.warn(_msg)
             return
 
         if self.session_event.is_set():
@@ -349,7 +361,15 @@ class JobSession(Thread):
                             break
 
                     if time.time() > total_wait:
-                        LOG.warn('Timeout waiting for response from nodes')
+                        _msg = 'Timeout waiting for response from nodes'
+                        LOG.warn(_msg)
+                        message = SysMessage(session_id=self.task_id,
+                                             ts=timestamp(),
+                                             org=self.user_org[1],
+                                             user=self.user_org[0],
+                                             stdout=_msg)
+                        self._reply(message)
+
                         for node in node_map.values():
                             if node['status'] != StatusCodes.FINISHED:
                                 node['data']['stderr'] = \
@@ -393,7 +413,14 @@ class JobSession(Thread):
                         continue
                     # Send task to attached node
                     node_map[job_rep.hdr.peer]['remote_user'] = remote_user
-                    LOG.info("Sending job to %s" % job_rep.hdr.peer)
+                    _msg = "Sending job to %s" % job_rep.hdr.peer
+                    LOG.info(_msg)
+                    message = SysMessage(session_id=self.task_id,
+                                         ts=timestamp(),
+                                         org=self.user_org[1],
+                                         user=self.user_org[0],
+                                         stdout=_msg)
+
                     job_msg = Job(self.session_id, remote_user, self.request)
                     job_msg.hdr.ident = job_rep.hdr.ident
                     job_msg.hdr.dest = self.session_id
