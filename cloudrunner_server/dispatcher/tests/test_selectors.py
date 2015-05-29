@@ -16,8 +16,6 @@ from contextlib import nested
 from mock import Mock, patch
 
 from cloudrunner.core import parser
-from cloudrunner_server.dispatcher import server, TaskQueue
-from cloudrunner_server.dispatcher.session import JobSession
 from cloudrunner_server.tests import base
 
 SESSION = "1234-5678-9012"
@@ -26,6 +24,7 @@ SESSION = "1234-5678-9012"
 class TestSelectors(base.BaseTestCase):
 
     def test_dispatcher(self):
+        from cloudrunner_server.dispatcher import server, TaskQueue
         disp = server.Dispatcher('run', config=base.CONFIG)
         disp.init_libs()
         self.assertIsNotNone(disp.transport_class)
@@ -128,8 +127,11 @@ whoami
 
         env = {'NEXT_NODE': ['host2', 'host9']}
         queue = Mock(return_value=Mock(get=lambda *args: [env, None]))
+        task_id = 101
+        step_id = 0
+        from cloudrunner_server.dispatcher.session import JobSession
         session = JobSession(
-            ctx, 'user', SESSION,
+            ctx, 'user', SESSION, task_id, step_id,
             {'target': '*', 'body': "\ntest_1\nexport NEXT_NODE='host2'\n\n"},
             remote_user_map, queue(), queue(), None, None)
         session._reply = Mock()

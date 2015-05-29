@@ -42,9 +42,9 @@ ORGS = {1: 'MyOrg', 2: 'MyOrg2'}
 class BaseRESTTestCase(BaseTestCase):
 
     @classmethod
-    def setUpClass(self):
+    def setUpClass(cls):
         BaseRESTTestCase.modules.update(modules)
-        super(BaseRESTTestCase, self).setUpClass()
+        super(BaseRESTTestCase, cls).setUpClass()
 
     def setUp(self):
         super(BaseRESTTestCase, self).setUp()

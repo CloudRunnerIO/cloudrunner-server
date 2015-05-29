@@ -104,7 +104,7 @@ class JobSession(Thread):
 
     def _execute(self):
         message = InitialMessage(session_id=self.session_id,
-                                 ts=timestamp(),
+                                 ts=self._create_ts(),
                                  org=self.user_org[1],
                                  user=self.user_org[0])
         self._reply(message)
@@ -114,7 +114,7 @@ class JobSession(Thread):
         except Empty:
             _msg = "Timeout waiting for previous task to finish"
             message = SysMessage(session_id=self.task_id,
-                                 ts=timestamp(),
+                                 ts=self._create_ts(),
                                  org=self.user_org[1],
                                  user=self.user_org[0],
                                  stdout=_msg)
@@ -373,7 +373,7 @@ class JobSession(Thread):
                         _msg = 'Timeout waiting for response from nodes'
                         LOG.warn(_msg)
                         message = SysMessage(session_id=self.task_id,
-                                             ts=timestamp(),
+                                             ts=self._create_ts(),
                                              org=self.user_org[1],
                                              user=self.user_org[0],
                                              stdout=_msg)
@@ -425,7 +425,7 @@ class JobSession(Thread):
                     _msg = "Sending job to %s" % job_rep.hdr.peer
                     LOG.info(_msg)
                     message = SysMessage(session_id=self.task_id,
-                                         ts=timestamp(),
+                                         ts=self._create_ts(),
                                          org=self.user_org[1],
                                          user=self.user_org[0],
                                          stdout=_msg)

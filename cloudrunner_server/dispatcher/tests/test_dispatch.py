@@ -24,8 +24,6 @@ class TestDispatch(base.BaseTestCase):
 
     def test_session(self):
 
-        from cloudrunner_server.dispatcher.session import JobSession
-
         class Ctx(object):
 
             def __init__(self):
@@ -65,9 +63,11 @@ class TestDispatch(base.BaseTestCase):
 
         env = {'NEXT_NODE': ['host2', 'host9']}
         queue = Mock(return_value=Mock(get=lambda *args: [env, None]))
-
+        task_id = 101
+        step_id = 0
+        from cloudrunner_server.dispatcher.session import JobSession
         session = JobSession(
-            ctx, 'user', SESSION,
+            ctx, 'user', SESSION, task_id, step_id,
             {'target': '*', 'body': "\ntest_1\nexport NEXT_NODE='host2'\n\n"},
             remote_user_map, queue(), queue(), None, None)
 
@@ -94,32 +94,32 @@ class TestDispatch(base.BaseTestCase):
             session.run()
 
             expected = [
-                {'hdr': {}, 'ts': 123456789.101,
-                 'session_id': '1234-5678-9012', 'kw':
-                 ['org', 'user', 'session_id', 'ts'],
-                 'user': 'user', 'org': 'DEFAULT'},
-                {'node': 'NODE1',
-                 'hdr': {},
-                 'kw': ['node', 'stdout', 'run_as', 'ts',
-                        'session_id', 'user', 'org'],
-                 'stdout': '["STDOUT", "BLA"]',
-                 'run_as': 'admin',
-                 'ts': 123456789.101,
-                 'session_id': 'JOB_ID',
-                 'user': 'user', 'org': 'DEFAULT'},
+                {'hdr': {}, 'ts': 123456789.101, 'session_id': '1234-5678-9012',  # noqa
+                'kw': ['org', 'user', 'session_id', 'ts'], 'user': 'user', 'org': 'DEFAULT'},  # noqa
+                {'hdr': {}, 'stdout': '-- Starting task #1',
+                    'ts': 123456789.101, 'session_id': 101,
+                    'kw': ['org', 'stdout', 'user', 'session_id', 'ts'], 'user': 'user', 'org': 'DEFAULT'},  # noqa
+                {'node': 'NODE1', 'hdr': {}, 'stdout': '["STDOUT", "BLA"]', 'run_as': 'admin',  # noqa
+                    'ts': 123456789.101, 'session_id': 'JOB_ID',
+                    'kw': ['node', 'stdout', 'run_as', 'ts', 'session_id', 'user', 'org'], 'user': 'user', 'org': 'DEFAULT'},  # noqa
                 {'hdr': {}, 'ts': 123456789.101, 'session_id': 'JOB_ID',
-                 'kw': ['ts', 'session_id', 'user', 'env',
-                        'org', 'result'],
-                 'user': 'user', 'env': {'NEXT_NODE': ['host2', 'host9']},
-                 'org': 'DEFAULT', 'result': {
-                     'NODE1': {'remote_user': 'root', 'ret_code': 1},
-                     'NODE6': {'remote_user': 'root', 'ret_code': 1}}}]
+                    'kw': ['ts', 'session_id', 'user', 'env', 'org', 'result'],
+                    'user': 'user', 'env': {'NEXT_NODE': ['host2', 'host9']},
+                    'org': 'DEFAULT', 'result': {
+                    'NODE1': {'remote_user': 'root', 'ret_code': 1},
+                    'NODE6': {'remote_user': 'root', 'ret_code': 1}}
+                }
+            ]
             self.assertEqual(
                 ctx.register_session.call_args_list, [call("1234-5678-9012")])
 
+            session._reply.call_args_list[1][0][0].stdout = \
+                '--' + session._reply.call_args_list[1][0][0].stdout[26:]
             self.assertEqual(
                 vars(session._reply.call_args_list[0][0][0]), expected[0])
             self.assertEqual(
                 vars(session._reply.call_args_list[1][0][0]), expected[1])
             self.assertEqual(
                 vars(session._reply.call_args_list[2][0][0]), expected[2])
+            self.assertEqual(
+                vars(session._reply.call_args_list[3][0][0]), expected[3])

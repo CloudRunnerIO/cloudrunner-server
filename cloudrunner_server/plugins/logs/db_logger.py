@@ -120,7 +120,6 @@ class DbLogger(LoggerPluginBase):
                 # Empty
                 return
             with self.cache.writer(msg.org, msg.session_id) as cache:
-                print "SYS MESSAGE:", msg.session_id, msg.ts, log, msg.user, io
                 cache.store_log('--', msg.ts, log, msg.user, io, ttl=None)
             self.r.publish('task:update', msg.session_id)
 
