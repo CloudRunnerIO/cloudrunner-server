@@ -194,20 +194,6 @@ class TriggerManager(Daemon):
                 deployment.env.update(env)
                 env = deployment.env
 
-            # parent = None
-            # parent_id = None
-            # if parent_uuid:
-            #     parent = self.db.query(Task).filter(
-            #         Task.uuid == parent_uuid).options(joinedload(
-            #             Task.group)).first()
-            # if parent:
-            #     parent_id = parent.id
-            #     group = parent.group
-            # else:
-            #     group = TaskGroup()
-            #     group.batch_id = batch_id
-            #     self.db.add(group)
-
             group = TaskGroup(deployment=deployment.object)
             self.db.add(group)
 
@@ -259,7 +245,7 @@ class TriggerManager(Daemon):
                 return
 
             msg = Master(ctx.user.name).command(
-                'dispatch', deployment=deployment.object.id,
+                'dispatch', task_id=group.id,
                 tasks=remote_tasks, roles=self._roles(ctx),
                 disabled_nodes=self.disabled_nodes(ctx), includes=[],
                 attachments=[], env=env)
@@ -346,7 +332,7 @@ class TriggerManager(Daemon):
 
             msg = Master(ctx.user.name).command(
                 'dispatch', tasks=remote_tasks,
-                deployment=deployment.object.id, roles=self._roles(ctx),
+                task_id=task.group.id, roles=self._roles(ctx),
                 disabled_nodes=self.disabled_nodes(ctx), includes=[],
                 attachments=[], env=env)
             if not isinstance(msg, Queued):
@@ -374,81 +360,6 @@ class TriggerManager(Daemon):
         nodes = [node.name for node in ctx.db.query(Node).filter(
             Node.enabled != True).all()]  # noqa
         return nodes
-
-    def run(self, **kwargs):
-        # DEFUNCT
-        self._prepare_db()
-        LOG.info('Listening for events')
-
-        pubsub = self.redis.pubsub()
-
-        pubsub.psubscribe('task:*')
-
-        while True:
-            try:
-                for item in pubsub.listen():
-                    if not item['pattern']:
-                        continue
-                    self.db.expire_all()
-                    target, action = item['channel'].split(":", 1)
-                    if target == 'task':
-                        if action == "update":
-                            LOG.info("Task %s running" % item['data'])
-                        elif action == "end":
-                            LOG.info("Task %s finished" % item['data'])
-                            job_data = json.loads(item['data'])
-                            # LOG.info(job_data)
-                            kwargs['env'] = job_data.get('env', {})
-                            task = self.db.query(Task).join(Run).filter(
-                                Run.uuid == job_data['id']).first()
-                            if (not task or not task.group.batch or
-                                    task.status != LOG_STATUS.Finished):
-                                    # Intermediate step - skip
-                                continue
-                            src_script_step = [
-                                s for s in task.group.batch.scripts
-                                if s.script == task.script_content.script]
-                            if len(src_script_step) != 1:
-                                s = task.script_content.script
-                                LOG.warn("Incorrect script id - %s steps "
-                                         "matched for sctipt %s" % (
-                                             len(src_script_step),
-                                             s.full_path()))
-                                continue
-                            src_script_step = src_script_step[0]
-                            conditions = [c for
-                                          c in task.group.batch.conditions
-                                          if c.source == src_script_step]
-                            passed = [c for c in conditions
-                                      if c.evaluate(job_data)]
-                            seen = []
-                            for p in passed:
-                                _scr = p.destination.script
-                                script_name = _scr.full_path()
-                                if p.destination.version:
-                                    script_name = "%s@%s" % (
-                                        script_name, p.destination.version)
-                                if p.destination.id in seen:
-                                    continue
-                                seen.append(p.destination.id)
-                                self.db.begin()
-                                self.db.commit()
-                                ctx = self.get_user_ctx(task.owner.id)
-                                job_uuid = self.execute(
-                                    user_id=task.owner.id,
-                                    content=_scr.contents(
-                                        ctx, rev=p.destination.version),
-                                    parent_uuid=task.uuid,
-                                    **kwargs)
-                                LOG.info("Executed %s/%s" % (
-                                    job_uuid, script_name))
-                    else:
-                        LOG.warn("Unrecognized pattern: %s" % item['pattern'])
-            except Exception, ex:
-                LOG.exception(ex)
-            except KeyboardInterrupt:
-                break
-        LOG.info('Exited main thread')
 
 
 def include_substitute(ctx, path):

@@ -203,14 +203,14 @@ class Dispatcher(Daemon):
         else:
             return [False, "Session not found"]
 
-    def dispatch(self, user, deployment_id, tasks, remote_user_map, env=None,
+    def dispatch(self, user, task_id, tasks, remote_user_map, env=None,
                  disabled_nodes=None):
         """
         Dispatch script to targeted nodes
         """
 
         queue = self.manager.prepare_session(
-            self.user_id, deployment_id, tasks, remote_user_map, env=env,
+            self.user_id, task_id, tasks, remote_user_map, env=env,
             disabled_nodes=disabled_nodes)
         return queue
 
@@ -250,7 +250,7 @@ class Dispatcher(Daemon):
                     disabled_nodes = msg.disabled_nodes or []
                     LOG.info('user: %s/%s' % (msg.user,
                                               remote_user_map['org']))
-                    response = self.dispatch(msg.user, msg.deployment,
+                    response = self.dispatch(msg.user, msg.task_id,
                                              msg.tasks, msg.roles,
                                              env=getattr(msg, 'env', {}),
                                              disabled_nodes=disabled_nodes)

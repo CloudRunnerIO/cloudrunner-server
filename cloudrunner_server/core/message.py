@@ -44,20 +44,20 @@ class PipeMessage(M):
     type = "PARTIAL"
 
 
+class SysMessage(M):
+    status = StatusCodes.PIPEOUT
+    fields = ["type", "session_id", "ts", "org", "user",
+              "stdout", "stderr"]
+
+    type = "SYSMESSAGE"
+
+
 class FinishedMessage(M):
     status = StatusCodes.FINISHED
     fields = ["type", "session_id", "ts",
               "user", "org", "result", "env"]
 
     type = "FINISHED"
-
-
-class ErrorMessage(M):
-    status = StatusCodes.ERROR
-    fields = ["type", "session_id", "ts",
-              "user", "org", "error"]
-
-    type = "ERROR"
 
 
 class EndMessage(M):

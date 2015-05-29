@@ -109,6 +109,21 @@ class DbLogger(LoggerPluginBase):
     def log(self, msg):
         LOG.debug(msg)
 
+        if msg.control == "SYSMESSAGE":
+            if msg.stdout:
+                log = msg.stdout
+                io = 'O'
+            elif msg.stderr:
+                log = msg.stderr
+                io = 'E'
+            else:
+                # Empty
+                return
+            with self.cache.writer(msg.org, msg.session_id) as cache:
+                print "SYS MESSAGE:", msg.session_id, msg.ts, log, msg.user, io
+                cache.store_log('--', msg.ts, log, msg.user, io, ttl=None)
+            self.r.publish('task:update', msg.session_id)
+
         if msg.control == "PIPEMESSAGE":
             if msg.stdout:
                 log = msg.stdout

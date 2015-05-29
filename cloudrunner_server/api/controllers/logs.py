@@ -122,12 +122,7 @@ class Logs(HookController):
             ser = serialize(t)
             task_map[t.id] = ser
             if not t.parent_id:
-                if t.group.batch:
-                    ser['batch'] = t.group.batch.serialize(
-                        skip=["source_id", "created_at", "id", "enabled"],
-                        rel=[('source', 'name', lambda s: s.full_path()
-                              if s else 'N/A')])
-                elif t.group.deployment:
+                if t.group.deployment:
                     ser['deployment'] = t.group.deployment.serialize(
                         skip=["id", "content", "owner_id"])
                 else:
@@ -323,13 +318,9 @@ class Logs(HookController):
                 log_data = logs.get(uuid, [])
                 if not log_data:
                     continue
-                run = filter(lambda r: r.uuid == uuid, runs)[0]
-
-                include = True
-                if pattern:
-                    include = bool(any([data for data in log_data.values()
-                                        if data['lines']]))
-                if include:
+                _runs = filter(lambda r: r.uuid == uuid, runs)
+                if _runs:
+                    run = _runs[0]
                     outputs.append(dict(
                         created_at=run.task.created_at,
                         status='running' if run.exit_code == -99
@@ -338,6 +329,11 @@ class Logs(HookController):
                         uuid=uuid,
                         task_id=run.task.uuid,
                         screen=log_data))
+                else:
+                    outputs.append(dict(
+                        etag=int(score),
+                        task_id=uuid,
+                        screen=log_data))
 
         return O.outputs(_list=outputs)
 
@@ -345,7 +341,8 @@ class Logs(HookController):
 def map_nodes(runs):
     _runs = []
     for r in runs:
-        _runs.extend([dict(name=n.name, exit=n.exit_code) for n in r.nodes])
+        _runs.extend([dict(name=n.name, exit=n.exit_code)
+                      for n in r.nodes])
     return _runs
 
 

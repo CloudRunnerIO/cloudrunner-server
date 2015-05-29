@@ -25,9 +25,9 @@ from sqlalchemy.orm import scoped_session, sessionmaker
 
 from cloudrunner import LIB_DIR
 from cloudrunner_server.api.model import (CloudProfile, NodeGroup, User,
-                                          Resource, Deployment, metadata)
-from cloudrunner_server.core.message import (SafeDictWrapper, ErrorMessage,
-                                             EndMessage)
+                                          TaskGroup, Resource, metadata)
+from cloudrunner_server.core.message import (SafeDictWrapper, InitialMessage,
+                                             EndMessage, SysMessage)
 from cloudrunner_server.dispatcher import TaskQueue
 from cloudrunner_server.dispatcher.session import JobSession
 from cloudrunner_server.plugins.clouds.base import BaseCloudProvider
@@ -88,7 +88,7 @@ class SessionManager(object):
 
         return targets + expanded_nodes
 
-    def prepare_session(self, user, deployment_id, tasks,
+    def prepare_session(self, user, task_id, tasks,
                         remote_user_map, **kwargs):
         queue = TaskQueue()
         queue.owner = user
@@ -98,11 +98,10 @@ class SessionManager(object):
         # env_in.put()
         env_out = Queue()
         global_job_event = Event()
-        job_id = uuid.uuid4().hex
         for task in tasks:
             task['targets'] = self._expand_target(task['targets'])
 
-        prepare_thread = PrepareThread(self, job_id, user, deployment_id,
+        prepare_thread = PrepareThread(self, task_id, user, task_id,
                                        tasks, remote_user_map['org'],
                                        env_in, start_args,
                                        global_job_event)
@@ -210,25 +209,37 @@ class SessionManager(object):
 
 class PrepareThread(Thread):
 
-    def __init__(self, manager, session_id, user, deployment_id, tasks,
+    def __init__(self, manager, session_id, user, task_id, tasks,
                  org, out_queue, start_args, job_event):
         super(PrepareThread, self).__init__()
         self.session_id = str(session_id)
         self.user = user
-        self.deployment_id = deployment_id
+        self.task_id = task_id
         self.tasks = tasks
         self.org = org
         self.out_queue = out_queue
         self.start_args = start_args
         self.manager = manager
         self.job_event = job_event
+        self.job_done = self.manager.backend.publish_queue('logger')
+
+    def log(self, stdout=None, stderr=None):
+        message = SysMessage(session_id=self.session_id, ts=timestamp(),
+                             org=self.org, user=self.user,
+                             stdout=stdout, stderr=stderr)
+        self.job_done.send(message._)
 
     def run(self):
         waiter = Event()
         targets = []
-        self.job_done = self.manager.backend.publish_queue('logger')
         self.node_connected = self.manager.backend.subscribe_fanout(
             'admin_fwd', sub_patterns=[self.org])
+
+        message = InitialMessage(session_id=self.session_id,
+                                 ts=timestamp(),
+                                 org=self.org,
+                                 user=self.user)
+        self.job_done.send(message._)
 
         wait_for_machines = []
         for task in self.tasks:
@@ -244,21 +255,31 @@ class PrepareThread(Thread):
                         User.username == self.user).first()
                     profile = CloudProfile.my(self.manager).filter(
                         CloudProfile.name == target['provider']).first()
+
                     if not profile:
-                        raise ValueError("Cloud profile: '%s' not found!" %
-                                         target['provider'])
+                        msg = ("Cloud profile: '%s' not found!" %
+                               target['provider'])
+                        self.log(stderr=msg)
+                        raise ValueError(msg)
                     if profile.shared:
                         profile = profile.shared
-                    deployment = Deployment.my(self.manager).filter(
-                        Deployment.id == self.deployment_id).first()
+                    task_group = self.manager.db.query(TaskGroup).filter(
+                        TaskGroup.id == self.task_id).first()
+                    if not task_group:
+                        msg = ("Invalid task group: %s" %
+                               self.task_id)
+                        self.log(stderr=msg)
+                        raise ValueError(msg)
+
+                    deployment = task_group.deployment
                     if not deployment:
-                        raise ValueError("Deployment: '%s' not found!" %
-                                         self.deployment_id)
+                        return
                     provider = BaseCloudProvider.find(profile.type)
                     if not provider:
-                        raise ValueError(
-                            "Cloud profile type '%s' not supported!" %
-                            profile.type)
+                        msg = ("Cloud profile type '%s' not supported!" %
+                               profile.type)
+                        self.log(stderr=msg)
+                        raise ValueError(msg)
                     status, machine_ids, meta = provider(
                         profile).create_machine(server_name, **target)
                     for m_id in machine_ids:
@@ -280,27 +301,25 @@ class PrepareThread(Thread):
                 while not waiter.is_set():
                     ret = self.node_connected.recv(timeout=1)
                     if ret:
-                        LOG.warn("Node %s has just appeared online" % ret[0])
+                        msg = "Node %s has just appeared online" % ret[0]
+                        self.log(stdout=msg)
+                        LOG.warn(msg)
                         if ret[1] in wait_for_machines:
                             wait_for_machines.remove(ret[1])
                         if not any(wait_for_machines):
                             waiter.set()
                     else:
                         if time.time() > max_timeout:
-                            LOG.error("Timeout waiting to create nodes")
+                            msg = ("Timeout waiting to create nodes")
+                            self.log(stderr=msg)
+                            LOG.error(msg)
                             waiter.set()
                             # Set global event to prevent task execution
                             self.job_event.set()
 
             except Exception, ex:
                 LOG.exception(ex)
-                message = ErrorMessage(ts=timestamp(),
-                                       session_id=self.session_id,
-                                       user=self.user,
-                                       org=self.org,
-                                       error=ex.message)
-
-            self.job_done.send(message._)
+                self.log(stderr=ex.message)
 
         self.out_queue.put(self.start_args)
         self.node_connected.close()

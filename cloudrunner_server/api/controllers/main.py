@@ -17,7 +17,6 @@ from pecan import expose, request
 from pecan.secure import secure
 
 from .auth import Auth
-# from .batches import Batches
 from .clouds import Clouds
 from .billing import Billing
 from .deployments import Deployments
@@ -84,7 +83,6 @@ class RestApi(object):
     deployments = secure(Deployments(), 'authorize')
     dispatch = secure(Dispatch(), 'authorize')
     workflows = secure(Workflows(), 'authorize')
-    # batches = secure(Batches(), 'authorize')
     library = secure(Library(), 'authorize')
     scheduler = secure(Jobs(), 'authorize')
     logs = secure(Logs(), 'authorize')

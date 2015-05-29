@@ -32,10 +32,8 @@ class TaskGroup(TableBase):
     __tablename__ = 'taskgroups'
 
     id = Column(Integer, primary_key=True)
-    batch_id = Column(Integer, ForeignKey('batches.id'))
     deployment_id = Column(Integer, ForeignKey('deployments.id'))
 
-    batch = relationship('Batch')
     deployment = relationship(Deployment,
                               backref=backref('tasks', cascade="save-update"))
 

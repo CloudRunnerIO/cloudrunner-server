@@ -18,7 +18,6 @@ from sqlalchemy.orm import scoped_session, sessionmaker
 from sqlalchemy.sql.expression import null
 
 from .base import metadata
-from .batches import *  # noqa
 from .deployments import *  # noqa
 from .nodes import *  # noqa
 from .users import *  # noqa
