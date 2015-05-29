@@ -12,6 +12,7 @@
 #  * without the express permission of CloudRunner.io
 #  *******************************************************/
 
+from datetime import datetime
 import logging
 import re
 from Queue import Empty
@@ -25,9 +26,9 @@ from cloudrunner.core.exceptions import (ConnectionError, InterruptExecution,
 from cloudrunner_server.core.message import (M, Ready, StdOut, StdErr,
                                              FileExport, Finished, Events, Job,
                                              Term, JobTarget, SafeDictWrapper,
-                                             InitialMessage, PipeMessage,
-                                             FinishedMessage, StatusCodes,
-                                             SysMessage)
+                                             PipeMessage, FinishedMessage,
+                                             InitialMessage, SysMessage,
+                                             StatusCodes)
 from cloudrunner.util.string import stringify
 from cloudrunner.util.string import stringify1
 
@@ -102,6 +103,12 @@ class JobSession(Thread):
             self.env_out.put((self.env, None))
 
     def _execute(self):
+        message = InitialMessage(session_id=self.session_id,
+                                 ts=timestamp(),
+                                 org=self.user_org[1],
+                                 user=self.user_org[0])
+        self._reply(message)
+
         try:
             env, self.file_exports = self.env_in.get(True, self.global_timeout)
         except Empty:
@@ -144,10 +151,12 @@ class JobSession(Thread):
             self.attachments.append(self.file_exports)
 
         ts = self._create_ts()
-        message = InitialMessage(session_id=self.session_id,
-                                 ts=ts,
-                                 org=self.user_org[1],
-                                 user=self.user_org[0])
+        message = SysMessage(session_id=self.task_id,
+                             ts=ts,
+                             org=self.user_org[1],
+                             user=self.user_org[0],
+                             stdout="[%s] Starting task #%s" %
+                             (datetime.now().strftime('%c'), self.step_id + 1))
         self._reply(message)
 
         # Clean up
@@ -488,7 +497,6 @@ class JobSession(Thread):
                             node['data'].setdefault('stderr', '') + \
                             '\nJob execution stopped: [%s]' % self.stop_reason
 
-                        node['stdout'] = str(node)
                         ts = self._create_ts()
                         yield ('PIPE', self.session_id, ts, '', name,
                                node['stdout'], node['stderr'])

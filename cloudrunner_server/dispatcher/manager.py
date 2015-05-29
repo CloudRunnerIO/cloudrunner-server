@@ -132,6 +132,7 @@ class SessionManager(object):
         return queue
 
     def resume_sessions(self, *sessions):
+        return
         queue = TaskQueue()
         timeout = 0
         sessions = sorted(sessions, key=lambda s: bool(s.get('parent')))
