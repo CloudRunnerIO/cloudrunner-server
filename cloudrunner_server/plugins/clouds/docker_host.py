@@ -115,13 +115,17 @@ class Docker(BaseCloudProvider):
     def delete_machine(self, server_ids, **kwargs):
         ret = self.OK
         for server_id in server_ids:
-            delete_url = "https://%s/containers/%s?force=true" % (
-                self.server_address, server_id)
-            res = requests.delete(delete_url, cert=(self._cert_path,
-                                                    self._key_path),
-                                  headers=HEADERS,
-                                  verify=False)
-            if res.status_code >= 300:
-                LOG.error("FAILURE %s(%s)" % (res.status_code, res.content))
-                ret = self.FAIL
+            try:
+                delete_url = "https://%s/containers/%s?force=true" % (
+                    self.server_address, server_id)
+                res = requests.delete(delete_url, cert=(self._cert_path,
+                                                        self._key_path),
+                                      headers=HEADERS,
+                                      verify=False)
+                if res.status_code >= 300:
+                    LOG.error("FAILURE %s(%s)" %
+                              (res.status_code, res.content))
+                    ret = self.FAIL
+            except Exception, ex:
+                LOG.error(ex)
         return ret
