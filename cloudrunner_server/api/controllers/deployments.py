@@ -136,7 +136,7 @@ class Deployments(HookController):
 
         task_ids = _execute(depl, **kwargs)
 
-        return O.success(msg="Rebuilt", task_ids=task_ids)
+        return O.success(status="ok", task_ids=task_ids)
 
     @deployments.when(method='DELETE', template='json')
     @deployments.wrap_delete()
@@ -165,7 +165,7 @@ class Deployments(HookController):
         depl.status = "Starting"
         task_ids = _execute(depl, **kwargs)
 
-        return O.success(msg="Started", task_ids=task_ids)
+        return O.success(status="ok", task_ids=task_ids)
 
     @expose('json', generic=True)
     @wrap_command(Deployment, method='start')
@@ -182,7 +182,7 @@ class Deployments(HookController):
         depl.status = "Starting"
         task_ids = _execute(depl, **kwargs)
 
-        return O.success(msg="Started", task_ids=task_ids)
+        return O.success(status="ok", task_ids=task_ids)
 
     @expose('json', generic=True)
     @wrap_command(Deployment, method='stop')
@@ -207,7 +207,6 @@ def _validate(content):
 def _execute(depl, **kwargs):
     dep = parser.DeploymentParser(conf, request)
     dep.parse(depl)
-    print "dep", dep.content
     if dep.steps and kwargs.get('env'):
         # Override ENV
 
@@ -228,8 +227,9 @@ def _execute(depl, **kwargs):
                            revision=temp_content,
                            db=request.db,
                            **kwargs)
-    task_ids.pop('group', None)
-    task_ids.pop('parent_uid', None)
+    if task_ids:
+        task_ids.pop('group', None)
+        task_ids.pop('parent_uid', None)
 
     return task_ids
 

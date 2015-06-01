@@ -69,9 +69,7 @@ class TestDeployments(base.BaseRESTTestCase):
 
         resp_json['success']['task_ids']['task_uid'] = '1'
         self.assertEqual(resp_json, {'success': {
-            'msg': 'Rebuilt',
-            'task_ids': {
-                   'task_uid': '1'}}})
+            'status': 'ok', 'task_ids': {'task_uid': '1'}}})
 
     @patch('zmq.Context', Mock(return_value=ctx_mock))
     def test_restart_deployment(self):
@@ -87,7 +85,7 @@ class TestDeployments(base.BaseRESTTestCase):
         resp_json['success']['task_ids']['task_uid'] = '1'
         self.assertEqual(resp_json,
                          {'success':
-                          {'msg': 'Started', 'task_ids': {'task_uid': '1'}}})
+                          {'status': 'ok', 'task_ids': {'task_uid': '1'}}})
 
     def test_stop_deployment(self):
         resp = self.app.post('/rest/deployments/stop/My running deployment',

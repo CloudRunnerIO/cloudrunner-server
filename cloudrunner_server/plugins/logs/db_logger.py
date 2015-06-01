@@ -82,7 +82,7 @@ class DbLogger(LoggerPluginBase):
             self.db.add(task)
             self.db.commit()
         except Exception, ex:
-            LOG.exception(ex)
+            LOG.error(ex)
             self.db.rollback()
 
     def _end(self, msg):
@@ -102,7 +102,7 @@ class DbLogger(LoggerPluginBase):
             self.db.add(task)
             self.db.commit()
         except Exception, ex:
-            LOG.exception(ex)
+            LOG.error(ex)
             self.db.rollback()
 
     @wrap_error

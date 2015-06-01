@@ -19,9 +19,11 @@ from pecan.hooks import HookController
 
 from cloudrunner_server.api.hooks.db_hook import DbHook
 from cloudrunner_server.api.util import (JsonOutput as O, flatten_params)
-from cloudrunner_server.api.model import (Script, Repository, Folder, ApiKey)
+from cloudrunner_server.api.model import (Script, Repository, ApiKey,
+                                          Deployment)
 from cloudrunner_server.triggers.manager import TriggerManager
 from cloudrunner_server.api.util import Wrap
+from cloudrunner_server.api.controllers.deployments import _execute
 
 LOG = logging.getLogger()
 
@@ -93,19 +95,12 @@ class Execute(HookController):
         else:
             return O.error(msg="Cannot send request")
 
-    batch = workflow
-
     @expose('json')
-    def script(self, *args, **kwargs):
+    def rebuild(self, name, *args, **kwargs):
         kwargs = kwargs or request.json
-        full_path = "/" + "/".join(args)
-        LOG.info("Received execute request [%s] from: %s" % (
-            full_path, request.client_addr))
+        LOG.info("Received rebuild job [%s] from: %s" % (
+            name, request.client_addr))
 
-        targets = kwargs.pop('targets', None)
-        if not targets:
-            return O.error(msg="The 'targets' parameter is mandatory "
-                           "for executing scripts.")
         if not getattr(request, "user", None):
             key = kwargs.pop('key', None)
             if not key:
@@ -114,59 +109,46 @@ class Execute(HookController):
             api_key = get_api_key(key)
             if not api_key:
                 return abort(401)
-            user_id = api_key.user_id
             request.user = cached_user(api_key.user)
-        else:
-            user_id = request.user.id
 
-        version = kwargs.pop("rev", None)
-        repo, _dir, scr_name, rev = Script.parse(full_path)
-
-        repo = request.db.query(Repository).filter(
-            Repository.name == repo).first()
-        if not repo:
-            return O.error(msg="Repository '%s' not found" % repo)
-
-        scr = request.db.query(Script).join(Folder).filter(
-            Script.name == scr_name, Folder.repository_id == repo.id,
-            Folder.full_name == _dir).first()
-        if not scr:
-            return O.error(msg="Script '%s' not found" % full_path)
-        rev = scr.contents(request, rev=version)
-        if not rev:
-            if version:
-                return O.error(msg="Version %s of script '%s' not found" %
-                               (version, full_path))
-            else:
-                return O.error(msg="Script contents for '%s' not found" %
-                               full_path)
-
-        scr_text = rev.content
-        if not scr_text:
-            return O.error(msg="Empty script body")
+        depl = request.db.query(Deployment).filter(
+            Deployment.name == name).first()
+        if not depl:
+            return O.error(msg="Deployment '%s' not found" % depl)
 
         request.db.commit()
-        task_id = MAN.execute(user_id=user_id,
-                              content=rev,
-                              targets=targets,
-                              db=request.db,
-                              **kwargs)
-        return O.success(msg="Dispatched", **task_id)
+        task_ids = _execute(depl, **kwargs)
+
+        return O.success(msg="Restarted", task_ids=task_ids)
 
     @expose('json')
-    def resume(self, uuid, step=None, **kwargs):
-        try:
-            step = 0
-            env = flatten_params(request.params)
-            task_id = MAN.resume(user_id=request.user.id,
-                                 task_uuid=uuid,
-                                 step=step,
-                                 env=env,
-                                 db=request.db,
-                                 **kwargs)
-            return O.success(msg="Dispatched", **task_id)
-        except:
-            return O.error(msg="Cannot resume task: %s" % uuid)
+    def start(self, name, *args, **kwargs):
+        kwargs = kwargs or request.json
+        LOG.info("Received rebuild job [%s] from: %s" % (
+            name, request.client_addr))
+
+        if not getattr(request, "user", None):
+            key = kwargs.pop('key', None)
+            if not key:
+                return O.error(msg="Missing auth key")
+
+            api_key = get_api_key(key)
+            if not api_key:
+                return abort(401)
+            request.user = cached_user(api_key.user)
+
+        depl = request.db.query(Deployment).filter(
+            Deployment.name == name).first()
+        if not depl:
+            return O.error(msg="Deployment '%s' not found" % depl)
+        if depl.status not in ['Pending', 'Stopped']:
+            return O.error(msg="Deployment must be Pending or Stopped "
+                           "to be Started.")
+
+        request.db.commit()
+        task_ids = _execute(depl, **kwargs)
+
+        return O.success(msg="Started", task_ids=task_ids)
 
 
 def get_api_key(key):
