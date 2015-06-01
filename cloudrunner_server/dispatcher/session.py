@@ -278,7 +278,6 @@ class JobSession(Thread):
             self._reply(message)
             self.env_out.put((env, self.file_exports))
 
-        self.session_event.set()
         # Wait for all other threads to finish consuming session data
         time.sleep(.5)
         self.job_done.close()

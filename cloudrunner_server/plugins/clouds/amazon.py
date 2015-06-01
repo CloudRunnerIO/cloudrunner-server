@@ -28,11 +28,11 @@ class AWS(BaseCloudProvider):
                        server=CR_SERVER,
                        security_groups=None,
                        key_name=None, **kwargs):
+        if image == 'custom':
+            image = kwargs['custom-image']
         LOG.info("Registering AWS machine [%s::%s] for [%s]" %
                  (name, image, CR_SERVER))
         try:
-            if image == 'custom':
-                image = kwargs['custom-image']
             self.conn = ec2.connect_to_region(
                 region,
                 aws_access_key_id=self.profile.username,
