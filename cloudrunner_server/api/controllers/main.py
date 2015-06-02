@@ -29,7 +29,6 @@ from .logs import Logs
 from .profile import Profile
 from .manage import Manage
 from .status import EntityStatus
-from .workflows import Workflows
 
 from cloudrunner_server.api import VERSION
 from cloudrunner_server.api.util import Wrap
@@ -82,7 +81,6 @@ class RestApi(object):
     my = secure(Profile(), 'authorize')
     deployments = secure(Deployments(), 'authorize')
     dispatch = secure(Dispatch(), 'authorize')
-    workflows = secure(Workflows(), 'authorize')
     library = secure(Library(), 'authorize')
     scheduler = secure(Jobs(), 'authorize')
     logs = secure(Logs(), 'authorize')

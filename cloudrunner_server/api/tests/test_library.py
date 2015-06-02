@@ -234,7 +234,7 @@ class TestLibrary(base.BaseRESTTestCase):
                         'allow_sudo': None,
                         'owner': 'testuser2',
                         'id': 4,
-                        'mime_type': 'text/workflow'
+                        'mime_type': 'text/script'
                     }
                 ]
             }}
@@ -301,8 +301,9 @@ class TestLibrary(base.BaseRESTTestCase):
             'name': 'test2',
             'created_at': '2014-01-20 00:00:00',
             'content': 'Version 4 Final',
+            'meta': {'timeout': 120, 'attachments': ['/test/test']},
             'version': '4',
-            'mime': 'text/workflow',
+            'mime': 'text/script',
             "editable": True,
             'allow_sudo': None,
             'owner': 'testuser',
@@ -326,6 +327,7 @@ class TestLibrary(base.BaseRESTTestCase):
             'content': 'Version 7',
             'version': '2',
             'mime': 'text/plain',
+            'meta': {},
             "editable": True,
             'allow_sudo': None,
             'owner': 'testuser',
@@ -336,9 +338,35 @@ class TestLibrary(base.BaseRESTTestCase):
 
         self.assertEqual(resp_json['script'], result['script'])
 
+        self.set_user(2)
+        resp = self.app.get(
+            '/rest/library/script/private/folder2/folder11/test2',
+            headers={'Cr-Token': 'PREDEFINED_TOKEN2', 'Cr-User': 'testuser2'})
+        self.assertEqual(resp.status_int, 200, resp.status_int)
+        resp_json = json.loads(resp.body)
+
+        result = {'script': {
+            'name': 'test2',
+            'created_at': '2014-01-30 00:00:00',
+            'content': "#! switch [*]\necho 'Done'",
+            'version': '1',
+            'mime': 'text/script',
+            'meta': {'attachments': ['/test/test'], 'timeout': 90},
+            "editable": True,
+            'allow_sudo': None,
+            'owner': 'testuser2',
+            'revisions': [{
+                'created_at': '2014-01-01 10:00:00',
+                'version': '1'}]
+        }
+        }
+
+        print resp_json
+        self.assertEqual(resp_json['script'], result['script'])
+
     def test_create_script(self):
         resp = self.app.post('/rest/library/script',
-                             "name=scr1&content=some content"
+                             "name=scr1&content=some content&mime=text/plain"
                              "&folder=cloudrunner/folder1/",
                              headers={
                                  'Cr-Token': 'PREDEFINED_TOKEN',
@@ -363,6 +391,7 @@ class TestLibrary(base.BaseRESTTestCase):
             "content": "some content",
             "owner": "testuser",
             "mime": "text/plain",
+            "meta": {},
             "name": "scr1",
             "editable": True,
             'version': '1',
@@ -388,7 +417,8 @@ class TestLibrary(base.BaseRESTTestCase):
     def test_update_script(self):
         resp = self.app.put('/rest/library/script',
                             "name=test1&content=some modified content"
-                            "&folder=cloudrunner/folder1/",
+                            "&folder=cloudrunner/folder1/&mime=text/script"
+                            "&meta={\"timeout\": 100}",
                             headers={
                                 'Cr-Token': 'PREDEFINED_TOKEN',
                                 'Cr-User': 'testuser'})
@@ -407,6 +437,46 @@ class TestLibrary(base.BaseRESTTestCase):
             'name': 'test1',
             'created_at': '2014-01-10 00:00:00',
             'content': 'some modified content',
+            'meta': {"timeout": 100},
+            'version': '3',
+            'mime': 'text/script',
+            'allow_sudo': None,
+            "editable": True,
+            'owner': 'testuser',
+            'revisions': [
+                {'version': '3'},
+                {'version': '2'},
+                {'version': '1'}]}
+        }
+        for rev in resp_json['script']['revisions']:
+            rev.pop('created_at')
+        self.maxDiff = None
+        self.assertEqual(resp_json['script'], result['script'])
+
+    def test_update_script2(self):
+        resp = self.app.put('/rest/library/script',
+                            "name=test1&content=some newly modified content"
+                            "&folder=cloudrunner/folder1/&mime=text/plain"
+                            "&meta={\"timeout\": 100}",
+                            headers={
+                                'Cr-Token': 'PREDEFINED_TOKEN',
+                                'Cr-User': 'testuser'})
+        self.assertEqual(resp.status_int, 200, resp.status_int)
+        resp_json = json.loads(resp.body)
+
+        self.assertEqual(resp_json, {"success": {"status": "ok"}},
+                         resp.body)
+
+        resp = self.app.get(
+            '/rest/library/script/cloudrunner/folder1/test1',
+            headers={'Cr-Token': 'PREDEFINED_TOKEN', 'Cr-User': 'testuser'})
+        self.assertEqual(resp.status_int, 200, resp.status_int)
+        resp_json = json.loads(resp.body)
+        result = {'script': {
+            'name': 'test1',
+            'created_at': '2014-01-10 00:00:00',
+            'content': 'some newly modified content',
+            'meta': {},
             'version': '3',
             'mime': 'text/plain',
             'allow_sudo': None,
@@ -419,6 +489,7 @@ class TestLibrary(base.BaseRESTTestCase):
         }
         for rev in resp_json['script']['revisions']:
             rev.pop('created_at')
+        self.maxDiff = None
         self.assertEqual(resp_json['script'], result['script'])
 
     def test_delete_script(self):
@@ -457,63 +528,3 @@ class TestLibrary(base.BaseRESTTestCase):
         self.assertEqual(
             resp_json, {"error": {"msg": "Script 'test1' not found"}},
             resp.body)
-
-    def test_show_workflow(self):
-        resp = self.app.get(
-            '/rest/workflows/workflow/cloudrunner/folder1/folder11/test2',
-            headers={'Cr-Token': 'PREDEFINED_TOKEN', 'Cr-User': 'testuser'})
-        self.assertEqual(resp.status_int, 200, resp.status_int)
-        resp_json = json.loads(resp.body)
-        result = {"workflow":
-                  {
-                      'editable': True,
-                      'rev': '4',
-                      'sections': [{'attachments': [],
-                                    'content': 'Version 4 Final',
-                                    'lang': 'bash',
-                                    'timeout': 0}],
-                      'revisions': [
-                          {
-                              'created_at': '2014-01-01 10:00:00',
-                              'version': '4'},
-                          {
-                              'created_at': '2014-01-01 08:00:00',
-                              'version': '3'},
-                          {
-                              'created_at': '2014-01-01 07:00:00',
-                              'version': '2'},
-                          {
-                              'created_at': '2014-01-01 06:00:00',
-                              'version': '1'}
-                      ]
-                  }}
-        self.assertEqual(
-            resp_json['workflow'], result['workflow'])
-
-    def test_show_workflow2(self):
-        self.set_user(2)
-        resp = self.app.get(
-            '/rest/workflows/workflow/private/folder2/folder11/test2',
-            headers={'Cr-Token': 'PREDEFINED_TOKEN2', 'Cr-User': 'testuser2'})
-        self.assertEqual(resp.status_int, 200, resp.status_int)
-        resp_json = json.loads(resp.body)
-
-        result = {"workflow": {
-            "sections": [
-                {
-                    "lang": "bash",
-                    "content": "#! switch [*]\necho 'Done'",
-                    "timeout": 0,
-                    "attachments": []
-                }
-            ],
-            "rev": "1",
-            "editable": True,
-            "revisions": [
-                {
-                    "created_at": "2014-01-01 10:00:00",
-                    "version": "1"
-                }
-            ]
-        }}
-        self.assertEqual(resp_json['workflow'], result['workflow'])

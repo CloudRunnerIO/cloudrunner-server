@@ -12,8 +12,10 @@
 #  * without the express permission of CloudRunner.io
 #  *******************************************************/
 
+import json
 from copy import copy
 from datetime import datetime
+from functools import partial
 import logging
 from os import path
 import pytz
@@ -22,7 +24,7 @@ from pecan import expose, request, response, redirect
 from pecan.hooks import HookController
 from sqlalchemy.orm import make_transient, exc
 
-from cloudrunner.core.parser import parse_sections
+from cloudrunner.core.parser import (is_script, substitute_includes)
 from cloudrunner_server.api.decorators import wrap_command
 from cloudrunner_server.api.hooks.error_hook import ErrorHook
 from cloudrunner_server.api.hooks.db_hook import DbHook
@@ -30,6 +32,7 @@ from cloudrunner_server.api.hooks.perm_hook import PermHook
 from cloudrunner_server.api.util import JsonOutput as O
 from cloudrunner_server.api.model import (Repository, Script, Folder, Revision,
                                           RepositoryCreds, Org, NULL)
+from cloudrunner_server.triggers.manager import include_substitute
 from cloudrunner_server.plugins.repository.base import (PluginRepoBase,
                                                         NotModified,
                                                         NotAccessible,
@@ -350,8 +353,10 @@ class Library(HookController):
                                        version=rev, script=new_script,
                                        content=cont)
                         try:
-                            if parse_sections(cont):
-                                new_script.mime_type = 'text/workflow'
+                            if is_script(cont):
+                                new_script.mime_type = 'text/script'
+                            else:
+                                new_script.mime_type = 'text/plain'
                         except:
                             pass
                         new_script.created_at = last_modified
@@ -410,7 +415,7 @@ class Library(HookController):
             return O.error(msg="Script not found")
 
         revisions = sorted([r.serialize(
-            skip=['id', 'script_id', 'draft', 'content'],
+            skip=['id', 'script_id', 'draft', 'content', 'meta'],
             rel=[("created_at", "created_at", lambda d: d)])
             for r in scr.history
             if not r.draft], key=lambda r: r["created_at"], reverse=True)
@@ -469,7 +474,7 @@ class Library(HookController):
                     response.cache_control.private = True
                     response.cache_control.max_age = 1
             revisions = sorted([r.serialize(
-                skip=['id', 'script_id', 'draft', 'content'],
+                skip=['id', 'script_id', 'draft', 'content', 'meta'],
                 rel=[("created_at", "created_at", lambda d: d)])
                 for r in scr.history
                 if not r.draft], key=lambda r: r["created_at"],
@@ -519,10 +524,25 @@ class Library(HookController):
         response.cache_control.private = True
         response.cache_control.max_age = 1
 
+        meta = {}
+        if scr.mime_type == 'text/script':
+            meta_data = rev.meta
+            try:
+                meta = json.loads(meta_data)
+            except:
+                pass
+            """
+            meta = dict(content=remove_shebangs(body.strip()),
+                           lang=lang,
+                           attachments=atts,
+                           timeout=timeout)
+            """
+
         return O.script(name=scr.name,
                         created_at=scr.created_at,
                         owner=scr.owner.username if scr.owner else repo.type,
                         content=rev.content,
+                        meta=meta,
                         version=rev.version,
                         allow_sudo=scr.allow_sudo,
                         mime=scr.mime_type,
@@ -536,10 +556,8 @@ class Library(HookController):
         if not Script.valid_name(name):
             return O.error(msg="Invalid script name")
         content = kwargs['content']
-        if parse_sections(content):
-            mime = 'text/workflow'
-        else:
-            mime = 'text/plain'
+        mime = kwargs.get('mime', 'text/plain')
+        meta = kwargs.get('meta')
         folder_name = kwargs['folder']
         repository, _, folder_path = folder_name.partition("/")
         folder_path = "/" + folder_path
@@ -557,7 +575,13 @@ class Library(HookController):
         request.db.add(scr)
         request.db.commit()
         request._model_id = scr.id
-        rev = Revision(content=content, script_id=scr.id)
+
+        if isinstance(meta, dict):
+            meta = json.dumps(meta)
+
+        rev = Revision(content=content, script_id=scr.id,
+                       meta=meta)
+
         request.db.add(rev)
 
     @script.when(method='PUT', template='json')
@@ -567,6 +591,13 @@ class Library(HookController):
         content = kwargs['content']
         folder_name = kwargs['folder']
         repository, _, folder_path = folder_name.partition("/")
+        mime = kwargs['mime']
+        meta = kwargs.get('meta') or {}
+        if not isinstance(meta, dict):
+            try:
+                meta = json.loads(meta)
+            except:
+                meta = {}
         folder_path = "/" + folder_path
         if not folder_path.endswith('/'):
             folder_path += "/"
@@ -582,16 +613,14 @@ class Library(HookController):
                 return O.error(msg="Invalid script name")
             scr.name = kwargs['new_name']
 
-        if parse_sections(content):
-            scr.mime_type = 'text/workflow'
-        else:
-            scr.mime_type = 'text/plain'
+        scr.mime_type = mime
 
         request.db.add(scr)
         request.db.commit()
 
         request._model_id = scr.id
-        rev = Revision(content=content, script_id=scr.id)
+        rev = Revision(content=content, script_id=scr.id,
+                       meta=json.dumps(meta))
         request.db.add(rev)
 
     @script.when(method='PATCH', template='json')
@@ -619,6 +648,17 @@ class Library(HookController):
         if not scr:
             return O.error(msg="Script '%s' not found" % name)
         request.db.delete(scr)
+
+    @expose('json', generic=True)
+    @wrap_command(Script)
+    def preview(self, *args, **kwargs):
+        if not args:
+            return O.error(msg="Path not provided")
+        content = kwargs['content']
+
+        content = expand_script(content)
+
+        return O.preview(content=content)
 
     @expose('json', generic=True)
     @wrap_command(Folder)
@@ -731,3 +771,10 @@ class Library(HookController):
 
 def created_at_eval(c):
     return c if isinstance(c, datetime) else None
+
+
+def expand_script(content):
+    subst = partial(include_substitute, request)
+    new_content = content.strip()
+    new_content = substitute_includes(new_content, callback=subst)
+    return new_content

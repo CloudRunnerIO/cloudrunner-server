@@ -12,6 +12,7 @@
 #  * without the express permission of CloudRunner.io
 #  *******************************************************/
 
+import json
 from datetime import datetime, timedelta
 from mock import MagicMock
 import os
@@ -257,7 +258,7 @@ class BaseRESTTestCase(BaseTestCase):
 
         wf2 = Script(name='test2', folder=folder11, owner=user,
                      created_at=datetime(2014, 1, 20, 0, 0, 0),
-                     mime_type="text/workflow",
+                     mime_type="text/script",
                      )
         Session.add(wf2)
 
@@ -268,7 +269,7 @@ class BaseRESTTestCase(BaseTestCase):
 
         wf4 = Script(name='test2', folder=folder21, owner=user2,
                      created_at=datetime(2014, 1, 30, 0, 0, 0),
-                     mime_type="text/workflow",
+                     mime_type="text/script",
                      )
         Session.add(wf4)
 
@@ -309,11 +310,15 @@ class BaseRESTTestCase(BaseTestCase):
         Session.commit()
 
         r2_4 = Revision(draft=False, content="Version 4 Final",
+                        meta=json.dumps(
+                            dict(timeout=120, attachments=['/test/test'])),
                         script=wf2, created_at=datetime(2014, 1, 1, 10, 0, 0))
         Session.add(r2_4)
         Session.commit()
 
         r22 = Revision(draft=False, content="#! switch [*]\necho 'Done'",
+                       meta=json.dumps(
+                           dict(timeout=90, attachments=['/test/test'])),
                        script=wf4, created_at=datetime(2014, 1, 1, 10, 0, 0))
         Session.add(r22)
         Session.commit()

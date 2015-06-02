@@ -201,6 +201,7 @@ class Revision(TableBase):
     version = Column(String(20))
     draft = Column(Boolean)
     content = Column(Text)
+    meta = Column(String(4000))
 
     script_id = Column(Integer, ForeignKey('scripts.id'))
 
