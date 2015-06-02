@@ -1,5 +1,5 @@
 boto
-cloudrunner>=1.3.5
+cloudrunner>=1.4.0
 pecan>=0.8
 pytz
 pyzmq
