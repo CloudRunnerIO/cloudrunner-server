@@ -67,6 +67,7 @@ class Step(object):
         self.targets = data.get('target')
         self.raw_content = data.get('content')
         self.path = None
+        self.body = None
         self.timeout = int(data.get('timeout', 0))
         self.env = json.loads(data.get('env', '{}'))
         self.args = None

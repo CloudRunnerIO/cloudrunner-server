@@ -140,7 +140,8 @@ class Deployments(HookController):
 
     @deployments.when(method='DELETE', template='json')
     @deployments.wrap_delete()
-    def delete(self, name, **kwargs):
+    def delete(self, *args, **kwargs):
+        name = "/".join(args)
         depl = Deployment.my(request).filter(Deployment.name == name).first()
         if not depl:
             return O.error(msg="Cannot find deployment '%s'" % name)
@@ -204,7 +205,7 @@ def _validate(content):
         step['content']  # validate data
 
 
-def _execute(depl, **kwargs):
+def _execute(depl, dont_save=False, **kwargs):
     dep = parser.DeploymentParser(conf, request)
     dep.parse(depl)
     if dep.steps and kwargs.get('env'):
@@ -216,6 +217,9 @@ def _execute(depl, **kwargs):
             env = json.loads(kwargs['env'])
         dep.steps[0].env.update(env)
 
+    if dont_save:
+        # Clear deployment reference
+        dep.object = None
     # clean-up resources
     _cleanup(depl)
     task_ids = []

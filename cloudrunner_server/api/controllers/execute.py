@@ -13,21 +13,22 @@
 #  *******************************************************/
 
 from datetime import datetime
+import json
 import logging
 from pecan import expose, request, abort
 from pecan.hooks import HookController
+import re
 
 from cloudrunner_server.api.hooks.db_hook import DbHook
 from cloudrunner_server.api.util import (JsonOutput as O, flatten_params)
-from cloudrunner_server.api.model import (Script, Repository, ApiKey,
-                                          Deployment)
+from cloudrunner_server.api.model import (ApiKey, Deployment, User)
 from cloudrunner_server.triggers.manager import TriggerManager
 from cloudrunner_server.api.util import Wrap
 from cloudrunner_server.api.controllers.deployments import _execute
 
 LOG = logging.getLogger()
-
 MAN = TriggerManager()
+SPLITTER = re.compile("[\s,;]")
 
 
 def cached_user(user):
@@ -43,9 +44,9 @@ class Execute(HookController):
     __hooks__ = [DbHook()]
 
     @expose('json')
-    def workflow(self, *args, **kwargs):
+    def script(self, *args, **kwargs):
         full_path = "/" + "/".join(args)
-        LOG.info("Received execute request [%s] from: %s" % (
+        LOG.info("Received execute script request [%s] from: %s" % (
             full_path, request.client_addr))
 
         if not getattr(request, "user", None):
@@ -60,40 +61,32 @@ class Execute(HookController):
             request.user = cached_user(api_key.user)
         else:
             user_id = request.user.id
+        user = request.db.query(User).filter(User.id == user_id).one()
 
-        version = kwargs.pop("rev", None)
-        repo, _dir, scr_name, rev = Script.parse(full_path)
-
-        repo = request.db.query(Repository).filter(
-            Repository.name == repo).first()
-        if not repo:
-            return O.error(msg="Repository '%s' not found" % repo)
-
-        scr = Script.find(request, full_path).one()
-
-        if not scr:
-            return O.error(msg="Script '%s' not found" % full_path)
-        rev = scr.contents(request, rev=version)
-        if not rev:
-            if version:
-                return O.error(msg="Version %s of script '%s' not found" %
-                               (version, full_path))
-            else:
-                return O.error(msg="Script contents for '%s' not found" %
-                               full_path)
+        targets = kwargs.pop("targets")
+        if not targets:
+            return O.error(msg="Targets is a mandatory field")
+        targets = [t.strip() for t in SPLITTER.split(targets) if t.strip()]
 
         env = kwargs.pop('env', {})
+
         env.update(flatten_params(request.params))
-        request.db.commit()
-        task_id = MAN.execute(user_id=user_id,
-                              content=rev,
-                              db=request.db,
-                              env=env,
-                              **kwargs)
-        if task_id:
-            return O.success(msg="Dispatched", **task_id)
+        dep_data = dict()
+        dep_data['steps'] = []
+        step = dict(target=targets,
+                    content=dict(path=full_path))
+        dep_data['steps'].append(step)
+
+        depl = Deployment(name="Execute: %s" % full_path,
+                          content=json.dumps(dep_data),
+                          status='Pending',
+                          owner=user)
+
+        task_ids = _execute(depl, env=env, dont_save=True, **kwargs)
+        if task_ids:
+            return O.success(status="ok", **task_ids)
         else:
-            return O.error(msg="Cannot send request")
+            return O.error(msg="Cannot execute script")
 
     @expose('json')
     def rebuild(self, name, *args, **kwargs):

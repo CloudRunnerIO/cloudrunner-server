@@ -204,7 +204,8 @@ class TriggerManager(Daemon):
                         script_content=revision,
                         exec_start=timestamp(),
                         timeout=timeout,
-                        exit_code=-99)
+                        exit_code=-99,
+                        script_name=deployment.name)
             self.db.add(task)
             for tag in tags:
                 task.tags.append(Tag(name=tag))

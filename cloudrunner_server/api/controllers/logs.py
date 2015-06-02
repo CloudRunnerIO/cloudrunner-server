@@ -26,7 +26,8 @@ from cloudrunner_server.api.hooks.error_hook import ErrorHook
 from cloudrunner_server.api.hooks.db_hook import DbHook
 from cloudrunner_server.api.hooks.perm_hook import PermHook
 from cloudrunner_server.api.model import (Script, Task, TaskGroup, Run,
-                                          Revision, RunNode, LOG_STATUS)
+                                          Revision, RunNode, Deployment,
+                                          LOG_STATUS)
 from cloudrunner_server.api.util import JsonOutput as O
 from cloudrunner_server.util.cache import CacheRegistry
 from cloudrunner_server.util.validator import valid_node_name
@@ -42,7 +43,7 @@ class Logs(HookController):
 
     @expose('json')
     def all(self, nodes=None, run_uuids=None, etag=None, marker=None,
-            page=None, script=None, **kwargs):
+            page=None, deployment=None, **kwargs):
         if etag:
             etag = int(etag)
         else:
@@ -73,9 +74,10 @@ class Logs(HookController):
             else:
                 uuids = run_uuids
 
-        if script:
+        if deployment:
             script_uuids = request.db.query(distinct(Run.uuid)).join(
-                Task).filter(Task.script_name == script).all() or ['']
+                Task, TaskGroup, Deployment).filter(
+                    Deployment.name == deployment).all() or ['']
 
             if uuids:
                 uuids = set(script_uuids).intersection(set(uuids))
@@ -126,7 +128,7 @@ class Logs(HookController):
                     ser['deployment'] = t.group.deployment.serialize(
                         skip=["id", "content", "owner_id"])
                 else:
-                    ser['batch'] = {}
+                    ser['deployment'] = dict(name=t.script_name)
                 task_list.append(ser)
                 task_map[t.id] = ser
             else:
