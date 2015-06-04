@@ -57,34 +57,56 @@ class Docker(BaseCloudProvider):
         os.unlink(self._key_path)
 
     def create_machine(self, name, image=None, server=CR_SERVER,
-                       port_bindings=None, privileged=False,
-                       volume_bindings=None, **kwargs):
-        ports = {}
-        volumes = {}
-        if port_bindings:
-            for binding in port_bindings:
-                ports[binding] = {}
-        if volume_bindings:
-            for binding in volume_bindings:
-                volumes[binding] = {}
+                       ports=None, privileged=None,
+                       volumes=None, **kwargs):
         LOG.info("Registering Docker machine [%s::%s] for [%s] at [%s]" %
                  (name, image, CR_SERVER, self.server_address))
+        priv = privileged in ['1', 'true', 'True']
         # cmd = PROVISION % dict(server=server,
         #                        name=name,
         #                        api_key=self.api_key)
+        exposed_ports, port_bindings = {}, {}
+        _ports = [p.strip() for p in ports.split(",") if p.strip()]
+        for port in _ports:
+            cont_port, _, host_port = port.partition(":")
+            exposed = "%s/tcp" % cont_port
+            exposed_ports[exposed] = {}
+            if host_port:
+                host_port = host_port
+                port_bindings[exposed] = [{
+                    'HostPort': host_port
+                }]
+            else:
+                port_bindings[exposed] = [{
+                    'HostPort': None
+                }]
+
+        volumes_desc, binds = {}, []
+        _volumes = [v.strip() for v in volumes.split(",") if v.strip()]
+        for _vol in _volumes:
+            mnt_host, _, mnt_cont = _vol.partition(":")
+            if not mnt_cont:
+                mnt_cont = mnt_host
+                mnt_host = ''
+            volumes_desc[mnt_cont] = {}
+            if mnt_host:
+                binds.append("%s:%s" % (mnt_host, mnt_cont))
+            else:
+                binds.append("%s:%s" % (mnt_cont, mnt_cont))
+
         env = ["SERVER_ID=%s" % CR_SERVER, "ORG_ID=%s" % self.api_key]
-        json_data = dict(Hostname=name, Image=image, Env=env,
-                         ExposedPorts=ports, Privileged=privileged,
-                         Volumes=volumes,
-                         Tty=True,
-                         OpenStdin=True,)
+        create_data = dict(Hostname=name, Image=image, Env=env,
+                           ExposedPorts=exposed_ports,
+                           Volumes=volumes_desc,
+                           Privileged=priv,
+                           Tty=True,
+                           OpenStdin=True,)
         # Cmd=[cmd],
         # Entrypoint=['/bin/curl'])
         create_url = "https://%s/containers/create" % self.server_address
-
         try:
             server_ids = []
-            res = requests.post(create_url, data=json.dumps(json_data),
+            res = requests.post(create_url, data=json.dumps(create_data),
                                 cert=(self._cert_path,
                                       self._key_path),
                                 headers=HEADERS,
@@ -92,13 +114,19 @@ class Docker(BaseCloudProvider):
             if res.status_code >= 300:
                 LOG.error("FAILURE %s(%s)" % (res.status_code, res.content))
                 return self.FAIL, [], {}
+
+            start_data = dict(PortBindings=port_bindings,
+                              Binds=binds,
+                              Privileged=priv,
+                              Detach=False,
+                              Tty=False)
             server_id = res.json()['Id']
+            LOG.info("Started docker instance %s" % server_id)
             server_ids.append(server_id)
             start_url = "https://%s/containers/%s/start" % (
                 self.server_address,
                 server_id)
-            res = requests.post(start_url, data=json.dumps({"Detach": False,
-                                                            "Tty": False}),
+            res = requests.post(start_url, data=json.dumps(start_data),
                                 cert=(self._cert_path,
                                       self._key_path),
                                 headers=HEADERS,

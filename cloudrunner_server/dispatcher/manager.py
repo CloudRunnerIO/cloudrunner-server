@@ -304,7 +304,7 @@ class PrepareThread(Thread):
                 while not waiter.is_set():
                     ret = self.node_connected.recv(timeout=1)
                     if ret:
-                        msg = "Node %s has just appeared online" % ret[0]
+                        msg = "Node %s has just appeared online" % ret[1]
                         self.log(stdout=msg)
                         LOG.warn(msg)
                         if ret[1] in wait_for_machines:
