@@ -59,7 +59,7 @@ class Docker(BaseCloudProvider):
                        volumes=None, **kwargs):
         self.log.info("Registering Docker machine [%s::%s] for [%s] at [%s]" %
                       (name, image, CR_SERVER, self.server_address))
-        priv = privileged in ['1', 'true', 'True']
+        priv = privileged in ['1', 'true', 'True', True]
         # cmd = PROVISION % dict(server=server,
         #                        name=name,
         #                        api_key=self.api_key)
