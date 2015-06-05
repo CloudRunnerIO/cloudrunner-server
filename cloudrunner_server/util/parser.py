@@ -82,7 +82,16 @@ class Step(object):
                 scr = Script.find(ctx, self.path).one()
                 if not scr:
                     raise ParseError("Script '%s' not found" % self.path)
-                c = scr.contents(ctx, rev=rev).content
+                revision = scr.contents(ctx, rev=rev)
+                c = revision.content
+                if revision.meta:
+                    try:
+                        meta = json.loads(revision.meta)
+                        timeout = meta.get('timeout')
+                        if timeout and int(timeout):
+                            self.timeout = int(timeout)
+                    except:
+                        pass
             elif 'text' in self.raw_content:
                 c = self.content['text']
             else:

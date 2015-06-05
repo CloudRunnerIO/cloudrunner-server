@@ -74,7 +74,6 @@ class Deployments(HookController):
             user = User.visible(request).filter(
                 User.id == request.user.id).first()
             content = kwargs.pop('content')
-
             if not isinstance(content, dict):
                 content = json.loads(content)
 
