@@ -25,7 +25,7 @@ HEADERS = {'Content-Type': 'application/json'}
 
 class Docker(BaseCloudProvider):
 
-    def __init__(self, profile, log):
+    def __init__(self, profile, log=None):
         super(Docker, self).__init__(profile, log)
 
         prefix = "%s-%s" % (self.profile.owner.org.name, self.profile.id)

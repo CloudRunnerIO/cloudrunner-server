@@ -26,7 +26,7 @@ URL = "https://management.core.windows.net/%(username)s/services/hostedservices/
 
 class Azure(BaseCloudProvider):
 
-    def __init__(self, profile, log):
+    def __init__(self, profile, log=None):
         super(Azure, self).__init__(profile, log)
         prefix = "%s-%s" % (self.profile.owner.org, self.profile.id)
         self._path = os.path.join(VAR_DIR, "tmp", "creds", prefix)

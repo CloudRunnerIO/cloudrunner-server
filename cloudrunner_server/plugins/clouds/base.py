@@ -20,33 +20,37 @@ class LogWrapper(object):
 
     def info(self, msg, *args):
         LOG.info(msg, *args)
-        if args:
-            self.remote(stdout=msg % args)
-        else:
-            self.remote(stdout=msg)
+        if self.remote:
+            if args:
+                self.remote(stdout=msg % args)
+            else:
+                self.remote(stdout=msg)
 
     def warn(self, msg, *args):
         LOG.warn(msg, *args)
-        if args:
-            self.remote(stdout=msg % args)
-        else:
-            self.remote(stdout=msg)
+        if self.remote:
+            if args:
+                self.remote(stdout=msg % args)
+            else:
+                self.remote(stdout=msg)
 
     warning = warn
 
     def error(self, msg, *args):
         LOG.error(msg, *args)
-        if args:
-            self.remote(stderr=msg % args)
-        else:
-            self.remote(stderr=msg)
+        if self.remote:
+            if args:
+                self.remote(stderr=msg % args)
+            else:
+                self.remote(stderr=msg)
 
     def exception(self, msg, *args):
         LOG.exception(msg, *args)
-        if args:
-            self.remote(stderr=msg % args)
-        else:
-            self.remote(stderr=msg)
+        if self.remote:
+            if args:
+                self.remote(stderr=msg % args)
+            else:
+                self.remote(stderr=msg)
 
 
 class BaseCloudProvider(object):
@@ -55,7 +59,7 @@ class BaseCloudProvider(object):
     FAIL = 0
     OK = 1
 
-    def __init__(self, profile, log):
+    def __init__(self, profile, log=None):
         self.log = LogWrapper(log)
         self.profile = profile
         _api_key = [k for k in self.profile.owner.apikeys if k.enabled]
