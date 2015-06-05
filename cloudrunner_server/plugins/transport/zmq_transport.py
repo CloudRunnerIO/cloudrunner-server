@@ -477,6 +477,19 @@ class ZmqTransport(ServerTransportBackend):
             LOGPUB.warn("Unrecognized node: %s" % msg)
         elif msg.control == 'PING':
             LOGPUB.info("PING from %s@%s" % (msg.hdr.peer, msg.hdr.org))
+            try:
+                new_node = NodeRegistration(org=msg.hdr.org,
+                                            name=msg.hdr.peer)
+                self.node_registered_queue.send(new_node._)
+            except zmq.ZMQError, err:
+                if self.context.closed or \
+                        getattr(err, 'errno', 0) == zmq.ETERM or \
+                        getattr(err, 'errno', 0) == zmq.ENOTSOCK:
+                    return True
+                else:
+                    raise err
+            except Exception, ex:
+                LOGPUB.error(ex)
         else:
             LOGPUB.info("HB from %s@%s" % (msg.hdr.peer, msg.hdr.org))
 
@@ -489,19 +502,6 @@ class ZmqTransport(ServerTransportBackend):
                 # New node
                 LOGPUB.info("Node %s attached to %s" % (msg.hdr.peer,
                                                         msg.hdr.org))
-                try:
-                    new_node = NodeRegistration(org=msg.hdr.org,
-                                                name=msg.hdr.peer)
-                    self.node_registered_queue.send(new_node._)
-                except zmq.ZMQError, err:
-                    if self.context.closed or \
-                            getattr(err, 'errno', 0) == zmq.ETERM or \
-                            getattr(err, 'errno', 0) == zmq.ENOTSOCK:
-                        return True
-                    else:
-                        raise err
-                except Exception, ex:
-                    LOGPUB.error(ex)
 
                 return True
 
