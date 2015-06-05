@@ -239,11 +239,11 @@ class TriggerManager(Daemon):
                 self.db.add(run)
 
             self.db.commit()
-            self.db.begin(subtransactions=True)
 
             if not remote_tasks:
-                self.db.rollback()
                 return
+
+            self.db.begin(subtransactions=True)
 
             msg = Master(ctx.user.name).command(
                 'dispatch', task_id=group.id,

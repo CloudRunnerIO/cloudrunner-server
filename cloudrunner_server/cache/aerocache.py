@@ -216,8 +216,12 @@ class RegWriter(RegBase):
         # Store indexed value
         index_key = dict(key=inc, ts=ts, uuid=self.id)
 
-        self.client.apply((LOGS_NS, INDEX_SET, self.org), 'lstack', 'push',
-                          ['autoid', index_key, 'filters'])
+        try:
+            self.client.apply((LOGS_NS, INDEX_SET, self.org), 'lstack', 'push',
+                              ['autoid', index_key, 'filters'])
+        except Exception, ex:
+            LOG.warn("Failed to insert %s" % [self.org, index_key])
+            LOG.error(ex)
 
     def store_log(self, node, ts, log, user, io='O', ttl=None):
         if not log:

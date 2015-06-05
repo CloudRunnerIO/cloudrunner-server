@@ -13,7 +13,6 @@
 #  *******************************************************/
 
 import json
-import logging
 import os
 import requests
 import tempfile
@@ -21,14 +20,13 @@ import tempfile
 from cloudrunner import VAR_DIR
 from .base import BaseCloudProvider, CR_SERVER
 
-LOG = logging.getLogger()
 HEADERS = {'Content-Type': 'application/json'}
 
 
 class Docker(BaseCloudProvider):
 
-    def __init__(self, profile):
-        super(Docker, self).__init__(profile)
+    def __init__(self, profile, log):
+        super(Docker, self).__init__(profile, log)
 
         prefix = "%s-%s" % (self.profile.owner.org.name, self.profile.id)
         self._path = os.path.join(VAR_DIR, "tmp", "creds", prefix)
@@ -59,8 +57,8 @@ class Docker(BaseCloudProvider):
     def create_machine(self, name, image=None, server=CR_SERVER,
                        ports=None, privileged=None,
                        volumes=None, **kwargs):
-        LOG.info("Registering Docker machine [%s::%s] for [%s] at [%s]" %
-                 (name, image, CR_SERVER, self.server_address))
+        self.log.info("Registering Docker machine [%s::%s] for [%s] at [%s]" %
+                      (name, image, CR_SERVER, self.server_address))
         priv = privileged in ['1', 'true', 'True']
         # cmd = PROVISION % dict(server=server,
         #                        name=name,
@@ -112,7 +110,8 @@ class Docker(BaseCloudProvider):
                                 headers=HEADERS,
                                 verify=False)
             if res.status_code >= 300:
-                LOG.error("FAILURE %s(%s)" % (res.status_code, res.content))
+                self.log.error("FAILURE %s(%s)" %
+                               (res.status_code, res.content))
                 return self.FAIL, [], {}
 
             start_data = dict(PortBindings=port_bindings,
@@ -121,7 +120,7 @@ class Docker(BaseCloudProvider):
                               Detach=False,
                               Tty=False)
             server_id = res.json()['Id']
-            LOG.info("Started docker instance %s" % server_id)
+            self.log.info("Started docker instance %s" % server_id)
             server_ids.append(server_id)
             start_url = "https://%s/containers/%s/start" % (
                 self.server_address,
@@ -133,7 +132,7 @@ class Docker(BaseCloudProvider):
                                 verify=False)
             meta = dict(server_address=self.server_address)
         except Exception, ex:
-            LOG.exception(ex)
+            self.log.exception(ex)
             raise
         finally:
             self._cleanup()
@@ -151,9 +150,9 @@ class Docker(BaseCloudProvider):
                                       headers=HEADERS,
                                       verify=False)
                 if res.status_code >= 300:
-                    LOG.error("FAILURE %s(%s)" %
-                              (res.status_code, res.content))
+                    self.log.error("FAILURE %s(%s)" %
+                                   (res.status_code, res.content))
                     ret = self.FAIL
             except Exception, ex:
-                LOG.error(ex)
+                self.log.error(ex)
         return ret

@@ -13,12 +13,9 @@
 #  *******************************************************/
 
 import json
-import logging
 import requests
 
 from .base import BaseCloudProvider, PROVISION, CR_SERVER
-
-LOG = logging.getLogger()
 
 
 class DigitalOcean(BaseCloudProvider):
@@ -36,8 +33,8 @@ class DigitalOcean(BaseCloudProvider):
         if volume_bindings:
             for binding in volume_bindings:
                 volumes[binding] = {}
-        LOG.info("Registering DigitalOcean machine [%s::%s] for [%s]" %
-                 (name, image, CR_SERVER))
+        self.log.info("Registering DigitalOcean machine [%s::%s] for [%s]" %
+                      (name, image, CR_SERVER))
 
         cmd = PROVISION % dict(server=server, name=name, api_key=self.api_key)
         json_data = dict(name=name, region=region, size=inst_type,
@@ -55,10 +52,10 @@ class DigitalOcean(BaseCloudProvider):
             res = requests.post(url, data=json.dumps(json_data),
                                 headers=headers)
             if res.status_code >= 300:
-                LOG.error("FAILURE %s(%s) [[%s]]" % (res.status_code,
-                                                     res.content,
-                                                     json_data
-                                                     ))
+                self.log.error("FAILURE %s(%s) [[%s]]" % (res.status_code,
+                                                          res.content,
+                                                          json_data
+                                                          ))
                 return self.FAIL, [], {}
 
             json_res = res.json()
@@ -67,8 +64,8 @@ class DigitalOcean(BaseCloudProvider):
             meta = dict(region=region)
             return self.OK, instance_ids, meta
         except Exception, ex:
-            LOG.exception(ex)
-            LOG.warn(json_data)
+            self.log.exception(ex)
+            self.log.warn(json_data)
             raise
 
         return self.FAIL, [], {}
@@ -82,11 +79,11 @@ class DigitalOcean(BaseCloudProvider):
             try:
                 res = requests.delete(url, headers=headers)
                 if res.status_code >= 300:
-                    LOG.error("FAILURE %s(%s)" %
-                              (res.status_code, res.content))
+                    self.log.error("FAILURE %s(%s)" %
+                                   (res.status_code, res.content))
                     return self.FAIL
 
                 return self.OK
             except Exception, ex:
-                LOG.exception(ex)
+                self.log.exception(ex)
                 raise

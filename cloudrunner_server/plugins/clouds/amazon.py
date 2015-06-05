@@ -13,11 +13,8 @@
 #  *******************************************************/
 
 from boto import ec2
-import logging
 
 from .base import BaseCloudProvider, PROVISION, CR_SERVER
-
-LOG = logging.getLogger()
 
 
 class AWS(BaseCloudProvider):
@@ -30,8 +27,8 @@ class AWS(BaseCloudProvider):
                        key_name=None, **kwargs):
         if image == 'custom':
             image = kwargs['custom-image']
-        LOG.info("Registering AWS machine [%s::%s] for [%s]" %
-                 (name, image, CR_SERVER))
+        self.log.info("Registering AWS machine [%s::%s] for [%s]" %
+                      (name, image, CR_SERVER))
         try:
             self.conn = ec2.connect_to_region(
                 region,
@@ -53,9 +50,7 @@ class AWS(BaseCloudProvider):
             meta = dict(region=region)
             return self.OK, instance_ids, meta
         except Exception, ex:
-            LOG.exception(ex)
-            LOG.error("DATA: %s :: %s :: %s :: %s" % (
-                region, image, size, kwargs))
+            self.log.exception(ex)
             return self.FAIL, [], {}
 
     def delete_machine(self, instance_ids, region='us-west-2', **kwargs):
@@ -66,6 +61,6 @@ class AWS(BaseCloudProvider):
         try:
             self.conn.terminate_instances(instance_ids)
         except Exception, ex:
-            LOG.exception(ex)
+            self.log.exception(ex)
             return self.FAIL
         return self.OK

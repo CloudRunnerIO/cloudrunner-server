@@ -13,12 +13,10 @@
 #  *******************************************************/
 
 import json
-import logging
 import requests
 
 from .base import BaseCloudProvider, PROVISION, CR_SERVER
 
-LOG = logging.getLogger()
 AUTH_URL = "https://identity.api.rackspacecloud.com/v2.0/tokens"
 
 
@@ -30,8 +28,8 @@ class Rax(BaseCloudProvider):
                        metadata=None,
                        networks=None,
                        **kwargs):
-        LOG.info("Registering AWS machine [%s::%s] for [%s]" %
-                 (name, image, CR_SERVER))
+        self.log.info("Registering AWS machine [%s::%s] for [%s]" %
+                      (name, image, CR_SERVER))
         cmd = PROVISION % dict(server=CR_SERVER,
                                name=name,
                                api_key=self.api_key)
@@ -49,7 +47,8 @@ class Rax(BaseCloudProvider):
             res = requests.post(AUTH_URL, data=self._auth_data,
                                 headers=headers)
             if res.status_code >= 300:
-                LOG.error("FAILURE %s(%s)" % (res.status_code, res.content))
+                self.log.error("FAILURE %s(%s)" % (res.status_code,
+                                                   res.content))
                 return self.FAIL
             json_res = res.json()
             auth_token = json_res['access']['token']['id']
@@ -67,7 +66,7 @@ class Rax(BaseCloudProvider):
             endpoint_url = '%s/servers' % endpoints[0]
 
         except Exception, ex:
-            LOG.exception(ex)
+            self.log.exception(ex)
             raise Exception("Rackspace: authentication problem")
 
         try:
@@ -75,11 +74,12 @@ class Rax(BaseCloudProvider):
             res = requests.post(endpoint_url, data=json.dumps(json_data),
                                 headers=headers)
             if res.status_code >= 300:
-                LOG.error("FAILURE %s(%s)" % (res.status_code, res.content))
+                self.log.error("FAILURE %s(%s)" %
+                               (res.status_code, res.content))
                 return self.FAIL, [], {}
             server_ids.append(res.json()['server']['id'])
         except Exception, ex:
-            LOG.exception(ex)
+            self.log.exception(ex)
             return self.FAIL, [], {}
 
         return self.OK, server_ids, meta
@@ -92,8 +92,8 @@ class Rax(BaseCloudProvider):
                 res = requests.post(AUTH_URL, data=self._auth_data,
                                     headers=headers)
                 if res.status_code >= 300:
-                    LOG.error("FAILURE %s(%s)" %
-                              (res.status_code, res.content))
+                    self.log.error("FAILURE %s(%s)" %
+                                   (res.status_code, res.content))
                     return self.FAIL
                 json_res = res.json()
                 auth_token = json_res['access']['token']['id']
@@ -112,11 +112,11 @@ class Rax(BaseCloudProvider):
                 headers['X-Auth-Token'] = auth_token
                 res = requests.delete(endpoint_url, headers=headers)
                 if res.status_code >= 300:
-                    LOG.error("FAILURE %s(%s)" %
-                              (res.status_code, res.content))
+                    self.log.error("FAILURE %s(%s)" %
+                                   (res.status_code, res.content))
                     ret = self.FAIL
         except Exception, ex:
-            LOG.exception(ex)
+            self.log.exception(ex)
             ret = self.FAIL
 
         return ret

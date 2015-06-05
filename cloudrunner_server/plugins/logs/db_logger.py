@@ -161,6 +161,7 @@ class DbLogger(LoggerPluginBase):
 
         elif msg.control == "INITIALMESSAGE":
             with self.cache.writer(msg.org, msg.session_id) as cache:
+                print "PREPARE", msg.session_id
                 cache.prepare_log(msg.user, msg.ts)
                 cache.incr(msg.org, "logs")
             self.r.publish('task:start', msg.session_id)

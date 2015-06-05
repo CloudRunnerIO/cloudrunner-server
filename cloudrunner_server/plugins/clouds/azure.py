@@ -15,21 +15,19 @@
 from azure.servicemanagement import (ServiceManagementService,
                                      LinuxConfigurationSet,
                                      OSVirtualHardDisk)
-import logging
 import os
 import tempfile
 
 from cloudrunner import VAR_DIR
 from .base import BaseCloudProvider, CR_SERVER  # , PROVISION
 
-LOG = logging.getLogger()
 URL = "https://management.core.windows.net/%(username)s/services/hostedservices/%(service)s/deployments"  # noqa
 
 
 class Azure(BaseCloudProvider):
 
-    def __init__(self, profile):
-        super(Azure, self).__init__(profile)
+    def __init__(self, profile, log):
+        super(Azure, self).__init__(profile, log)
         prefix = "%s-%s" % (self.profile.owner.org, self.profile.id)
         self._path = os.path.join(VAR_DIR, "tmp", "creds", prefix)
         self.server_address = self.profile.username
@@ -47,8 +45,8 @@ class Azure(BaseCloudProvider):
                        username='', password='', ssh_pub_key='',
                        server=CR_SERVER,
                        cleanup=None, **kwargs):
-        LOG.info("Registering Azure machine [%s::%s] for [%s]" %
-                 (name, image, CR_SERVER))
+        self.log.info("Registering Azure machine [%s::%s] for [%s]" %
+                      (name, image, CR_SERVER))
         try:
             sms = ServiceManagementService(self.profile.username,
                                            self._cert_path)
@@ -75,7 +73,7 @@ class Azure(BaseCloudProvider):
             meta['cleanup_service'] = cleanup in ['1', 'True', 'true']
             return self.OK, instance_ids, meta
         except Exception, ex:
-            LOG.exception(ex)
+            self.log.exception(ex)
             return self.FAIL, [], {}
 
     def delete_machine(self, instance_ids, deployment_name=None,
@@ -90,6 +88,6 @@ class Azure(BaseCloudProvider):
                     sms.delete_hosted_service(service_name=inst)
 
             except Exception, ex:
-                LOG.exception(ex)
+                self.log.exception(ex)
                 return self.FAIL
         return self.OK

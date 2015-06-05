@@ -247,25 +247,33 @@ class PrepareThread(Thread):
         wait_for_machines = []
         for task in self.tasks:
             for target in task['targets']:
-                if isinstance(target, dict):
-                    if target['name'] in targets:
-                        continue
-                    targets.append(target['name'])
+                if not isinstance(target, dict):
+                    targets.append(target)
+                    continue
 
-                    # Provider value
-                    server_name = target.pop('name')
-                    self.manager.user = self.manager.db.query(User).filter(
-                        User.username == self.user).first()
-                    profile = CloudProfile.my(self.manager).filter(
-                        CloudProfile.name == target['provider']).first()
+                if target['name'] in targets:
+                    continue
+                targets.append(target['name'])
 
-                    if not profile:
-                        msg = ("Cloud profile: '%s' not found!" %
-                               target['provider'])
-                        self.log(stderr=msg)
-                        raise ValueError(msg)
-                    if profile.shared:
-                        profile = profile.shared
+                # Provider value
+                server_name = target.pop('name')
+                self.manager.user = self.manager.db.query(User).filter(
+                    User.username == self.user).first()
+                profile = CloudProfile.my(self.manager).filter(
+                    CloudProfile.name == target['provider']).first()
+
+                if not profile:
+                    msg = ("Cloud profile: '%s' not found!" %
+                           target['provider'])
+                    self.log(stderr=msg)
+                    raise ValueError(msg)
+                if profile.shared:
+                    profile = profile.shared
+                task_group = self.manager.db.query(TaskGroup).filter(
+                    TaskGroup.id == self.task_id).first()
+                if not task_group:
+                    # Wait 1 more sec for DB sync ?
+                    time.sleep(1)
                     task_group = self.manager.db.query(TaskGroup).filter(
                         TaskGroup.id == self.task_id).first()
                     if not task_group:
@@ -274,20 +282,27 @@ class PrepareThread(Thread):
                         self.log(stderr=msg)
                         raise ValueError(msg)
 
-                    deployment = task_group.deployment
-                    if not deployment:
-                        return
-                    provider = BaseCloudProvider.find(profile.type)
-                    if not provider:
-                        msg = ("Cloud profile type '%s' not supported!" %
-                               profile.type)
-                        self.log(stderr=msg)
-                        raise ValueError(msg)
+                deployment = task_group.deployment
+                if not deployment:
+                    return
+                provider = BaseCloudProvider.find(profile.type)
+                if not provider:
+                    msg = ("Cloud profile type '%s' not supported!" %
+                           profile.type)
+                    self.log(stderr=msg)
+                    raise ValueError(msg)
+                try:
                     status, machine_ids, meta = provider(
-                        profile).create_machine(server_name, **target)
+                        profile, self.log).create_machine(
+                            server_name, **target)
+                except Exception, ex:
+                    self.log(stderr=str(ex))
+                else:
                     for m_id in machine_ids:
-                        res = Resource(server_name=server_name, server_id=m_id,
-                                       deployment=deployment, profile=profile,
+                        res = Resource(server_name=server_name,
+                                       server_id=m_id,
+                                       deployment=deployment,
+                                       profile=profile,
                                        meta=json.dumps(meta))
                         self.manager.db.add(res)
                     self.manager.db.commit()
@@ -295,8 +310,6 @@ class PrepareThread(Thread):
                     # Return arg to dict
                     target['name'] = server_name
                     targets.append(server_name)
-                else:
-                    targets.append(target)
 
         if wait_for_machines:
             try:
