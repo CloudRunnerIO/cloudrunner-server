@@ -17,6 +17,7 @@ from datetime import datetime
 import json
 import logging
 import os
+from pecan import conf
 import re
 import redis
 from sqlalchemy.orm import (scoped_session, sessionmaker, make_transient)
@@ -35,7 +36,7 @@ from cloudrunner_server.api.server import Master
 from cloudrunner_server.core.message import Queued, DictWrapper
 from cloudrunner_server.plugins.repository.base import (PluginRepoBase,
                                                         NotModified)
-from cloudrunner_server.util import timestamp
+from cloudrunner_server.util import parser, timestamp
 from cloudrunner_server.util.db import checkout_listener
 from cloudrunner_server.api.util import JsonOutput as O
 
@@ -158,20 +159,24 @@ class TriggerManager(Daemon):
 
     def run_job(self, job_name, **kwargs):
         self._prepare_db()
-        self.db.begin()
 
         job = self.db.query(Job).filter(Job.uid == job_name,
                                         Job.enabled == True).first()  # noqa
         if not job:
             LOG.warn("Job not found: %s" % job_name)
+            return
 
-        self.db.commit()
+        ctx = self.get_user_ctx(job.owner_id)
 
-        LOG.info("Script '%s' started by job '%s'" % (job.script.script.name,
-                                                      job.name))
+        depl = job.deployment
+        dep = parser.DeploymentParser(conf, ctx)
+        dep.parse(depl)
 
-        self.execute(user_id=job.owner_id, content=job.script,
-                     started_by=job.name)
+        if not depl:
+            LOG.info("No deployment found for scheduled task '%s'" % job.name)
+
+        LOG.info("Deploment '%s' started by job '%s'" % (depl.name, job.name))
+        self.execute(user_id=job.owner_id, deployment=dep)
 
     def execute(self, user_id, deployment, revision=None, **kwargs):
         LOG.info("Starting %s " % deployment.name)

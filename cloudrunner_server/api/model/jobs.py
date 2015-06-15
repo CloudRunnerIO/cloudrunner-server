@@ -23,7 +23,7 @@ from sqlalchemy.orm import relationship, backref
 
 from .base import TableBase
 from .users import User, Org
-from .library import Revision
+from .deployments import Deployment
 
 from cloudrunner_server.api.model.exceptions import QuotaExceeded
 LOG = logging.getLogger()
@@ -45,10 +45,11 @@ class Job(TableBase):
     uid = Column(String(40), unique=True,
                  default=lambda ctx: uuid.uuid4().hex)
 
-    revision_id = Column(Integer, ForeignKey('revisions.id'))
+    deployment_id = Column(Integer, ForeignKey('deployments.id'))
     owner_id = Column(Integer, ForeignKey('users.id'))
 
-    script = relationship(Revision, backref=backref("jobs", cascade="delete"))
+    deployment = relationship(Deployment,
+                              backref=backref("jobs", cascade="delete"))
     owner = relationship(User, backref=backref("jobs", cascade='delete'))
 
     @staticmethod

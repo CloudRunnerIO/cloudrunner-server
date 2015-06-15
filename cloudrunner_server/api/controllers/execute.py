@@ -49,8 +49,8 @@ class Execute(HookController):
         LOG.info("Received execute script request [%s] from: %s" % (
             full_path, request.client_addr))
 
+        key = kwargs.pop('key', None)
         if not getattr(request, "user", None):
-            key = kwargs.pop('key', None)
             if not key:
                 return O.error(msg="Missing auth key")
 
@@ -94,8 +94,8 @@ class Execute(HookController):
         LOG.info("Received rebuild job [%s] from: %s" % (
             name, request.client_addr))
 
+        key = kwargs.pop('key', None)
         if not getattr(request, "user", None):
-            key = kwargs.pop('key', None)
             if not key:
                 return O.error(msg="Missing auth key")
 
@@ -110,7 +110,7 @@ class Execute(HookController):
             return O.error(msg="Deployment '%s' not found" % depl)
 
         request.db.commit()
-        task_ids = _execute(depl, **kwargs)
+        task_ids = _execute(depl, env=kwargs)
 
         return O.success(msg="Restarted", task_ids=task_ids)
 
@@ -139,7 +139,7 @@ class Execute(HookController):
                            "to be Started.")
 
         request.db.commit()
-        task_ids = _execute(depl, **kwargs)
+        task_ids = _execute(depl, env=kwargs)
 
         return O.success(msg="Started", task_ids=task_ids)
 

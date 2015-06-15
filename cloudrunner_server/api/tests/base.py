@@ -82,7 +82,8 @@ class BaseRESTTestCase(BaseTestCase):
                                total_repos=5,
                                external_repos=True,
                                users=10, groups=10, roles=5,
-                               deployments=10, cloud_profiles=12))
+                               cron_jobs=10, deployments=10,
+                               cloud_profiles=12))
         return token
 
     def set_user(self, user_id):
@@ -323,14 +324,6 @@ class BaseRESTTestCase(BaseTestCase):
         Session.add(r22)
         Session.commit()
 
-        job1 = Job(name="trigger1", enabled=True, exec_period="* * * * *",
-                   owner=user, script=r1_2)
-        Session.add(job1)
-        job2 = Job(name="trigger2", enabled=True, exec_period="0 * * * *",
-                   private=True, script=r2_3, owner=user2)
-        Session.add(job2)
-        Session.commit()
-
         node1 = Node(name='node1', approved=True, meta='{"ID": "NODE1"}',
                      org=org,
                      joined_at=datetime.strptime('2014-01-01', '%Y-%m-%d'),
@@ -433,4 +426,16 @@ class BaseRESTTestCase(BaseTestCase):
                         meta='{"region": "us-east-2"}',
                         deployment=depl2, profile=prof1)
         Session.add(res1)
+        Session.commit()
+
+        job1 = Job(name="Job 1", enabled=True, exec_period="* * * * *",
+                   owner=user, deployment=depl,
+                   created_at=datetime.strptime(
+                       '2015-05-23', '%Y-%m-%d'))
+        Session.add(job1)
+        job2 = Job(name="Job 2", enabled=True, exec_period="0 * * * *",
+                   private=True, deployment=depl2, owner=user2,
+                   created_at=datetime.strptime(
+                       '2015-06-13', '%Y-%m-%d'))
+        Session.add(job2)
         Session.commit()

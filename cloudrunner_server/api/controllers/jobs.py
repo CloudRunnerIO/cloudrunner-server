@@ -23,9 +23,8 @@ from cloudrunner_server.api.decorators import wrap_command
 from cloudrunner_server.api.hooks.error_hook import ErrorHook
 from cloudrunner_server.api.hooks.db_hook import DbHook
 from cloudrunner_server.api.hooks.perm_hook import PermHook
-from cloudrunner_server.api.model import (Job, Script, Repository, User)
+from cloudrunner_server.api.model import (Job, Deployment, User)
 from cloudrunner_server.api.util import JsonOutput as O
-from cloudrunner_server.plugins.repository.base import PluginRepoBase
 from cloudrunner_server.plugins.scheduler import Period
 
 schedule_manager = conf.schedule_manager
@@ -37,14 +36,6 @@ if not EXE_PATH:
     LOG.warn("Scheduler job executable not found on server")
 else:
     EXE_PATH = "%s exec %%s" % EXE_PATH
-
-
-def _get_script_data(r):
-    if r:
-        full_path = r.script.full_path()
-        path, _, name = full_path.rpartition('/')
-        return dict(path="/%s/" % path, name=name, rev=r.version)
-    return dict(path="", name=None, rev=None)
 
 
 def _try_load(s):
@@ -66,10 +57,10 @@ class Jobs(HookController):
             jobs = []
             query = Job.visible(request)
             jobs = [t.serialize(
-                skip=['id', 'key', 'owner_id', 'revision_id', 'uid'],
+                skip=['id', 'key', 'owner_id', 'deployment_id', 'uid'],
                 rel=[('owner.username', 'owner'),
                      ('params', 'params', _try_load),
-                     ('script', 'script', _get_script_data)])
+                     ('deployment', 'deployment', lambda d: d.name)])
                     for t in query.all()]
             return O._anon(jobs=sorted(jobs, key=lambda t: t['name'].lower()),
                            quota=dict(allowed=request.user.tier.cron_jobs))
@@ -78,10 +69,10 @@ class Jobs(HookController):
             try:
                 job = Job.visible(request).filter(Job.name == job_name).one()
                 return O.job(**job.serialize(
-                    skip=['id', 'key', 'owner_id', 'revision_id', 'uid'],
+                    skip=['id', 'key', 'owner_id', 'deployment_id', 'uid'],
                     rel=[('owner.username', 'owner'),
                          ('params', 'params', _try_load),
-                         ('script', 'script', _get_script_data)]))
+                         ('deployment', 'deployment', lambda d: d.name)]))
             except exc.NoResultFound, ex:
                 LOG.error(ex)
                 request.db.rollback()
@@ -94,8 +85,7 @@ class Jobs(HookController):
         if not kwargs:
             kwargs = request.json
         name = name or kwargs['name']
-        script = kwargs['script']
-        version = kwargs.get('version')
+        automation = kwargs['automation']
         params = kwargs.get('params')
         if params:
             if not isinstance(params, dict):
@@ -110,21 +100,14 @@ class Jobs(HookController):
         if not period.is_valid():
             return O.error(msg="Period %s is not valid" % period)
 
-        repo, _dir, script_name, version = Script.parse(script)
-        scr = Script.visible(request, repo, _dir).filter(
-            Script.name == script_name).one()
-        if version:
-            rev = [r for r in scr.history if r.version == version]
-        else:
-            rev = sorted(scr.history,
-                         key=lambda x: x.created_at, reverse=True)
-        if not rev:
-            return O.error(msg="Invalid script/version")
-        rev = rev[0]
+        depl = Deployment.my(request).filter(
+            Deployment.name == automation).first()
+        if not depl:
+            return O.error(msg="Invalid Automation name")
 
         user = request.db.query(User).filter(User.id == request.user.id).one()
         job = Job(name=name, owner=user, enabled=True,
-                  params=json.dumps(params), script=rev, private=private,
+                  params=json.dumps(params), deployment=depl, private=private,
                   exec_period=period._)
 
         request.db.add(job)
@@ -157,7 +140,13 @@ class Jobs(HookController):
             job.name = new_name
             name_to_update = True
 
-        _script = kwargs.get('script')
+        automation = kwargs.get('automation')
+        if automation:
+            depl = Deployment.my(request).filter(
+                Deployment.name == automation).first()
+            if not depl:
+                return O.error(msg="Invalid Automation name")
+            job.deployment = depl
 
         period = None
         per = kwargs.get('period')
@@ -169,42 +158,6 @@ class Jobs(HookController):
 
             if period.is_only_minutes() and period.total_minutes < 5:
                 return O.error(msg="Period cannot be less than 5 minutes")
-
-        if _script:
-            _repo, _dir, script_name, version = Script.parse(_script)
-            repo = Repository.visible(request).filter(
-                Repository.name == _repo).first()
-            if not repo:
-                return O.error(msg="Invalid repository: %s" % _repo,
-                               field='script')
-            scr = Script.visible(request, _repo, _dir).filter(
-                Script.name == script_name).first()
-            if not scr:
-                return O.error(msg="Invalid script: %s" % _script,
-                               field='script')
-            rev = scr.contents(request, rev=version)
-
-            if repo.type == 'cloudrunner':
-                if not rev:
-                    return O.error(msg="Invalid script: %s" % _script,
-                                   field='script')
-            else:
-                plugin = PluginRepoBase.find(repo.type)
-                if not plugin:
-                    return O.error(
-                        msg="Cannot find plugin for %s repo" % repo.type,
-                        field='script')
-                plugin = plugin(repo.credentials.auth_user,
-                                repo.credentials.auth_pass,
-                                repo.credentials.auth_auth_args)
-                content, last_modified, rev = plugin.contents(
-                    "/".join([_dir, script_name]), rev=version)
-                if content is None:
-                    return O.error(
-                        msg="Cannot load script content for %s" % _script,
-                        field='script')
-
-            job.script = rev
 
         params = kwargs.get('params')
         if params:
@@ -250,7 +203,7 @@ class Jobs(HookController):
         kwargs = kw or request.json
         try:
             assert kwargs['name']
-            assert kwargs['script']
+            assert kwargs['automation']
             assert kwargs['params']
             assert kwargs['period']
             assert kwargs['private']
