@@ -25,6 +25,7 @@ BuildRequires: python-devel
 
 Requires:      python-argparse
 Requires:      python-crontab
+Requires:      crontabs
 Requires:      m2crypto
 Requires:      openssl
 Requires:      python-zmq >= 13.0
