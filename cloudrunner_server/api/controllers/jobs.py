@@ -80,7 +80,7 @@ class Jobs(HookController):
         return O.error(msg="Invalid request")
 
     @jobs.when(method='POST', template='json')
-    @jobs.wrap_create()
+    @jobs.wrap_create(integrity_error=lambda ie: "Duplicate name for Job")
     def create(self, name=None, **kwargs):
         if not kwargs:
             kwargs = request.json
@@ -94,6 +94,9 @@ class Jobs(HookController):
             params = {}
         private = (bool(kwargs.get('private'))
                    and not kwargs.get('private') in ['0', 'false', 'False'])
+
+        if not EXE_PATH:
+            return O.error(msg="Scheduler job executable not found on server")
 
         per = kwargs['period']
         period = Period(per)
@@ -114,8 +117,6 @@ class Jobs(HookController):
         request.db.commit()
         cron_name = job.uid
         # Post-create
-        if not EXE_PATH:
-            return O.error(msg="Scheduler job executable not found on server")
         url = EXE_PATH % cron_name
         if job.params:
             url = "%s -e '%s'" % (url, job.params)
