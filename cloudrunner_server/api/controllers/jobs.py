@@ -60,7 +60,7 @@ class Jobs(HookController):
                 skip=['id', 'key', 'owner_id', 'deployment_id', 'uid'],
                 rel=[('owner.username', 'owner'),
                      ('params', 'params', _try_load),
-                     ('deployment', 'deployment', lambda d: d.name)])
+                     ('deployment', 'automation', lambda d: d.name)])
                     for t in query.all()]
             return O._anon(jobs=sorted(jobs, key=lambda t: t['name'].lower()),
                            quota=dict(allowed=request.user.tier.cron_jobs))
@@ -72,7 +72,7 @@ class Jobs(HookController):
                     skip=['id', 'key', 'owner_id', 'deployment_id', 'uid'],
                     rel=[('owner.username', 'owner'),
                          ('params', 'params', _try_load),
-                         ('deployment', 'deployment', lambda d: d.name)]))
+                         ('deployment', 'automation', lambda d: d.name)]))
             except exc.NoResultFound, ex:
                 LOG.error(ex)
                 request.db.rollback()

@@ -32,7 +32,7 @@ class TestScheduler(base.BaseRESTTestCase):
                 'enabled': True,
                 'private': False,
                 'params': None,
-                'deployment': 'My deployment',
+                'automation': 'My deployment',
                 'owner': 'testuser',
                 'exec_period': '* * * * *'}],
             'quota': {'allowed': 10}}
@@ -50,7 +50,7 @@ class TestScheduler(base.BaseRESTTestCase):
             'enabled': True,
             'private': False,
             'params': None,
-            'deployment': 'My deployment',
+            'automation': 'My deployment',
             'owner': 'testuser',
             'exec_period': '* * * * *'}
         }
@@ -69,7 +69,7 @@ class TestScheduler(base.BaseRESTTestCase):
                 'enabled': True,
                 'private': False,
                 'params': None,
-                'deployment': 'My deployment',
+                'automation': 'My deployment',
                 'owner': 'testuser',
                 'exec_period': '* * * * *'},
             {
@@ -77,7 +77,7 @@ class TestScheduler(base.BaseRESTTestCase):
                 'enabled': True,
                 'private': False,
                 'params': {},
-                'deployment': 'My deployment',
+                'automation': 'My deployment',
                 'owner': 'testuser',
                 'exec_period': '0 0 * * *'}],
             'quota': {'allowed': 10}}
