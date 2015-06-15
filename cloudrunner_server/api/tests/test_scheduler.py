@@ -13,7 +13,7 @@
 #  *******************************************************/
 
 import json
-from mock import Mock
+from mock import Mock, patch
 
 from cloudrunner_server.api.tests import base
 
@@ -62,7 +62,10 @@ class TestScheduler(base.BaseRESTTestCase):
         resp_json = json.loads(resp.body)
         self.assertEqual(resp_json, cr_data)
 
-    def test_create_jobs(self):
+    @patch('cloudrunner_server.api.controllers.jobs.EXE_PATH')
+    def test_create_jobs(self, exe_path):
+        exe_path = '/usr/bin/cloudrunner-trigger'
+        print exe_path
         cr_data = {'jobs': [
             {
                 'name': 'Job 1',
