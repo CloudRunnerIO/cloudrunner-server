@@ -27,6 +27,7 @@ class TestDeployments(base.BaseRESTTestCase):
 
     def test_list_deployments(self):
         cr_data = {
+            'quota': {'allowed': 10},
             'deployments': [
                 {'content': '{"steps": [{"content": {"path": "/test/test2@HEAD", '  # noqa
                  '"env": {"a": "env_A"}}, "target": [{"name": "3232", "key_name": '  # noqa

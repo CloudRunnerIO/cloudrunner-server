@@ -20,60 +20,65 @@ from cloudrunner_server.api.tests import base
 class TestCloudProfiles(base.BaseRESTTestCase):
 
     def test_list_profiles(self):
-        cr_data = {'profiles': [
-            {
-                'username': 'AWS_KEY',
-                'name': 'ProfAWS',
-                'created_at': '2015-05-21 00:00:00',
-                'enabled': True,
-                'shares': [],
-                'clear_nodes': True,
-                'type': 'aws'},
-            {
-                'username': 'RAX_user',
-                'name': 'ProfRAX',
-                'created_at': '2015-05-22 00:00:00',
-                'enabled': True,
-                'shares': [{'created_at': '2015-05-23 00:00:00',
-                            'name': 'rax-share', 'node_quota': 2}],
-                'clear_nodes': True,
-                'type': 'rackspace'}
-        ]}
+        cr_data = {
+            'quota': {'allowed': 12},
+            'profiles': [
+                {
+                    'username': 'AWS_KEY',
+                    'name': 'ProfAWS',
+                    'created_at': '2015-05-21 00:00:00',
+                    'enabled': True,
+                    'shares': [],
+                    'clear_nodes': True,
+                    'type': 'aws'},
+                {
+                    'username': 'RAX_user',
+                    'name': 'ProfRAX',
+                    'created_at': '2015-05-22 00:00:00',
+                    'enabled': True,
+                    'shares': [{'created_at': '2015-05-23 00:00:00',
+                                'name': 'rax-share', 'node_quota': 2}],
+                    'clear_nodes': True,
+                    'type': 'rackspace'}
+            ]}
 
         resp = self.app.get('/rest/clouds/profiles', headers={
             'Cr-Token': 'PREDEFINED_TOKEN', 'Cr-User': 'testuser'})
         self.assertEqual(resp.status_int, 200, resp.status_int)
         resp_json = json.loads(resp.body)
+        self.maxDiff = None
 
         self.assertEqual(resp_json, cr_data)
 
     def test_create_profile(self):
-        cr_data = {'profiles': [
-            {
-                'username': 'AWS_KEY',
-                'name': 'ProfAWS',
-                'created_at': '2015-05-21 00:00:00',
-                'enabled': True,
-                'shares': [],
-                'clear_nodes': True,
-                'type': 'aws'},
-            {
-                'username': 'RAX_user',
-                'name': 'ProfRAX',
-                'created_at': '2015-05-22 00:00:00',
-                'enabled': True,
-                'shares': [{'created_at': '2015-05-23 00:00:00',
-                            'name': 'rax-share', 'node_quota': 2}],
-                'clear_nodes': True,
-                'type': 'rackspace'},
-            {
-                'username': 'do_prof',
-                'name': 'digitalocean',
-                'enabled': True,
-                'shares': [],
-                'clear_nodes': False,
-                'type': 'digitalocean'}
-        ]}
+        cr_data = {
+            'quota': {'allowed': 12},
+            'profiles': [
+                {
+                    'username': 'AWS_KEY',
+                    'name': 'ProfAWS',
+                    'created_at': '2015-05-21 00:00:00',
+                    'enabled': True,
+                    'shares': [],
+                    'clear_nodes': True,
+                    'type': 'aws'},
+                {
+                    'username': 'RAX_user',
+                    'name': 'ProfRAX',
+                    'created_at': '2015-05-22 00:00:00',
+                    'enabled': True,
+                    'shares': [{'created_at': '2015-05-23 00:00:00',
+                                'name': 'rax-share', 'node_quota': 2}],
+                    'clear_nodes': True,
+                    'type': 'rackspace'},
+                {
+                    'username': 'do_prof',
+                    'name': 'digitalocean',
+                    'enabled': True,
+                    'shares': [],
+                    'clear_nodes': False,
+                    'type': 'digitalocean'}
+            ]}
 
         resp = self.app.post('/rest/clouds/profiles',
             'username=do_prof&password=very_secret&arguments=arghh&name=digitalocean&type=digitalocean&shared=false',  # noqa
