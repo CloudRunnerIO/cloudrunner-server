@@ -58,7 +58,9 @@ class Clouds(HookController):
                 skip=['id', 'owner_id', 'share_id', 'password', 'arguments'],
                 rel=[('shares', 'shares', shares)])
                 for p in CloudProfile.my(request).all()]
-            return O._anon(profiles=profs)
+            return O._anon(
+                profiles=profs,
+                quota=dict(allowed=request.user.tier.cloud_profiles))
 
     @profiles.when(method='POST', template='json')
     @check_policy('is_admin')

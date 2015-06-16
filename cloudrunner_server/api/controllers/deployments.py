@@ -59,7 +59,8 @@ class Deployments(HookController):
             depl = sorted([d.serialize(skip=skip)
                            for d in Deployment.my(request).all()],
                           key=lambda d: d['name'])
-            return O._anon(deployments=depl)
+            return O._anon(deployments=depl,
+                           quota=dict(allowed=request.user.tier.deployments))
         return O.none()
 
     @deployments.when(method='POST', template='json')

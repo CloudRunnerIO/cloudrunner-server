@@ -12,9 +12,6 @@ down_revision = '2e455c06266d'
 
 from alembic import op
 import sqlalchemy as sa
-from sqlalchemy.orm import sessionmaker
-from cloudrunner_server.api.model import Task
-_Session = sessionmaker()
 
 
 def upgrade():
@@ -22,15 +19,6 @@ def upgrade():
     op.add_column(
         'tasks', sa.Column('script_name', sa.String(length=255), nullable=True))
     ### end Alembic commands ###
-
-    bind = op.get_bind()
-    session = _Session(bind=bind)
-
-    for task in session.query(Task).all():
-        if task.script_content:
-            task.script_name = task.script_content.script.full_path()
-            session.add(task)
-    session.commit()
 
 
 def downgrade():
