@@ -20,7 +20,7 @@ from sys import maxint as MAX_INT
 from threading import (Thread, Event)
 import time
 
-from cloudrunner.core.parser import has_params
+from cloudrunner.core.parser import has_params, is_script
 from cloudrunner.core.exceptions import (ConnectionError, InterruptExecution,
                                          InterruptStep)
 from cloudrunner_server.core.message import (M, Ready, StdOut, StdErr,
@@ -72,6 +72,11 @@ class JobSession(Thread):
         self.user_org = (self.user, self.remote_user_map['org'])
         self.attachments = []
         self.start_at = kwargs.get('start_at', 0)
+
+        if not is_script(self.task.body):
+            # If lang not explicitly set - set from task.lang
+            self.task.body = "#! /usr/bin/env %s\n%s" % (self.task.lang,
+                                                         self.task.body)
         self.request = dict(env=self.env, script=self.task.body,
                             remote_user_map=self.remote_user_map)
         self.file_exports = {}

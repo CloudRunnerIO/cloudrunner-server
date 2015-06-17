@@ -218,7 +218,7 @@ class TriggerManager(Daemon):
             for i, step in enumerate(deployment.steps):
                 targets = step.targets
                 remote_task = dict(attachments=step.atts, body=step.body,
-                                   targets=targets,
+                                   lang=step.lang, targets=targets,
                                    timeout=step.timeout, env=step.env or {})
                 flat_targets = []
                 for t in targets:

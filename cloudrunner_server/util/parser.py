@@ -24,7 +24,7 @@ except ImportError:
     from ordereddict import OrderedDict
 
 from cloudrunner.core.parser import (parse_lang, substitute_includes,
-                                     ParseError, DEFAULT_LANG)
+                                     is_script, ParseError, DEFAULT_LANG)
 from cloudrunner_server.api.model import Repository, Folder, Script, Revision
 from cloudrunner_server.plugins.repository.base import (PluginRepoBase,
                                                         NotModified)
@@ -74,7 +74,7 @@ class Step(object):
         self.text = None
         self.lang = DEFAULT_LANG
         self.atts = []
-
+        meta = {}
         if isinstance(self.raw_content, dict):
             if "path" in self.raw_content:
                 self.path = self.raw_content['path']
@@ -100,7 +100,7 @@ class Step(object):
             scr_parse = ScriptParser()
             scr_parse.parse(ctx, c)
             self.body = scr_parse.body
-            self.lang = scr_parse.lang
+            self.lang = scr_parse.lang or meta.get('lang', DEFAULT_LANG)
             self.args = scr_parse.args
             if self.args.timeout:
                 self.timeout = self.args.timeout[0]
@@ -155,7 +155,10 @@ class ScriptParser(object):
                 args.append({match[1]: match[2]})
             args = ArgsCollection(*args)
 
-            lang = parse_lang(content)
+            if is_script(content):
+                lang = parse_lang(content)
+            else:
+                lang = None
             subst = partial(include_substitute, ctx)
             self.body = substitute_includes(content, callback=subst)
 
