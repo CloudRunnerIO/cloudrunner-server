@@ -23,7 +23,7 @@ except ImportError:
     # python 2.6 or earlier, use backport
     from ordereddict import OrderedDict
 
-from cloudrunner.core.parser import (parse_lang, substitute_includes,
+from cloudrunner.core.parser import (substitute_includes,
                                      is_script, ParseError, DEFAULT_LANG)
 from cloudrunner_server.api.model import Repository, Folder, Script, Revision
 from cloudrunner_server.plugins.repository.base import (PluginRepoBase,
@@ -155,10 +155,7 @@ class ScriptParser(object):
                 args.append({match[1]: match[2]})
             args = ArgsCollection(*args)
 
-            if is_script(content):
-                lang = parse_lang(content)
-            else:
-                lang = None
+            lang = is_script(content)
             subst = partial(include_substitute, ctx)
             self.body = substitute_includes(content, callback=subst)
 
