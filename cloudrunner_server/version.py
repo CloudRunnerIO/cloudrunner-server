@@ -12,4 +12,4 @@
 #  * without the express permission of CloudRunner.io
 #  *******************************************************/
 
-VERSION = '1.6.0'
+VERSION = '1.6.1'
