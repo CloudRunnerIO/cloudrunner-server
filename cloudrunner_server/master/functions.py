@@ -118,6 +118,7 @@ class CertController(DbMixin):
 
     def serial_no_inc(self):
         serial_fn = os.path.join(self.ca_path, 'serial')
+        current = None
         if not os.path.exists(serial_fn):
             serial = open(serial_fn, 'w')
         else:

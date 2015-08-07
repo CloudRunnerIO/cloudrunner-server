@@ -23,7 +23,7 @@ from .deployments import Deployments
 from .dispatch import Dispatch
 from .execute import Execute
 from .help import HtmlDocs
-from .jobs import Jobs
+# from .jobs import Jobs
 from .library import Library
 from .logs import Logs
 from .profile import Profile
@@ -82,7 +82,7 @@ class RestApi(object):
     deployments = secure(Deployments(), 'authorize')
     dispatch = secure(Dispatch(), 'authorize')
     library = secure(Library(), 'authorize')
-    scheduler = secure(Jobs(), 'authorize')
+    # scheduler = secure(Jobs(), 'authorize')
     logs = secure(Logs(), 'authorize')
     clouds = secure(Clouds(), 'authorize')
     manage = secure(Manage(), 'authorize')
