@@ -24,7 +24,7 @@ ctx_mock.socket.return_value = sock_mock
 
 class TestScheduler(base.BaseRESTTestCase):
 
-    def test_list_jobs(self):
+    def _test_list_jobs(self):
         cr_data = {'jobs': [
             {
                 'name': 'Job 1',
@@ -43,7 +43,7 @@ class TestScheduler(base.BaseRESTTestCase):
         resp_json = json.loads(resp.body)
         self.assertEqual(resp_json, cr_data)
 
-    def test_list_job(self):
+    def _test_list_job(self):
         cr_data = {'job': {
             'name': 'Job 1',
             'created_at': '2015-05-23 00:00:00',
@@ -63,7 +63,7 @@ class TestScheduler(base.BaseRESTTestCase):
         self.assertEqual(resp_json, cr_data)
 
     @patch('cloudrunner_server.api.controllers.jobs.EXE_PATH')
-    def test_create_jobs(self, exe_path):
+    def _test_create_jobs(self, exe_path):
         exe_path = '/usr/bin/cloudrunner-trigger'
         print exe_path
         cr_data = {'jobs': [
@@ -103,7 +103,7 @@ class TestScheduler(base.BaseRESTTestCase):
         self.maxDiff = None
         self.assertEqual(resp_json, cr_data)
 
-    def test_delete_job(self):
+    def _test_delete_job(self):
 
         resp = self.app.delete('/rest/scheduler/jobs/Job 1',
                                headers={
