@@ -73,3 +73,10 @@ As a service from packages:
 
     service cloudrunner-dsp start
 
+License
+=======
+
+Code and documentation copyright 2014-2016 CloudRunner.IO.
+Code released under the Apache license.
+Docs released under Creative Commons.
+
